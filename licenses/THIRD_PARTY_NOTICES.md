@@ -11,5 +11,6 @@ Esta distribuição incorpora componentes mantidos por projetos independentes:
 - **platformdirs** — MIT License: <https://github.com/tox-dev/platformdirs>
 - **PyInstaller** (ferramenta de build) — GPLv2 com exceção para distribuir aplicações: <https://pyinstaller.org/en/stable/license.html>
 - **Spotify attribution asset** — o logotipo completo preto é um asset oficial não modificado, usado somente para atribuir metadados obtidos do Spotify. Spotify é marca da Spotify AB e não endossa este aplicativo. Fonte e regras de uso: <https://developer.spotify.com/documentation/design>. Consulte também `assets/third_party/spotify/SOURCE.md`.
+- **Simple Icons / logos de plataformas** — formas vetoriais obtidas do projeto Simple Icons, disponibilizado sob CC0 1.0. As marcas continuam pertencendo aos respectivos titulares e seu uso apenas identifica as plataformas compatíveis; nenhuma delas endossa este aplicativo. Fonte e detalhes: <https://github.com/simple-icons/simple-icons>. Consulte também `assets/icons/brands/SOURCE.md`.
 
 Os avisos e arquivos de licença incluídos pelos pacotes Python/Qt no ambiente de build devem permanecer no diretório `_internal` gerado pelo PyInstaller. Ao trocar o build de FFmpeg, reavalie as obrigações de licença e disponibilização de código-fonte correspondentes.

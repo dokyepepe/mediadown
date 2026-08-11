@@ -16,3 +16,7 @@ def test_catalog_icons_are_valid_svg_assets():
         icon = asset_path("icons", f"{platform.icon}.svg")
         assert icon.exists(), platform.name
         assert ElementTree.parse(icon).getroot().tag.endswith("svg")
+        assert "currentColor" in icon.read_text(encoding="utf-8")
+        assert platform.icon.startswith("brands/")
+        assert platform.brand_background
+        assert platform.brand_accent.startswith("#")

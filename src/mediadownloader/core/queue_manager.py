@@ -129,7 +129,9 @@ class QueueManager(QObject):
 
     @Slot(str, object)
     def _on_progress(self, item_id: str, update: dict) -> None:
-        item = self.items[item_id]
+        item = self.items.get(item_id)
+        if item is None or item.status.terminal:
+            return
         if "status" in update:
             item.status = DownloadStatus(update["status"])
         for field in ("progress", "speed", "eta", "downloaded_bytes", "total_bytes"):
@@ -139,7 +141,9 @@ class QueueManager(QObject):
 
     @Slot(str, str)
     def _on_completed(self, item_id: str, final_file: str) -> None:
-        item = self.items[item_id]
+        item = self.items.get(item_id)
+        if item is None:
+            return
         item.status = DownloadStatus.COMPLETED
         item.progress = 100.0
         item.speed = None
@@ -150,7 +154,9 @@ class QueueManager(QObject):
 
     @Slot(str, object)
     def _on_failed(self, item_id: str, error: FriendlyError) -> None:
-        item = self.items[item_id]
+        item = self.items.get(item_id)
+        if item is None:
+            return
         item.status = DownloadStatus.ERROR
         item.error = error.message
         item.technical_error = error.details
@@ -158,7 +164,9 @@ class QueueManager(QObject):
 
     @Slot(str)
     def _on_cancelled(self, item_id: str) -> None:
-        item = self.items[item_id]
+        item = self.items.get(item_id)
+        if item is None:
+            return
         item.status = DownloadStatus.CANCELLED
         item.speed = None
         item.eta = None

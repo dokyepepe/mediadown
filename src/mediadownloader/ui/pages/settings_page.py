@@ -111,14 +111,12 @@ class SettingsPage(QWidget):
         self.open_folder = QCheckBox("Abrir pasta ao concluir")
         self.notifications = QCheckBox("Mostrar notificação")
         self.confirm_close = QCheckBox("Confirmar antes de fechar com downloads ativos")
-        self.clear_after = QCheckBox("Limpar formulário após adicionar à fila")
         general.form.addRow("Idioma", self.language)
         general.form.addRow("Tema", self.theme)
         general.form.addRow("Pasta padrão", directory_row)
         general.form.addRow("", self.open_folder)
         general.form.addRow("", self.notifications)
         general.form.addRow("", self.confirm_close)
-        general.form.addRow("", self.clear_after)
         root.addWidget(general)
 
         downloads = SettingsSection("Downloads", icon_name="downloads")
@@ -277,7 +275,6 @@ class SettingsPage(QWidget):
         self.open_folder.setChecked(self.settings.get("general.open_folder_on_complete", False))
         self.notifications.setChecked(self.settings.get("general.notifications", True))
         self.confirm_close.setChecked(self.settings.get("general.confirm_close_active", True))
-        self.clear_after.setChecked(self.settings.get("general.clear_after_queue", True))
         self.concurrent.setValue(self.settings.get("downloads.concurrent", 2))
         for combo, key in ((self.video_format, "video_format"), (self.video_quality, "video_quality"), (self.audio_format, "audio_format"), (self.audio_quality, "audio_quality")):
             combo.setCurrentText(str(self.settings.get(f"downloads.{key}", combo.itemText(0))))
@@ -301,7 +298,7 @@ class SettingsPage(QWidget):
         self.settings.update_section("general", {
             "language": "pt_BR", "theme": self.theme.currentData(), "download_dir": self.download_dir.text(),
             "open_folder_on_complete": self.open_folder.isChecked(), "notifications": self.notifications.isChecked(),
-            "confirm_close_active": self.confirm_close.isChecked(), "clear_after_queue": self.clear_after.isChecked(),
+            "confirm_close_active": self.confirm_close.isChecked(),
         })
         self.settings.update_section("downloads", {
             "concurrent": self.concurrent.value(), "video_format": self.video_format.currentText(),

@@ -15,12 +15,12 @@ Versão 1.1.0. O MVP implementa o fluxo completo de análise, seleção, fila, d
 - interface Windows com sidebar, onboarding, estados vazios e tema claro/escuro/sistema;
 - conjunto próprio de ícones SVG vetoriais, com renderização HiDPI pelo Qt;
 - análise assíncrona de URL, título, autor, duração, origem, thumbnail e formatos;
-- playlists com seleção individual e expansão em itens da fila;
+- playlists enumeradas com ações para baixar um item, ignorar itens, baixar a seleção ou baixar tudo;
 - vídeo automático/MP4/MKV/WEBM e limite de resolução disponível;
 - áudio MP3/M4A/AAC/OPUS/FLAC/WAV, bitrate MP3, capa e metadados;
 - legendas oficiais/automáticas, download ou incorporação;
 - fila concorrente limitada de 1 a 5, cancelamento, retry e pausa de agendamento;
-- progresso, velocidade, ETA, bytes e estados de FFmpeg sem exibir 100% prematuramente;
+- progresso, velocidade, ETA, bytes e estados de FFmpeg sem exibir 100% prematuramente, com eventos limitados para downloads longos;
 - histórico SQLite pesquisável, filtros e ações de arquivo/pasta/URL;
 - página Sobre com catálogo das principais plataformas, validado contra os extractors instalados do yt-dlp e integrações nativas;
 - reconhecimento de links Spotify com metadados via oEmbed, abertura no serviço e playlists autorizadas via OAuth 2.0 PKCE;

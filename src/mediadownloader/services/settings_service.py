@@ -20,7 +20,6 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "open_folder_on_complete": False,
         "notifications": True,
         "confirm_close_active": True,
-        "clear_after_queue": True,
         "first_run": True,
     },
     "downloads": {

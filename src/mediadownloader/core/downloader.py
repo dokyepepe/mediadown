@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -33,6 +34,42 @@ ProgressCallback = Callable[[dict[str, Any]], None]
 
 class DownloadCancelled(Exception):
     pass
+
+
+class _ProgressReporter:
+    """Bound progress events so long downloads cannot flood Qt's event queue."""
+
+    MIN_INTERVAL_SECONDS = 0.25
+    MIN_PERCENT_STEP = 0.5
+
+    def __init__(
+        self,
+        callback: ProgressCallback,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._callback = callback
+        self._clock = clock
+        self._last_time = float("-inf")
+        self._last_progress = -1.0
+        self._last_status = ""
+
+    def emit(self, update: dict[str, Any], *, force: bool = False) -> bool:
+        now = self._clock()
+        status = str(update.get("status") or "")
+        value = float(update.get("progress") or 0.0)
+        should_emit = (
+            force
+            or status != self._last_status
+            or now - self._last_time >= self.MIN_INTERVAL_SECONDS
+            or value - self._last_progress >= self.MIN_PERCENT_STEP
+        )
+        if not should_emit:
+            return False
+        self._callback(update)
+        self._last_time = now
+        self._last_progress = value
+        self._last_status = status
+        return True
 
 
 class _YtdlpLogger:
@@ -94,6 +131,13 @@ class DownloadEngine:
                 index=index,
                 thumbnail=str(entry.get("thumbnail") or ""),
                 duration=entry.get("duration"),
+                author=str(
+                    entry.get("uploader")
+                    or entry.get("channel")
+                    or entry.get("artist")
+                    or ""
+                ),
+                album=str(entry.get("album") or ""),
             )
             for index, entry in enumerate(entries_raw, start=1)
             if entry.get("url") or entry.get("webpage_url")
@@ -130,7 +174,10 @@ class DownloadEngine:
             is_playlist=is_playlist,
             playlist_count=int(info.get("playlist_count") or len(entries)),
             entries=entries,
-            raw=info,
+            # The normalized fields above are all the regular UI needs. Keeping the
+            # complete yt-dlp response here duplicated format/playlist metadata and
+            # could retain hundreds of MB after analyzing very large playlists.
+            raw={},
         )
 
     def download(
@@ -160,6 +207,7 @@ class DownloadEngine:
             )
 
         final_filename: list[str] = []
+        reporter = _ProgressReporter(progress)
 
         def progress_hook(data: dict[str, Any]) -> None:
             if cancel_event.is_set():
@@ -176,7 +224,7 @@ class DownloadEngine:
                     download_status = DownloadStatus.DOWNLOADING_AUDIO
                 else:
                     download_status = DownloadStatus.DOWNLOADING
-                progress({
+                reporter.emit({
                     "status": download_status.value,
                     "progress": percent,
                     "speed": data.get("speed"),
@@ -188,12 +236,12 @@ class DownloadEngine:
                 filename = data.get("filename")
                 if filename:
                     final_filename[:] = [str(filename)]
-                progress({
+                reporter.emit({
                     "status": DownloadStatus.FINALIZING.value,
                     "progress": 99.0,
                     "eta": None,
                     "speed": None,
-                })
+                }, force=True)
 
         def postprocessor_hook(data: dict[str, Any]) -> None:
             if cancel_event.is_set():
@@ -205,7 +253,9 @@ class DownloadEngine:
                 status = DownloadStatus.MERGING
             else:
                 status = DownloadStatus.FINALIZING
-            progress({"status": status.value, "progress": 99.0, "eta": None, "speed": None})
+            reporter.emit(
+                {"status": status.value, "progress": 99.0, "eta": None, "speed": None}
+            )
 
         ydl_options: dict[str, Any] = {
             "format": FormatManager.selector(options),
@@ -218,6 +268,9 @@ class DownloadEngine:
             "quiet": True,
             "no_warnings": True,
             "continuedl": True,
+            "retries": 10,
+            "fragment_retries": 10,
+            "file_access_retries": 5,
             "overwrites": options.duplicate_policy == "overwrite",
             "writethumbnail": options.embed_thumbnail,
             "windowsfilenames": True,
@@ -244,11 +297,15 @@ class DownloadEngine:
         if options.duplicate_policy in {"rename", "skip"}:
             existing = self._prepare_collision_policy(item.url, ydl_options, options)
             if existing:
-                progress({"status": DownloadStatus.FINALIZING.value, "progress": 99.0})
+                reporter.emit(
+                    {"status": DownloadStatus.FINALIZING.value, "progress": 99.0}, force=True
+                )
                 return existing
 
         try:
-            progress({"status": DownloadStatus.PREPARING.value, "progress": 0.0})
+            reporter.emit(
+                {"status": DownloadStatus.PREPARING.value, "progress": 0.0}, force=True
+            )
             with yt_dlp.YoutubeDL(ydl_options) as ydl:
                 result = ydl.extract_info(item.url, download=True)
                 if result:

@@ -43,14 +43,25 @@ class PlatformCard(QFrame):
         self.setObjectName("SoftCard")
         self.setMinimumHeight(104)
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.setAccessibleName(platform.name)
+        self.setAccessibleDescription(
+            f"{platform.description}. Recursos: {platform.capabilities}."
+        )
+        self.setStyleSheet(
+            f"QFrame#SoftCard {{ border-left: 3px solid {platform.brand_accent}; }}"
+        )
         layout = QHBoxLayout(self)
         layout.setContentsMargins(14, 13, 14, 13)
         layout.setSpacing(12)
         icon = QLabel()
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon.setFixedSize(38, 38)
-        icon.setPixmap(svg_pixmap(platform.icon, 25, "#2E8B57"))
-        icon.setObjectName("TintedIcon")
+        icon.setFixedSize(46, 46)
+        icon.setPixmap(svg_pixmap(platform.icon, 27, platform.logo_color))
+        icon.setAccessibleName(f"Logo {platform.name}")
+        icon.setStyleSheet(
+            f"background: {platform.brand_background}; "
+            f"border: 1px solid {platform.brand_accent}; border-radius: 9px;"
+        )
         text = QVBoxLayout()
         text.setSpacing(3)
         name = QLabel(platform.name)

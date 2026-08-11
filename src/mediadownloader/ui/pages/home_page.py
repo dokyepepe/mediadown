@@ -141,16 +141,21 @@ class HomePage(QWidget):
         self.playlist_frame.setObjectName("Card")
         playlist_layout = QVBoxLayout(self.playlist_frame)
         playlist_header = QHBoxLayout()
-        playlist_title = QLabel("Itens da playlist")
-        playlist_title.setObjectName("SectionTitle")
-        self.select_all_button = QPushButton("Selecionar todos")
+        self.playlist_title = QLabel("Itens da playlist")
+        self.playlist_title.setObjectName("SectionTitle")
+        self.download_current_button = QPushButton("Baixar item")
+        set_button_icon(self.download_current_button, "downloads")
+        self.download_current_button.setToolTip("Baixar somente o item destacado na lista")
+        self.download_current_button.clicked.connect(self._queue_current_playlist_item)
+        self.select_all_button = QPushButton("Incluir todos")
         set_button_icon(self.select_all_button, "check")
         self.select_all_button.clicked.connect(lambda: self._check_all(True))
-        self.clear_all_button = QPushButton("Desmarcar todos")
+        self.clear_all_button = QPushButton("Ignorar todos")
         set_button_icon(self.clear_all_button, "cancel")
         self.clear_all_button.clicked.connect(lambda: self._check_all(False))
-        playlist_header.addWidget(playlist_title)
+        playlist_header.addWidget(self.playlist_title)
         playlist_header.addStretch()
+        playlist_header.addWidget(self.download_current_button)
         playlist_header.addWidget(self.select_all_button)
         playlist_header.addWidget(self.clear_all_button)
         self.playlist_list = QListWidget()
@@ -158,7 +163,13 @@ class HomePage(QWidget):
         self.playlist_list.setAccessibleDescription(
             "Marque os itens que deseja adicionar individualmente à fila de downloads."
         )
-        self.playlist_list.setMaximumHeight(210)
+        self.playlist_list.setMinimumHeight(120)
+        self.playlist_list.setMaximumHeight(420)
+        self.playlist_list.itemChanged.connect(self._update_playlist_selection)
+        self.playlist_list.itemSelectionChanged.connect(self._update_playlist_selection)
+        self.playlist_list.itemDoubleClicked.connect(
+            lambda _item: self._queue_current_playlist_item()
+        )
         playlist_layout.addLayout(playlist_header)
         playlist_layout.addWidget(self.playlist_list)
         result_layout.addWidget(self.playlist_frame)
@@ -270,10 +281,14 @@ class HomePage(QWidget):
         download_row = QHBoxLayout(self.download_controls)
         download_row.setContentsMargins(0, 0, 0, 0)
         download_row.addStretch()
+        self.download_all_button = SecondaryButton("BAIXAR TUDO", icon_name="check")
+        self.download_all_button.setToolTip("Adicionar todos os itens da playlist à fila")
+        self.download_all_button.clicked.connect(self._queue_all_playlist_items)
         self.download_button = PrimaryButton("BAIXAR", icon_name="downloads")
         self.download_button.setMinimumWidth(180)
-        self.download_button.setToolTip("Adicionar a seleção atual à fila")
-        self.download_button.clicked.connect(self.queue_download)
+        self.download_button.setToolTip("Adicionar somente os itens incluídos à fila")
+        self.download_button.clicked.connect(lambda: self.queue_download())
+        download_row.addWidget(self.download_all_button)
         download_row.addWidget(self.download_button)
         result_layout.addWidget(self.download_controls)
         self.result.hide()
@@ -288,11 +303,13 @@ class HomePage(QWidget):
         tab_order = [
             self.url_input, self.paste_button, self.analyze_button,
             self.open_spotify_button, self.copy_spotify_button, self.configure_spotify_button,
+            self.download_current_button, self.select_all_button, self.clear_all_button,
+            self.playlist_list,
             self.video_button, self.audio_button, self.video_quality,
             self.video_format, self.audio_format, self.audio_quality,
             self.embed_thumbnail, self.add_metadata, self.subtitle_mode,
             self.subtitle_language, self.destination, browse,
-            self.playlist_folder, self.download_button,
+            self.playlist_folder, self.download_all_button, self.download_button,
         ]
         for current, following in zip(tab_order, tab_order[1:]):
             QWidget.setTabOrder(current, following)
@@ -325,7 +342,9 @@ class HomePage(QWidget):
             return
         self.analyze_button.setEnabled(False)
         self.analyze_button.setText("ANALISANDO…")
-        self.result.hide()
+        # Keep the URL and any existing result in place while the next link is
+        # analyzed. Disabling avoids queuing stale data without making the form jump.
+        self.result.setEnabled(False)
         self._show_notice("Analisando link…")
         self.analysis_changed.emit(True)
         cookie_source = self.settings.get("cookies.source", "none")
@@ -348,10 +367,12 @@ class HomePage(QWidget):
             self._populate_subtitles(media)
         self._populate_playlist(media)
         self._configure_result_mode(media)
+        self.result.setEnabled(True)
         self.result.show()
         self.notice.hide()
         self.analyze_button.setEnabled(True)
         self.analyze_button.setText("ANALISAR")
+        self.result.setEnabled(True)
         self.analysis_changed.emit(False)
 
     def _analysis_failed(self, error: FriendlyError) -> None:
@@ -402,6 +423,7 @@ class HomePage(QWidget):
             self.subtitle_language.addItem(f"{language} — {kind}", language)
 
     def _populate_playlist(self, media: MediaInfo) -> None:
+        self.playlist_list.blockSignals(True)
         self.playlist_list.clear()
         for entry in media.entries:
             author = f" — {entry.author}" if entry.author else ""
@@ -410,20 +432,31 @@ class HomePage(QWidget):
             if media.download_supported:
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
                 item.setCheckState(Qt.CheckState.Checked)
+                item.setToolTip(
+                    "Marcado para baixar. Desmarque para ignorar ou destaque e use “Baixar item”."
+                )
             else:
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
             self.playlist_list.addItem(item)
+        self.playlist_list.blockSignals(False)
         if self.playlist_list.count():
             self.playlist_list.setCurrentRow(0)
+        visible_rows = min(max(len(media.entries), 3), 10)
+        self.playlist_list.setMinimumHeight(visible_rows * 34 + 8)
+        self.playlist_title.setText(
+            f"Itens da playlist ({len(media.entries)})" if media.entries else "Itens da playlist"
+        )
         self.playlist_frame.setVisible(bool(media.entries))
         self.select_all_button.setVisible(media.download_supported)
         self.clear_all_button.setVisible(media.download_supported)
+        self.download_current_button.setVisible(media.download_supported)
         self.playlist_folder.setVisible(media.is_playlist and media.download_supported)
         self.playlist_list.setAccessibleDescription(
             "Marque os itens que deseja adicionar à fila."
             if media.download_supported
             else "Use as setas para escolher um item e copiar seus dados para uma busca manual."
         )
+        self._update_playlist_selection()
 
     def _configure_result_mode(self, media: MediaInfo) -> None:
         spotify = bool(media.raw.get("spotify"))
@@ -431,6 +464,7 @@ class HomePage(QWidget):
         self.options_card.setVisible(media.download_supported)
         self.destination_card.setVisible(media.download_supported)
         self.download_controls.setVisible(media.download_supported)
+        self.download_all_button.setVisible(media.is_playlist and media.download_supported)
         if not spotify:
             return
         message = media.source_notice
@@ -481,8 +515,39 @@ class HomePage(QWidget):
 
     def _check_all(self, checked: bool) -> None:
         state = Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
+        self.playlist_list.blockSignals(True)
         for index in range(self.playlist_list.count()):
             self.playlist_list.item(index).setCheckState(state)
+        self.playlist_list.blockSignals(False)
+        self._update_playlist_selection()
+
+    def _update_playlist_selection(self, *_: object) -> None:
+        included = sum(
+            self.playlist_list.item(index).checkState() == Qt.CheckState.Checked
+            for index in range(self.playlist_list.count())
+        )
+        if self.media and self.media.is_playlist and self.media.download_supported:
+            self.download_button.setText(f"BAIXAR SELECIONADOS ({included})")
+            self.download_button.setEnabled(included > 0)
+            self.download_current_button.setEnabled(self.playlist_list.currentItem() is not None)
+        else:
+            self.download_button.setText("BAIXAR")
+            self.download_button.setEnabled(True)
+
+    def _queue_current_playlist_item(self) -> None:
+        item = self.playlist_list.currentItem()
+        if item is None:
+            QMessageBox.information(self, "Playlist", "Escolha um item da playlist.")
+            return
+        entry = item.data(Qt.ItemDataRole.UserRole)
+        if entry is not None:
+            self.queue_download([entry])
+
+    def _queue_all_playlist_items(self) -> None:
+        if not self.media or not self.media.entries:
+            return
+        self._check_all(True)
+        self.queue_download(list(self.media.entries))
 
     def _toggle_media_type(self) -> None:
         audio = self.audio_button.isChecked()
@@ -496,7 +561,7 @@ class HomePage(QWidget):
             self.destination.setText(directory)
             self.settings.set("general.download_dir", directory)
 
-    def queue_download(self) -> None:
+    def queue_download(self, entries_override: list | None = None) -> None:
         if not self.media:
             return
         if not self.media.download_supported:
@@ -513,11 +578,14 @@ class HomePage(QWidget):
             return
         entries = []
         if self.media.is_playlist:
-            entries = [
-                self.playlist_list.item(index).data(Qt.ItemDataRole.UserRole)
-                for index in range(self.playlist_list.count())
-                if self.playlist_list.item(index).checkState() == Qt.CheckState.Checked
-            ]
+            if entries_override is not None:
+                entries = list(entries_override)
+            else:
+                entries = [
+                    self.playlist_list.item(index).data(Qt.ItemDataRole.UserRole)
+                    for index in range(self.playlist_list.count())
+                    if self.playlist_list.item(index).checkState() == Qt.CheckState.Checked
+                ]
             if not entries:
                 QMessageBox.information(self, "Playlist", "Selecione pelo menos um item.")
                 return
@@ -542,11 +610,10 @@ class HomePage(QWidget):
             cookies_browser=self.settings.get("cookies.browser", "") if self.settings.get("cookies.source") == "browser" else "",
         )
         self.download_requested.emit(self.media, options, entries)
-        self._show_notice(f"{len(entries) if entries else 1} item(ns) adicionado(s) à fila.")
-        if self.settings.get("general.clear_after_queue", True):
-            self.result.hide()
-            self.url_input.clear()
-            self.media = None
+        amount = len(entries) if entries else 1
+        self._show_notice(
+            f"{amount} item(ns) adicionado(s) à fila. Acompanhe o progresso em Downloads."
+        )
 
     def _show_notice(self, message: str, error: bool = False) -> None:
         self.notice.setProperty("state", "error" if error else "info")

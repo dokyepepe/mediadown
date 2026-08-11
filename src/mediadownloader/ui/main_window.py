@@ -150,7 +150,7 @@ class MainWindow(QMainWindow):
             item = DownloadItem(
                 url=url,
                 title=title,
-                author=media.author,
+                author=entry.author if entry and entry.author else media.author,
                 thumbnail=entry.thumbnail if entry and entry.thumbnail else media.thumbnail,
                 platform=media.platform,
                 media_type=options.media_type,
@@ -159,7 +159,8 @@ class MainWindow(QMainWindow):
                 output_path=str(output_dir),
             )
             self.queue.add(item, item_options)
-        self._navigate(1)
+        # Keep the analysis and URL visible. Downloads remain available from the
+        # sidebar without unexpectedly replacing the form the user is working in.
 
     def _redownload(self, old: DownloadItem) -> None:
         options = DownloadOptions.from_dict(old.options)
