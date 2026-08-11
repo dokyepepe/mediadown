@@ -1,0 +1,4 @@
+﻿Build FFmpeg obtido de https://www.gyan.dev/ffmpeg/builds/
+Pacote: ffmpeg-release-essentials.zip
+SHA-256: e6b54767a6065919048f1a098eb27211ca4e12b4348a05d88777a5855d0b6e71
+Consulte licenses/THIRD_PARTY_NOTICES.md.

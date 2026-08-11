@@ -1,0 +1,12 @@
+.venv/
+.build/
+build/
+dist/
+release/
+resources/ffmpeg/*.exe
+resources/ffmpeg/*.dll
+resources/deno/*.exe
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.log

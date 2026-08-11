@@ -1,0 +1,13 @@
+Media Downloader - licença do projeto
+
+Copyright (c) 2026 Media Downloader Project
+
+É concedida permissão, gratuitamente, a qualquer pessoa que obtenha uma cópia
+deste software e dos arquivos de documentação associados, para usar, copiar,
+modificar, mesclar, publicar, distribuir, sublicenciar e/ou vender cópias do
+software, sujeita à inclusão deste aviso de copyright e permissão.
+
+O SOFTWARE É FORNECIDO "COMO ESTÁ", SEM GARANTIA DE QUALQUER TIPO, EXPRESSA OU
+IMPLÍCITA, INCLUINDO, SEM LIMITAÇÃO, GARANTIAS DE COMERCIALIZAÇÃO, ADEQUAÇÃO A
+UMA FINALIDADE ESPECÍFICA E NÃO VIOLAÇÃO.
+

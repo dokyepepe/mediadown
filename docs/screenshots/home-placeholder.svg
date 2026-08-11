@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="720" viewBox="0 0 1100 720">
+  <rect width="1100" height="720" fill="#F5F6F7"/>
+  <rect width="220" height="720" fill="#FFFFFF" stroke="#DADDE1"/>
+  <text x="30" y="52" font-family="Segoe UI" font-size="22" font-weight="600" fill="#2E8B57">⇩ Media Downloader</text>
+  <rect x="14" y="92" width="192" height="44" fill="#E7F3EC"/>
+  <text x="32" y="121" font-family="Segoe UI" font-size="16" fill="#257349">⌂  Início</text>
+  <text x="254" y="72" font-family="Segoe UI" font-size="32" font-weight="600" fill="#252525">Baixar mídia</text>
+  <text x="254" y="105" font-family="Segoe UI" font-size="16" fill="#666">Cole o link de um vídeo, música ou playlist.</text>
+  <rect x="254" y="135" width="610" height="48" rx="5" fill="#FFF" stroke="#DADDE1"/>
+  <text x="274" y="166" font-family="Segoe UI" font-size="15" fill="#8A8F94">Cole uma URL aqui...</text>
+  <rect x="878" y="135" width="152" height="48" rx="5" fill="#2E8B57"/>
+  <text x="919" y="166" font-family="Segoe UI" font-size="15" font-weight="600" fill="#FFF">ANALISAR</text>
+  <rect x="254" y="216" width="776" height="150" rx="6" fill="#FFF" stroke="#DADDE1"/>
+  <rect x="274" y="236" width="196" height="110" rx="5" fill="#E7EAEC"/>
+  <text x="494" y="258" font-family="Segoe UI" font-size="18" font-weight="600" fill="#252525">Prévia da mídia</text>
+  <text x="494" y="290" font-family="Segoe UI" font-size="15" fill="#666">Título, autor, duração e origem</text>
+  <rect x="254" y="386" width="776" height="188" rx="6" fill="#FFF" stroke="#DADDE1"/>
+  <text x="274" y="419" font-family="Segoe UI" font-size="18" font-weight="600" fill="#252525">Tipo de download</text>
+  <rect x="822" y="400" width="85" height="36" rx="5" fill="#E7F3EC" stroke="#2E8B57"/>
+  <text x="840" y="423" font-family="Segoe UI" font-size="14" font-weight="600" fill="#257349">VÍDEO</text>
+  <rect x="917" y="400" width="85" height="36" rx="5" fill="#FFF" stroke="#DADDE1"/>
+  <text x="938" y="423" font-family="Segoe UI" font-size="14" fill="#252525">ÁUDIO</text>
+  <rect x="850" y="616" width="180" height="48" rx="5" fill="#2E8B57"/>
+  <text x="908" y="647" font-family="Segoe UI" font-size="15" font-weight="600" fill="#FFF">BAIXAR</text>
+</svg>
+

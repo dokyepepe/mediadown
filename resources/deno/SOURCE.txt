@@ -1,0 +1,3 @@
+﻿Deno obtido da release oficial em https://github.com/denoland/deno/releases
+Pacote: deno-x86_64-pc-windows-msvc.zip
+SHA-256: 171efab55ac6b9881fd53ee4c20f8bf3bb1340ffc618483746909014db12216a
