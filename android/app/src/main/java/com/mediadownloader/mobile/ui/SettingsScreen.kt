@@ -166,15 +166,7 @@ private fun YtDlpUpdateCard(
                     enabled = !isBusy,
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text("Verificar")
-                }
-                if (state.updateState == YtDlpUpdateState.AVAILABLE) {
-                    Button(
-                        onClick = { onAction(MobileUiAction.UpdateYtDlp) },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text("Atualizar")
-                    }
+                    Text("Verificar e atualizar")
                 }
             }
         }

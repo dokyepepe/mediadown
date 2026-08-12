@@ -62,8 +62,8 @@ if ($AcceptSdkLicenses) {
     Write-Warning "Use -AcceptSdkLicenses para instalar pacotes em uma máquina nova."
 }
 
-Write-Host "Instalando Platform Tools, Android 16 (API 36) e Build Tools 36.0.0..."
-& $sdkManager --sdk_root=$sdkRoot "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+Write-Host "Instalando Platform Tools, Android 16 (API 36) e Build Tools 35/36..."
+& $sdkManager --sdk_root=$sdkRoot "platform-tools" "platforms;android-36" "build-tools;35.0.0" "build-tools;36.0.0"
 if ($LASTEXITCODE -ne 0) {
     throw "sdkmanager terminou com código $LASTEXITCODE"
 }

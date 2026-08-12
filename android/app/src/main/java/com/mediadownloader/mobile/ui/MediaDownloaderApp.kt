@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -55,6 +57,13 @@ fun MediaDownloaderApp(
     MediaDownloaderTheme(preference = state.settings.theme) {
         val snackbarHostState = remember { SnackbarHostState() }
         val message = state.message
+
+        state.legalDocument?.let { document ->
+            LegalDocumentDialog(
+                document = document,
+                onDismiss = { onAction(MobileUiAction.DismissLegalDocument) },
+            )
+        }
 
         LaunchedEffect(message?.id) {
             if (message != null) {
@@ -105,6 +114,44 @@ fun MediaDownloaderApp(
             }
         }
     }
+}
+
+@Composable
+private fun LegalDocumentDialog(
+    document: LegalDocument,
+    onDismiss: () -> Unit,
+) {
+    val title = when (document) {
+        LegalDocument.RESPONSIBLE_USE -> "Uso responsável"
+        LegalDocument.PRIVACY -> "Privacidade"
+        LegalDocument.OPEN_SOURCE_LICENSES -> "Licenças de código aberto"
+    }
+    val text = when (document) {
+        LegalDocument.RESPONSIBLE_USE ->
+            "Baixe somente conteúdo próprio, em domínio público ou para o qual você tenha " +
+                "autorização. O aplicativo não remove DRM e o usuário é responsável por " +
+                "respeitar direitos autorais e os termos da plataforma de origem."
+
+        LegalDocument.PRIVACY ->
+            "Links, fila, preferências e histórico permanecem neste aparelho. O aplicativo " +
+                "não possui conta, anúncios ou telemetria. A conexão de rede é usada apenas " +
+                "para analisar e baixar a mídia solicitada e atualizar o yt-dlp."
+
+        LegalDocument.OPEN_SOURCE_LICENSES ->
+            "Este aplicativo inclui AndroidX, Kotlin, yt-dlp, Python, FFmpeg e " +
+                "youtubedl-android. Os componentes mantêm suas respectivas licenças de " +
+                "código aberto; os avisos completos acompanham o código-fonte do projeto."
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(text) },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("Fechar")
+            }
+        },
+    )
 }
 
 @Composable

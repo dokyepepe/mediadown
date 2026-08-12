@@ -62,7 +62,6 @@ class AndroidDownloadEngine(context: Context) {
         onProgress: (EngineProgress) -> Unit,
     ): DownloadResult = withContext(Dispatchers.IO) {
         validateUrl(item.sourceUrl)
-        cancelledProcesses.remove(item.id)
         ensureInitialized()
         checkCancelled(item.id)
 
@@ -123,6 +122,14 @@ class AndroidDownloadEngine(context: Context) {
     fun cancel(processId: String): Boolean {
         cancelledProcesses += processId
         return YoutubeDL.getInstance().destroyProcessById(processId)
+    }
+
+    fun prepare(processId: String) {
+        cancelledProcesses.remove(processId)
+    }
+
+    suspend fun initialize() = withContext(Dispatchers.IO) {
+        ensureInitialized()
     }
 
     private suspend fun ensureInitialized() {

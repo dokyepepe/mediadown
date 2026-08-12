@@ -1,8 +1,8 @@
 # Media Downloader
 
-Aplicativo desktop para Windows 10/11 que analisa, baixa e converte vídeos, áudios e playlists com **yt-dlp** e **FFmpeg**. A interface em **PySide6/Qt** adota um layout compacto inspirado em aplicativos móveis, com navegação inferior e controles adequados ao toque. O aplicativo não exige conta própria e não envia telemetria nem histórico; a conexão opcional com o Spotify serve somente para consultar metadados e playlists autorizadas.
+Aplicativo para Android 8+ e Windows 10/11 que analisa, baixa e converte vídeos, áudios e playlists com **yt-dlp** e **FFmpeg**. No Android, a interface é nativa em Kotlin/Jetpack Compose; no Windows, usa PySide6/Qt. O aplicativo não exige conta própria e não envia telemetria nem histórico; a conexão opcional com o Spotify está disponível na edição desktop e serve somente para consultar metadados e playlists autorizadas.
 
-A janela abre em 412 × 820 pixels lógicos, adapta-se à área disponível entre 360 e 480 pixels de largura e usa rolagem vertical nas telas mais longas. Este repositório gera um executável para Windows; não inclui APK/IPA nem suporte a Android/iOS.
+A interface adapta-se a telas compactas e usa rolagem vertical nas telas mais longas. Este repositório gera APK para Android e executável/instalador para Windows; não inclui IPA nem suporte a iOS.
 
 > Use o aplicativo somente para conteúdo que você tem direito de acessar e baixar. O projeto não remove nem contorna DRM.
 
@@ -111,6 +111,23 @@ dist/MediaDownloader/MediaDownloader.exe
 ```
 
 O build é `onedir`, mais previsível para Qt e FFmpeg e mais rápido na inicialização do que `onefile`. `utils/paths.py` resolve corretamente assets e binários no desenvolvimento e no bundle PyInstaller. A versão é definida uma única vez em `src/mediadownloader/version.py`; metadados do PE e do instalador são derivados dela no build.
+
+## Gerar o APK Android
+
+Requisitos: Windows, PowerShell e JDK 17 em `C:\Program Files\Java\jdk-17`. Na primeira execução, instale o SDK local do projeto e aceite as licenças:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/setup_android.ps1 -AcceptSdkLicenses
+powershell -ExecutionPolicy Bypass -File scripts/build_android.ps1 -Variant Debug
+```
+
+Saída instalável e assinada com a chave de desenvolvimento:
+
+```text
+release/MediaDownloader-android-debug.apk
+```
+
+Para instalar em um aparelho conectado com depuração USB, acrescente `-Install`. Uma versão de distribuição exige uma chave de assinatura própria; o script interrompe o fluxo caso `Release` seja gerado sem assinatura.
 
 ## Gerar o instalador
 

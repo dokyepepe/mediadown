@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.webkit.MimeTypeMap
+import androidx.annotation.RequiresApi
 import com.mediadownloader.mobile.data.PublishedFile
 import java.io.File
 import java.io.FileInputStream
@@ -31,6 +32,7 @@ internal class MediaStorePublisher(private val context: Context) {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun publishScoped(source: File, isCancelled: () -> Boolean): PublishedFile {
         val relativePath = "${Environment.DIRECTORY_DOWNLOADS}/$DOWNLOAD_DIRECTORY"
         val displayName = uniqueScopedName(safeDisplayName(source.name), relativePath)
@@ -103,6 +105,7 @@ internal class MediaStorePublisher(private val context: Context) {
         output.flush()
     }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun uniqueScopedName(original: String, relativePath: String): String {
         val name = original.substringBeforeLast('.', original)
         val extension = original.substringAfterLast('.', "").let { if (it.isBlank()) "" else ".$it" }
@@ -115,8 +118,8 @@ internal class MediaStorePublisher(private val context: Context) {
         return candidate
     }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun scopedNameExists(name: String, relativePath: String): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
         val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         return resolver.query(
             collection,

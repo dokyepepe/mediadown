@@ -34,6 +34,12 @@ try {
 
 $variantFolder = $Variant.ToLowerInvariant()
 $sourceApk = Join-Path $androidRoot "app\build\outputs\apk\$variantFolder\app-$variantFolder.apk"
+if ($Variant -eq "Release" -and -not (Test-Path -LiteralPath $sourceApk)) {
+    $unsignedRelease = Join-Path $androidRoot "app\build\outputs\apk\release\app-release-unsigned.apk"
+    if (Test-Path -LiteralPath $unsignedRelease) {
+        throw "O APK release foi gerado sem assinatura em $unsignedRelease. Configure uma signingConfig antes de distribuir."
+    }
+}
 if (-not (Test-Path -LiteralPath $sourceApk)) {
     throw "APK esperado não foi encontrado em $sourceApk"
 }

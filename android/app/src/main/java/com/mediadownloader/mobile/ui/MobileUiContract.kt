@@ -21,6 +21,7 @@ data class MobileUiState(
     val history: HistoryUiState = HistoryUiState(),
     val settings: SettingsUiState = SettingsUiState(),
     val message: UiMessage? = null,
+    val legalDocument: LegalDocument? = null,
 )
 
 data class UiMessage(
@@ -202,6 +203,7 @@ sealed interface MobileUiAction {
     object UpdateYtDlp : MobileUiAction
     object ChooseDownloadLocation : MobileUiAction
     data class OpenLegalDocument(val document: LegalDocument) : MobileUiAction
+    object DismissLegalDocument : MobileUiAction
 
     data class DismissMessage(val id: Long) : MobileUiAction
 }

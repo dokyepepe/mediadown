@@ -82,16 +82,19 @@ data class DownloadItem(
             thumbnailUrl: String? = null,
             options: DownloadOptions = DownloadOptions(),
             nowEpochMs: Long = System.currentTimeMillis(),
-        ): DownloadItem = DownloadItem(
-            id = UUID.randomUUID().toString(),
-            sourceUrl = sourceUrl.trim(),
-            title = title.ifBlank { sourceUrl },
-            sourceName = sourceName,
-            thumbnailUrl = thumbnailUrl,
-            options = options,
-            createdAtEpochMs = nowEpochMs,
-            updatedAtEpochMs = nowEpochMs,
-        )
+        ): DownloadItem {
+            val normalizedUrl = sourceUrl.trim()
+            return DownloadItem(
+                id = UUID.randomUUID().toString(),
+                sourceUrl = normalizedUrl,
+                title = title.trim().ifBlank { normalizedUrl },
+                sourceName = sourceName,
+                thumbnailUrl = thumbnailUrl,
+                options = options,
+                createdAtEpochMs = nowEpochMs,
+                updatedAtEpochMs = nowEpochMs,
+            )
+        }
     }
 }
 

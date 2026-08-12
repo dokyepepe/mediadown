@@ -36,6 +36,9 @@ class DownloadService : Service() {
     @Volatile
     private var currentDownloadId: String? = null
 
+    @Volatile
+    private var latestStartId: Int = 0
+
     private var lastProgressPersisted = -1
     private var lastProgressUpdateMs = 0L
 
@@ -54,6 +57,7 @@ class DownloadService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        latestStartId = startId
         ensureForeground("Verificando a fila", indeterminate = true)
         when (intent?.action) {
             ACTION_CANCEL -> intent.getStringExtra(EXTRA_DOWNLOAD_ID)?.let(::requestCancellation)
@@ -77,6 +81,12 @@ class DownloadService : Service() {
         super.onDestroy()
     }
 
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        currentDownloadId?.let(engine::cancel)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf(startId)
+    }
+
     private fun startWorker() {
         if (!workerStarted.compareAndSet(false, true)) return
         serviceScope.launch {
@@ -92,14 +102,17 @@ class DownloadService : Service() {
             runDownload(next)
         }
         currentDownloadId = null
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        val completedStartId = latestStartId
+        if (stopSelfResult(completedStartId)) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        }
     }
 
     private suspend fun runDownload(queuedItem: DownloadItem) {
         currentDownloadId = queuedItem.id
         lastProgressPersisted = -1
         lastProgressUpdateMs = 0L
+        engine.prepare(queuedItem.id)
         val starting = repository.markInitializing(queuedItem.id)
         if (starting?.state != com.mediadownloader.mobile.data.DownloadState.INITIALIZING) return
         ensureForeground("Preparando ${queuedItem.title}", indeterminate = true, item = queuedItem)
