@@ -9,4 +9,17 @@ resources/deno/*.exe
 __pycache__/
 *.py[cod]
 .pytest_cache/
+*.egg-info/
 *.log
+
+# Android/Gradle (ferramentas locais, caches, artefatos e chaves privadas)
+.android-sdk/
+.android-sdk-download/
+.gradle-dist/
+.gradle/
+android/.gradle/
+android/local.properties
+android/**/build/
+android/.idea/
+*.jks
+*.keystore

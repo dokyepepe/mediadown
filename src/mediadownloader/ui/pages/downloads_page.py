@@ -1,12 +1,13 @@
 """Visual bounded queue and its global controls."""
 
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QMessageBox, QScrollArea, QVBoxLayout, QWidget
 
 from mediadownloader.core import QueueManager
 from mediadownloader.models import DownloadItem, DownloadStatus
 
 from ..icons import set_button_icon
-from ..widgets import DownloadCard, EmptyState, PageHeader, SecondaryButton
+from ..widgets import DownloadCard, EmptyState, PageHeader, SecondaryButton, enable_touch_scrolling
 
 
 class DownloadsPage(QWidget):
@@ -16,32 +17,30 @@ class DownloadsPage(QWidget):
         self.queue = queue
         self.cards: dict[str, DownloadCard] = {}
         root = QVBoxLayout(self)
-        root.setContentsMargins(34, 28, 34, 34)
-        root.setSpacing(14)
-        header = QHBoxLayout()
-        title_box = QVBoxLayout()
-        title_box.addWidget(PageHeader(
+        root.setContentsMargins(16, 18, 16, 22)
+        root.setSpacing(12)
+        root.addWidget(PageHeader(
             "Downloads", "Acompanhe a fila e o processamento de mídia.", "downloads"
         ))
-        controls = QHBoxLayout()
+        controls = QVBoxLayout()
+        controls.setSpacing(7)
         self.pause_button = SecondaryButton("Pausar fila", icon_name="pause")
         self.pause_button.clicked.connect(self._toggle_pause)
-        cancel_all = SecondaryButton("Cancelar todos", icon_name="cancel")
-        cancel_all.setProperty("role", "danger")
-        cancel_all.clicked.connect(queue.cancel_all)
-        clear = SecondaryButton("Limpar concluídos", icon_name="trash")
-        clear.clicked.connect(self._clear_completed)
+        self.cancel_all_button = SecondaryButton("Cancelar todos", icon_name="cancel")
+        self.cancel_all_button.setProperty("role", "danger")
+        self.cancel_all_button.clicked.connect(self._confirm_cancel_all)
+        self.clear_button = SecondaryButton("Limpar concluídos", icon_name="trash")
+        self.clear_button.clicked.connect(self._clear_completed)
         controls.addWidget(self.pause_button)
-        controls.addWidget(cancel_all)
-        controls.addWidget(clear)
-        header.addLayout(title_box)
-        header.addStretch()
-        header.addLayout(controls)
-        root.addLayout(header)
+        controls.addWidget(self.cancel_all_button)
+        controls.addWidget(self.clear_button)
+        root.addLayout(controls)
         self.empty = EmptyState("Nenhum download em andamento", "Os downloads adicionados aparecerão aqui.", "downloads")
         root.addWidget(self.empty, 1)
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        enable_touch_scrolling(self.scroll)
         container = QWidget()
         self.list_layout = QVBoxLayout(container)
         self.list_layout.setContentsMargins(0, 0, 0, 0)
@@ -52,6 +51,9 @@ class DownloadsPage(QWidget):
         root.addWidget(self.scroll, 1)
         queue.item_added.connect(self.add_item)
         queue.item_updated.connect(self.update_item)
+        queue.item_finished.connect(lambda _item: self._update_controls())
+        queue.active_count_changed.connect(lambda _count: self._update_controls())
+        self._update_controls()
 
     def add_item(self, item: DownloadItem) -> None:
         card = DownloadCard(item)
@@ -61,16 +63,19 @@ class DownloadsPage(QWidget):
         self.cards[item.id] = card
         self.list_layout.insertWidget(self.list_layout.count() - 1, card)
         self._update_empty()
+        self._update_controls()
 
     def update_item(self, item: DownloadItem) -> None:
         if card := self.cards.get(item.id):
             card.update_item(item)
+        self._update_controls()
 
     def _remove(self, item_id: str) -> None:
         self.queue.remove(item_id)
         if card := self.cards.pop(item_id, None):
             card.deleteLater()
         self._update_empty()
+        self._update_controls()
 
     def _clear_completed(self) -> None:
         self.queue.clear_completed()
@@ -80,6 +85,20 @@ class DownloadsPage(QWidget):
                 self.cards.pop(item_id)
                 card.deleteLater()
         self._update_empty()
+        self._update_controls()
+
+    def _confirm_cancel_all(self) -> None:
+        if not self.queue.has_active:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Cancelar downloads",
+            "Cancelar todos os downloads ativos e pendentes?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self.queue.cancel_all()
 
     def _toggle_pause(self) -> None:
         if self.queue.paused:
@@ -95,3 +114,10 @@ class DownloadsPage(QWidget):
         empty = not self.cards
         self.empty.setVisible(empty)
         self.scroll.setVisible(not empty)
+
+    def _update_controls(self) -> None:
+        active = self.queue.has_active
+        completed = any(item.status == DownloadStatus.COMPLETED for item in self.queue.items.values())
+        self.pause_button.setEnabled(active)
+        self.cancel_all_button.setEnabled(active)
+        self.clear_button.setEnabled(completed)

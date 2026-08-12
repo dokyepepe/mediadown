@@ -5,11 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QThreadPool, Qt, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QDragEnterEvent, QDropEvent, QKeySequence, QShortcut
+from PySide6.QtGui import (
+    QAccessible, QAccessibleEvent, QDesktopServices, QDragEnterEvent, QDropEvent,
+    QKeySequence, QShortcut,
+)
 from PySide6.QtWidgets import (
     QButtonGroup, QCheckBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QScrollArea,
-    QVBoxLayout, QWidget,
+    QSizePolicy, QVBoxLayout, QWidget,
 )
 
 from mediadownloader.core.extractor import MediaExtractor
@@ -22,6 +25,7 @@ from mediadownloader.utils.validators import is_valid_url, validate_url
 from ..icons import set_button_icon, svg_asset_pixmap, svg_icon
 from ..widgets import (
     MediaPreviewCard, PageHeader, PrimaryButton, SecondaryButton, WheelSafeComboBox,
+    enable_touch_scrolling,
 )
 
 
@@ -47,18 +51,17 @@ class HomePage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        enable_touch_scrolling(scroll)
         content = QWidget()
         content.setObjectName("Page")
         self.layout = QVBoxLayout(content)
-        self.layout.setContentsMargins(34, 28, 34, 34)
-        self.layout.setSpacing(18)
+        self.layout.setContentsMargins(16, 18, 16, 22)
+        self.layout.setSpacing(14)
 
         self.layout.addWidget(PageHeader(
-            "Baixar mídia", "Cole o link de um vídeo, música ou playlist.", "home"
+            "Baixar mídia", "Cole o link de um vídeo, áudio ou playlist.", "home"
         ))
 
-        url_row = QHBoxLayout()
-        url_row.setSpacing(8)
         self.url_input = QLineEdit()
         self.url_input.setPlaceholderText("Cole uma URL aqui...")
         self.url_input.setAccessibleName("URL da mídia")
@@ -75,10 +78,12 @@ class HomePage(QWidget):
         self.analyze_button = PrimaryButton("ANALISAR", icon_name="analyze")
         self.analyze_button.setToolTip("Analisar a URL sem bloquear a janela")
         self.analyze_button.clicked.connect(self.analyze)
-        url_row.addWidget(self.url_input, 1)
-        url_row.addWidget(self.paste_button)
-        url_row.addWidget(self.analyze_button)
-        self.layout.addLayout(url_row)
+        self.layout.addWidget(self.url_input)
+        url_actions = QHBoxLayout()
+        url_actions.setSpacing(8)
+        url_actions.addWidget(self.paste_button, 1)
+        url_actions.addWidget(self.analyze_button, 2)
+        self.layout.addLayout(url_actions)
 
         self.notice = QLabel()
         self.notice.setObjectName("Notice")
@@ -100,7 +105,7 @@ class HomePage(QWidget):
         spotify_layout = QVBoxLayout(self.spotify_frame)
         spotify_layout.setContentsMargins(18, 16, 18, 18)
         spotify_layout.setSpacing(10)
-        spotify_header = QHBoxLayout()
+        spotify_header = QVBoxLayout()
         self.spotify_logo = QLabel()
         self.spotify_logo.setObjectName("SpotifyLogo")
         self.spotify_logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -110,17 +115,21 @@ class HomePage(QWidget):
         ))
         spotify_title = QLabel("Conteúdo fornecido pelo Spotify")
         spotify_title.setObjectName("SectionTitle")
+        spotify_title.setWordWrap(True)
+        spotify_title.setMinimumWidth(0)
+        spotify_title.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         spotify_header.addWidget(self.spotify_logo)
         spotify_header.addWidget(spotify_title)
-        spotify_header.addStretch()
         self.spotify_message = QLabel()
         self.spotify_message.setObjectName("WarningText")
         self.spotify_message.setWordWrap(True)
         self.spotify_message.setAccessibleName("Limitações da integração com Spotify")
-        spotify_actions = QHBoxLayout()
+        spotify_actions = QVBoxLayout()
+        spotify_actions.setSpacing(8)
         self.open_spotify_button = PrimaryButton("ABRIR SPOTIFY", icon_name="external")
         self.open_spotify_button.clicked.connect(self._open_spotify)
-        self.copy_spotify_button = SecondaryButton("COPIAR DADOS PARA BUSCA", icon_name="copy")
+        self.copy_spotify_button = SecondaryButton("COPIAR DADOS", icon_name="copy")
+        self.copy_spotify_button.setAccessibleName("Copiar dados para busca")
         self.copy_spotify_button.setToolTip(
             "Copia título e artista; nenhuma pesquisa ou download é iniciado automaticamente."
         )
@@ -130,7 +139,6 @@ class HomePage(QWidget):
         spotify_actions.addWidget(self.open_spotify_button)
         spotify_actions.addWidget(self.copy_spotify_button)
         spotify_actions.addWidget(self.configure_spotify_button)
-        spotify_actions.addStretch()
         spotify_layout.addLayout(spotify_header)
         spotify_layout.addWidget(self.spotify_message)
         spotify_layout.addLayout(spotify_actions)
@@ -140,31 +148,41 @@ class HomePage(QWidget):
         self.playlist_frame = QFrame()
         self.playlist_frame.setObjectName("Card")
         playlist_layout = QVBoxLayout(self.playlist_frame)
-        playlist_header = QHBoxLayout()
+        playlist_header = QVBoxLayout()
+        playlist_header.setSpacing(8)
         self.playlist_title = QLabel("Itens da playlist")
         self.playlist_title.setObjectName("SectionTitle")
+        self.playlist_title.setWordWrap(True)
+        self.playlist_title.setMinimumWidth(0)
+        self.playlist_title.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.download_current_button = QPushButton("Baixar item")
         set_button_icon(self.download_current_button, "downloads")
         self.download_current_button.setToolTip("Baixar somente o item destacado na lista")
         self.download_current_button.clicked.connect(self._queue_current_playlist_item)
-        self.select_all_button = QPushButton("Incluir todos")
+        self.select_all_button = QPushButton("Todos")
+        self.select_all_button.setAccessibleName("Incluir todos os itens")
         set_button_icon(self.select_all_button, "check")
         self.select_all_button.clicked.connect(lambda: self._check_all(True))
-        self.clear_all_button = QPushButton("Ignorar todos")
+        self.clear_all_button = QPushButton("Nenhum")
+        self.clear_all_button.setAccessibleName("Ignorar todos os itens")
         set_button_icon(self.clear_all_button, "cancel")
         self.clear_all_button.clicked.connect(lambda: self._check_all(False))
         playlist_header.addWidget(self.playlist_title)
-        playlist_header.addStretch()
         playlist_header.addWidget(self.download_current_button)
-        playlist_header.addWidget(self.select_all_button)
-        playlist_header.addWidget(self.clear_all_button)
+        playlist_bulk_actions = QHBoxLayout()
+        playlist_bulk_actions.setSpacing(8)
+        playlist_bulk_actions.addWidget(self.select_all_button, 1)
+        playlist_bulk_actions.addWidget(self.clear_all_button, 1)
+        playlist_header.addLayout(playlist_bulk_actions)
         self.playlist_list = QListWidget()
         self.playlist_list.setAccessibleName("Itens da playlist")
         self.playlist_list.setAccessibleDescription(
             "Marque os itens que deseja adicionar individualmente à fila de downloads."
         )
         self.playlist_list.setMinimumHeight(120)
-        self.playlist_list.setMaximumHeight(420)
+        self.playlist_list.setMaximumHeight(228)
+        self.playlist_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        enable_touch_scrolling(self.playlist_list)
         self.playlist_list.itemChanged.connect(self._update_playlist_selection)
         self.playlist_list.itemSelectionChanged.connect(self._update_playlist_selection)
         self.playlist_list.itemDoubleClicked.connect(
@@ -179,7 +197,8 @@ class HomePage(QWidget):
         options_layout = QVBoxLayout(self.options_card)
         options_layout.setContentsMargins(18, 16, 18, 18)
         options_layout.setSpacing(14)
-        type_row = QHBoxLayout()
+        type_row = QVBoxLayout()
+        type_row.setSpacing(8)
         type_label = QLabel("Tipo de download")
         type_label.setObjectName("SectionTitle")
         self.video_button = QPushButton("VÍDEO")
@@ -196,9 +215,11 @@ class HomePage(QWidget):
         self.video_button.setChecked(True)
         self.type_group.buttonClicked.connect(self._toggle_media_type)
         type_row.addWidget(type_label)
-        type_row.addStretch()
-        type_row.addWidget(self.video_button)
-        type_row.addWidget(self.audio_button)
+        type_buttons = QHBoxLayout()
+        type_buttons.setSpacing(8)
+        type_buttons.addWidget(self.video_button, 1)
+        type_buttons.addWidget(self.audio_button, 1)
+        type_row.addLayout(type_buttons)
         options_layout.addLayout(type_row)
 
         self.video_options = QWidget()
@@ -213,11 +234,12 @@ class HomePage(QWidget):
         self.video_format.currentIndexChanged.connect(self._update_format_details)
         video_grid.addWidget(QLabel("Qualidade"), 0, 0)
         video_grid.addWidget(self.video_quality, 1, 0)
-        video_grid.addWidget(QLabel("Formato"), 0, 1)
-        video_grid.addWidget(self.video_format, 1, 1)
+        video_grid.addWidget(QLabel("Formato"), 2, 0)
+        video_grid.addWidget(self.video_format, 3, 0)
         self.format_details = QLabel("A melhor combinação disponível será selecionada automaticamente.")
         self.format_details.setObjectName("Muted")
-        video_grid.addWidget(self.format_details, 2, 0, 1, 2)
+        self.format_details.setWordWrap(True)
+        video_grid.addWidget(self.format_details, 4, 0)
         options_layout.addWidget(self.video_options)
 
         self.audio_options = QWidget()
@@ -233,10 +255,10 @@ class HomePage(QWidget):
         self.add_metadata = QCheckBox("Adicionar metadados")
         audio_grid.addWidget(QLabel("Formato"), 0, 0)
         audio_grid.addWidget(self.audio_format, 1, 0)
-        audio_grid.addWidget(QLabel("Qualidade MP3"), 0, 1)
-        audio_grid.addWidget(self.audio_quality, 1, 1)
-        audio_grid.addWidget(self.embed_thumbnail, 2, 0)
-        audio_grid.addWidget(self.add_metadata, 2, 1)
+        audio_grid.addWidget(QLabel("Qualidade MP3"), 2, 0)
+        audio_grid.addWidget(self.audio_quality, 3, 0)
+        audio_grid.addWidget(self.embed_thumbnail, 4, 0)
+        audio_grid.addWidget(self.add_metadata, 5, 0)
         self.audio_options.hide()
         options_layout.addWidget(self.audio_options)
 
@@ -251,8 +273,8 @@ class HomePage(QWidget):
         self.subtitle_language.addItem("Automático", "auto")
         subtitle_grid.addWidget(QLabel("Legendas"), 0, 0)
         subtitle_grid.addWidget(self.subtitle_mode, 1, 0)
-        subtitle_grid.addWidget(QLabel("Idioma"), 0, 1)
-        subtitle_grid.addWidget(self.subtitle_language, 1, 1)
+        subtitle_grid.addWidget(QLabel("Idioma"), 2, 0)
+        subtitle_grid.addWidget(self.subtitle_language, 3, 0)
         options_layout.addLayout(subtitle_grid)
         result_layout.addWidget(self.options_card)
 
@@ -261,7 +283,8 @@ class HomePage(QWidget):
         destination_layout = QVBoxLayout(self.destination_card)
         destination_title = QLabel("Destino")
         destination_title.setObjectName("SectionTitle")
-        destination_row = QHBoxLayout()
+        destination_row = QVBoxLayout()
+        destination_row.setSpacing(8)
         self.destination = QLineEdit()
         self.destination.setAccessibleName("Pasta de destino")
         self.destination.setAccessibleDescription("Pasta onde o arquivo final será salvo.")
@@ -269,23 +292,23 @@ class HomePage(QWidget):
         browse = SecondaryButton("PROCURAR", icon_name="folder")
         browse.setToolTip("Escolher a pasta de destino (Ctrl+O)")
         browse.clicked.connect(self.choose_destination)
-        destination_row.addWidget(self.destination, 1)
+        destination_row.addWidget(self.destination)
         destination_row.addWidget(browse)
-        self.playlist_folder = QCheckBox("Criar subpasta com o nome da playlist")
+        self.playlist_folder = QCheckBox("Criar subpasta")
+        self.playlist_folder.setAccessibleName("Criar subpasta com o nome da playlist")
         destination_layout.addWidget(destination_title)
         destination_layout.addLayout(destination_row)
         destination_layout.addWidget(self.playlist_folder)
         result_layout.addWidget(self.destination_card)
 
         self.download_controls = QWidget()
-        download_row = QHBoxLayout(self.download_controls)
+        download_row = QVBoxLayout(self.download_controls)
         download_row.setContentsMargins(0, 0, 0, 0)
-        download_row.addStretch()
+        download_row.setSpacing(8)
         self.download_all_button = SecondaryButton("BAIXAR TUDO", icon_name="check")
         self.download_all_button.setToolTip("Adicionar todos os itens da playlist à fila")
         self.download_all_button.clicked.connect(self._queue_all_playlist_items)
         self.download_button = PrimaryButton("BAIXAR", icon_name="downloads")
-        self.download_button.setMinimumWidth(180)
         self.download_button.setToolTip("Adicionar somente os itens incluídos à fila")
         self.download_button.clicked.connect(lambda: self.queue_download())
         download_row.addWidget(self.download_all_button)
@@ -441,8 +464,8 @@ class HomePage(QWidget):
         self.playlist_list.blockSignals(False)
         if self.playlist_list.count():
             self.playlist_list.setCurrentRow(0)
-        visible_rows = min(max(len(media.entries), 3), 10)
-        self.playlist_list.setMinimumHeight(visible_rows * 34 + 8)
+        visible_rows = min(max(len(media.entries), 3), 5)
+        self.playlist_list.setMinimumHeight(visible_rows * 44 + 8)
         self.playlist_title.setText(
             f"Itens da playlist ({len(media.entries)})" if media.entries else "Itens da playlist"
         )
@@ -477,7 +500,7 @@ class HomePage(QWidget):
             else:
                 message += (
                     " Para consultar os itens de uma playlist, conecte a conta proprietária "
-                    "ou colaboradora em Configurações."
+                    "ou colaboradora na aba Ajustes."
                 )
         auth_error = str(media.raw.get("spotify_auth_error") or "")
         if auth_error:
@@ -488,7 +511,10 @@ class HomePage(QWidget):
             media.is_playlist and (not media.entries or bool(auth_error))
         )
         self.copy_spotify_button.setText(
-            "COPIAR ITEM PARA BUSCA" if media.entries else "COPIAR DADOS PARA BUSCA"
+            "COPIAR ITEM" if media.entries else "COPIAR DADOS"
+        )
+        self.copy_spotify_button.setAccessibleName(
+            "Copiar item para busca" if media.entries else "Copiar dados para busca"
         )
 
     def _open_spotify(self) -> None:
@@ -527,11 +553,13 @@ class HomePage(QWidget):
             for index in range(self.playlist_list.count())
         )
         if self.media and self.media.is_playlist and self.media.download_supported:
-            self.download_button.setText(f"BAIXAR SELECIONADOS ({included})")
+            self.download_button.setText(f"BAIXAR SELEÇÃO ({included})")
+            self.download_button.setAccessibleName(f"Baixar itens selecionados: {included}")
             self.download_button.setEnabled(included > 0)
             self.download_current_button.setEnabled(self.playlist_list.currentItem() is not None)
         else:
             self.download_button.setText("BAIXAR")
+            self.download_button.setAccessibleName("Baixar mídia")
             self.download_button.setEnabled(True)
 
     def _queue_current_playlist_item(self) -> None:
@@ -623,6 +651,7 @@ class HomePage(QWidget):
         self.notice.setText(message)
         self.notice.setAccessibleDescription(message)
         self.notice.show()
+        QAccessible.updateAccessibility(QAccessibleEvent(self.notice, QAccessible.Event.Alert))
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         if event.mimeData().hasText() and is_valid_url(event.mimeData().text().strip()):

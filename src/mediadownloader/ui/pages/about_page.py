@@ -11,7 +11,7 @@ from mediadownloader.core.platform_catalog import PlatformInfo, extractor_count,
 from mediadownloader.version import APP_VERSION
 
 from ..icons import svg_pixmap
-from ..widgets import PageHeader
+from ..widgets import PageHeader, ThemedIconLabel, enable_touch_scrolling
 
 
 class MetricCard(QFrame):
@@ -21,8 +21,7 @@ class MetricCard(QFrame):
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(14, 12, 14, 12)
-        icon = QLabel()
-        icon.setPixmap(svg_pixmap(icon_name, 24, "#2E8B57"))
+        icon = ThemedIconLabel(icon_name, 24)
         icon.setFixedWidth(32)
         text = QVBoxLayout()
         text.setSpacing(0)
@@ -91,42 +90,52 @@ class AboutPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        enable_touch_scrolling(scroll)
         content = QWidget()
         content.setObjectName("Page")
+        content.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         root = QVBoxLayout(content)
-        root.setContentsMargins(34, 28, 34, 34)
-        root.setSpacing(16)
+        root.setContentsMargins(16, 18, 16, 22)
+        root.setSpacing(14)
         root.addWidget(PageHeader(
             "Sobre", "Informações do aplicativo, compatibilidade e componentes.", "info"
         ))
 
         hero = QFrame()
         hero.setObjectName("Card")
-        hero_layout = QHBoxLayout(hero)
-        hero_layout.setContentsMargins(24, 22, 24, 22)
-        hero_layout.setSpacing(20)
-        logo = QLabel()
+        hero.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        hero_layout = QVBoxLayout(hero)
+        hero_layout.setContentsMargins(18, 18, 18, 18)
+        hero_layout.setSpacing(12)
+        logo = ThemedIconLabel("brand", 58)
         logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         logo.setFixedSize(82, 82)
-        logo.setPixmap(svg_pixmap("brand", 58, "#2E8B57"))
         logo.setObjectName("TintedIcon")
         identity = QVBoxLayout()
         identity.setSpacing(5)
         eyebrow = QLabel("UTILITÁRIO DESKTOP PARA WINDOWS")
         eyebrow.setObjectName("Eyebrow")
+        eyebrow.setWordWrap(True)
+        eyebrow.setMinimumWidth(0)
+        eyebrow.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         name = QLabel("Media Downloader")
         name.setObjectName("HeroName")
+        name.setWordWrap(True)
+        name.setMinimumWidth(0)
+        name.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         description = QLabel(
             "Download e conversão de mídias com uma interface simples, organizada e local. "
             "Sem conta obrigatória, telemetria ou envio do histórico."
         )
         description.setObjectName("Muted")
         description.setWordWrap(True)
+        description.setMinimumWidth(0)
+        description.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         identity.addWidget(eyebrow)
         identity.addWidget(name)
         identity.addWidget(description)
-        hero_layout.addWidget(logo)
-        hero_layout.addLayout(identity, 1)
+        hero_layout.addWidget(logo, 0, Qt.AlignmentFlag.AlignHCenter)
+        hero_layout.addLayout(identity)
         root.addWidget(hero)
 
         metrics = QGridLayout()
@@ -134,14 +143,16 @@ class AboutPage(QWidget):
         metrics.setVerticalSpacing(10)
         count = extractor_count()
         metrics.addWidget(MetricCard(APP_VERSION, "Versão do aplicativo", "info"), 0, 0)
-        metrics.addWidget(MetricCard(f"{count:,}".replace(",", ".") if count else "Ampla", "Extractors disponíveis", "globe"), 0, 1)
-        metrics.addWidget(MetricCard("100% local", "Histórico e configurações permanecem neste computador", "shield"), 1, 0, 1, 2)
+        metrics.addWidget(MetricCard(f"{count:,}".replace(",", ".") if count else "Ampla", "Extractors disponíveis", "globe"), 1, 0)
+        metrics.addWidget(MetricCard("100% local", "Histórico e configurações permanecem neste computador", "shield"), 2, 0)
         metrics.setColumnStretch(0, 1)
-        metrics.setColumnStretch(1, 1)
         root.addLayout(metrics)
 
         section = QLabel("Principais plataformas compatíveis")
         section.setObjectName("SectionTitle")
+        section.setWordWrap(True)
+        section.setMinimumWidth(0)
+        section.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         root.addWidget(section)
         explanation = QLabel(
             "A disponibilidade depende do tipo de URL, região, autenticação e mudanças feitas por cada serviço. "
@@ -149,37 +160,44 @@ class AboutPage(QWidget):
         )
         explanation.setObjectName("Muted")
         explanation.setWordWrap(True)
+        explanation.setMinimumWidth(0)
+        explanation.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         root.addWidget(explanation)
         platform_grid = QGridLayout()
         platform_grid.setHorizontalSpacing(10)
         platform_grid.setVerticalSpacing(10)
         for index, platform in enumerate(supported_platforms()):
-            platform_grid.addWidget(PlatformCard(platform), index // 2, index % 2)
+            platform_grid.addWidget(PlatformCard(platform), index, 0)
         platform_grid.setColumnStretch(0, 1)
-        platform_grid.setColumnStretch(1, 1)
         root.addLayout(platform_grid)
 
         more = QFrame()
         more.setObjectName("Card")
+        more.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         more_layout = QHBoxLayout(more)
         more_layout.setContentsMargins(18, 15, 18, 15)
-        more_icon = QLabel()
-        more_icon.setPixmap(svg_pixmap("list", 28, "#2E8B57"))
+        more_icon = ThemedIconLabel("list", 28)
         more_text = QLabel(
             "<b>E muitos outros sites.</b><br>O mecanismo genérico do yt-dlp e seus extractors adicionais "
             "ampliam a cobertura além das plataformas destacadas acima."
         )
         more_text.setWordWrap(True)
+        more_text.setMinimumWidth(0)
+        more_text.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         more_layout.addWidget(more_icon)
         more_layout.addWidget(more_text, 1)
         root.addWidget(more)
 
         third = QFrame()
         third.setObjectName("Card")
+        third.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         third_layout = QVBoxLayout(third)
         third_layout.setContentsMargins(18, 16, 18, 16)
         third_title = QLabel("Componentes de terceiros")
         third_title.setObjectName("SectionTitle")
+        third_title.setWordWrap(True)
+        third_title.setMinimumWidth(0)
+        third_title.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         third_text = QLabel(
             "<b>yt-dlp</b> — extração e download &nbsp; • &nbsp; "
             "<b>FFmpeg</b> — merge e conversão &nbsp; • &nbsp; "
@@ -190,9 +208,13 @@ class AboutPage(QWidget):
         )
         third_text.setObjectName("Muted")
         third_text.setWordWrap(True)
+        third_text.setMinimumWidth(0)
+        third_text.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         legal = QLabel("Baixe somente conteúdo que você possui autorização para acessar e conservar.")
         legal.setObjectName("WarningText")
         legal.setWordWrap(True)
+        legal.setMinimumWidth(0)
+        legal.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         third_layout.addWidget(third_title)
         third_layout.addWidget(third_text)
         third_layout.addWidget(legal)

@@ -1,4 +1,4 @@
-"""Deterministic SVG icon rendering for consistent desktop controls."""
+"""Deterministic SVG icon rendering for consistent native controls."""
 
 from __future__ import annotations
 

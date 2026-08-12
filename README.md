@@ -1,6 +1,8 @@
 # Media Downloader
 
-Aplicativo desktop Windows para analisar, baixar e converter vídeos, áudios e playlists com **yt-dlp** e **FFmpeg**, usando uma interface nativa em **PySide6/Qt**. Não há conta, telemetria nem envio do histórico: configurações, fila e histórico permanecem locais.
+Aplicativo desktop para Windows 10/11 que analisa, baixa e converte vídeos, áudios e playlists com **yt-dlp** e **FFmpeg**. A interface em **PySide6/Qt** adota um layout compacto inspirado em aplicativos móveis, com navegação inferior e controles adequados ao toque. O aplicativo não exige conta própria e não envia telemetria nem histórico; a conexão opcional com o Spotify serve somente para consultar metadados e playlists autorizadas.
+
+A janela abre em 412 × 820 pixels lógicos, adapta-se à área disponível entre 360 e 480 pixels de largura e usa rolagem vertical nas telas mais longas. Este repositório gera um executável para Windows; não inclui APK/IPA nem suporte a Android/iOS.
 
 > Use o aplicativo somente para conteúdo que você tem direito de acessar e baixar. O projeto não remove nem contorna DRM.
 
@@ -8,26 +10,26 @@ Aplicativo desktop Windows para analisar, baixar e converter vídeos, áudios e 
 
 Versão 1.1.0. O MVP implementa o fluxo completo de análise, seleção, fila, download, pós-processamento e histórico. A cobertura real de sites acompanha os extractors do yt-dlp; alterações nas plataformas podem exigir uma atualização do componente.
 
-![Placeholder da tela inicial](docs/screenshots/home-placeholder.svg)
+![Mockup do estado analisado no layout compacto](docs/screenshots/home-placeholder.svg)
 
 ## Recursos
 
-- interface Windows com sidebar, onboarding, estados vazios e tema claro/escuro/sistema;
+- interface compacta com barra superior, navegação inferior, alvos de toque, onboarding, estados vazios e tema claro/escuro/sistema;
 - conjunto próprio de ícones SVG vetoriais, com renderização HiDPI pelo Qt;
-- análise assíncrona de URL, título, autor, duração, origem, thumbnail e formatos;
+- análise assíncrona de URL, título, autor, duração, origem, miniatura e formatos;
 - playlists enumeradas com ações para baixar um item, ignorar itens, baixar a seleção ou baixar tudo;
 - vídeo automático/MP4/MKV/WEBM e limite de resolução disponível;
-- áudio MP3/M4A/AAC/OPUS/FLAC/WAV, bitrate MP3, capa e metadados;
+- áudio MP3/M4A/AAC/OPUS/FLAC/WAV, taxa de bits MP3, capa e metadados;
 - legendas oficiais/automáticas, download ou incorporação;
-- fila concorrente limitada de 1 a 5, cancelamento, retry e pausa de agendamento;
+- fila concorrente limitada de 1 a 5, cancelamento, tentativa novamente e pausa de agendamento;
 - progresso, velocidade, ETA, bytes e estados de FFmpeg sem exibir 100% prematuramente, com eventos limitados para downloads longos;
-- histórico SQLite pesquisável, filtros e ações de arquivo/pasta/URL;
+- histórico SQLite pesquisável em cartões, com filtros e ações de arquivo/pasta/URL;
 - página Sobre com catálogo das principais plataformas, validado contra os extractors instalados do yt-dlp e integrações nativas;
 - reconhecimento de links Spotify com metadados via oEmbed, abertura no serviço e playlists autorizadas via OAuth 2.0 PKCE;
 - preferências persistentes, templates de nome, proxy e cookies consentidos;
 - logs rotativos sem registrar cookies, tokens e credenciais deliberadamente;
 - atualização controlada do yt-dlp: wheel oficial do PyPI com SHA-256, ativado no reinício;
-- Deno interno e yt-dlp-ejs para o suporte completo atual do extractor do YouTube;
+- Deno interno e yt-dlp-ejs para ampliar a compatibilidade atual com o YouTube;
 - PyInstaller sem console e instalador Inno Setup x64 com atalhos e desinstalador.
 
 ## Arquitetura
@@ -64,12 +66,12 @@ Para consultar até 20 itens de uma playlist pertencente à sua conta ou na qual
 1. Crie um aplicativo no [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
 2. Cadastre exatamente `http://127.0.0.1:43819/callback` em **Redirect URIs**.
 3. Copie somente o **Client ID** — nunca é necessário informar o Client Secret.
-4. Em Configurações → Spotify, informe o Client ID e escolha **Conectar conta**.
+4. Na aba **Ajustes**, seção **Spotify**, informe o Client ID e escolha **Conectar conta**.
 5. Autorize somente os escopos de leitura de playlists exibidos pelo Spotify.
 
 O login ocorre no navegador padrão usando Authorization Code com PKCE e proteção `state`. Tokens não entram no arquivo de configurações ou nos logs; ficam no cofre de credenciais do usuário do Windows. Use **Desconectar** para removê-los.
 
-Aplicativos Spotify em Development Mode estão sujeitos às regras e cotas atuais do serviço, inclusive restrições de usuário, propriedade/colaboração de playlists e possíveis requisitos de conta Premium do proprietário do aplicativo. Consulte a [documentação oficial de autorização](https://developer.spotify.com/documentation/web-api/concepts/authorization) e o [guia de mudanças de 2026](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide).
+No Development Mode, o proprietário do aplicativo precisa manter uma assinatura Spotify Premium ativa; novos aplicativos aceitam até cinco usuários. Consulte a [documentação oficial de autorização](https://developer.spotify.com/documentation/web-api/concepts/authorization) e o [guia de mudanças de 2026](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide) para as regras e exceções aplicáveis a aplicativos existentes.
 
 ## Desenvolvimento
 
@@ -108,7 +110,7 @@ Saída:
 dist/MediaDownloader/MediaDownloader.exe
 ```
 
-O build é `onedir`, mais previsível para Qt e FFmpeg e mais rápido na inicialização que `onefile`. `utils/paths.py` resolve corretamente assets e binários no desenvolvimento e no bundle PyInstaller. A versão é definida uma única vez em `src/mediadownloader/version.py`; metadados do PE e do instalador são derivados dela no build.
+O build é `onedir`, mais previsível para Qt e FFmpeg e mais rápido na inicialização do que `onefile`. `utils/paths.py` resolve corretamente assets e binários no desenvolvimento e no bundle PyInstaller. A versão é definida uma única vez em `src/mediadownloader/version.py`; metadados do PE e do instalador são derivados dela no build.
 
 ## Gerar o instalador
 
@@ -142,7 +144,7 @@ Veja [`licenses/THIRD_PARTY_NOTICES.md`](licenses/THIRD_PARTY_NOTICES.md). Prese
 ## Troubleshooting
 
 - **“FFmpeg não encontrado”**: execute `scripts/setup_ffmpeg.ps1` e reinicie o app.
-- **Site deixou de funcionar**: em Configurações → Componentes, verifique/atualize yt-dlp.
+- **Site deixou de funcionar**: na aba **Ajustes**, seção **Componentes**, verifique/atualize yt-dlp.
 - **Conteúdo privado**: configure cookies somente para uma conta à qual você tem acesso legítimo.
 - **Erro de merge/conversão**: consulte `app.log`; confirme espaço em disco e a versão do FFmpeg.
 - **Antivírus sinaliza build local**: builds PyInstaller sem assinatura podem gerar falso positivo. Para distribuição pública, assine EXE e Setup com certificado Authenticode.

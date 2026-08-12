@@ -7,8 +7,8 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeySequence
 from PySide6.QtWidgets import (
-    QApplication, QButtonGroup, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
-    QStackedWidget, QSystemTrayIcon, QVBoxLayout, QWidget,
+    QApplication, QButtonGroup, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
+    QSizePolicy, QStackedWidget, QSystemTrayIcon, QVBoxLayout, QWidget,
 )
 
 from mediadownloader.core import DownloadEngine, FFmpegManager, MediaExtractor, QueueManager
@@ -21,8 +21,7 @@ from mediadownloader.version import APP_NAME, APP_VERSION
 
 from .pages import AboutPage, DownloadsPage, HistoryPage, HomePage, SettingsPage
 from .theme import apply_theme
-from .icons import svg_pixmap
-from .widgets import SidebarButton
+from .widgets import BottomNavButton, PageHeader, ThemedIconLabel
 
 
 class MainWindow(QMainWindow):
@@ -40,8 +39,15 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(APP_NAME)
         self.setAccessibleName(APP_NAME)
         self.setAccessibleDescription("Utilitário para analisar, baixar e converter mídias.")
-        self.resize(1100, 720)
-        self.setMinimumSize(900, 620)
+        screen = QApplication.primaryScreen()
+        available = screen.availableGeometry() if screen else None
+        available_width = available.width() if available else 412
+        available_height = available.height() if available else 820
+        target_width = min(412, available_width)
+        target_height = min(820, available_height)
+        self.resize(target_width, target_height)
+        self.setMinimumSize(min(360, target_width), min(480, target_height))
+        self.setMaximumWidth(min(480, available_width))
         icon = QIcon(str(asset_path("app.ico")))
         if not icon.isNull():
             self.setWindowIcon(icon)
@@ -55,34 +61,29 @@ class MainWindow(QMainWindow):
 
     def _build_ui(self) -> None:
         central = QWidget()
-        root = QHBoxLayout(central)
+        central.setObjectName("AppShell")
+        root = QVBoxLayout(central)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        sidebar = QWidget()
-        sidebar.setObjectName("Sidebar")
-        sidebar.setFixedWidth(220)
-        side = QVBoxLayout(sidebar)
-        side.setContentsMargins(14, 20, 14, 16)
-        side.setSpacing(5)
-        brand_widget = QWidget()
-        brand_layout = QHBoxLayout(brand_widget)
-        brand_layout.setContentsMargins(7, 3, 4, 3)
-        brand_layout.setSpacing(10)
-        brand_icon = QLabel()
-        brand_icon.setPixmap(svg_pixmap("brand", 30, "#2E8B57"))
-        brand_icon.setFixedSize(34, 34)
-        brand_text = QVBoxLayout()
-        brand_text.setSpacing(0)
+
+        app_bar = QFrame()
+        app_bar.setObjectName("AppBar")
+        brand_layout = QHBoxLayout(app_bar)
+        brand_layout.setContentsMargins(16, 10, 16, 10)
+        brand_layout.setSpacing(9)
+        brand_icon = ThemedIconLabel("brand", 26)
+        brand_icon.setFixedSize(30, 30)
         brand = QLabel("Media Downloader")
         brand.setObjectName("BrandName")
-        brand_caption = QLabel("MÍDIA • ÁUDIO • VÍDEO")
-        brand_caption.setObjectName("BrandCaption")
-        brand_text.addWidget(brand)
-        brand_text.addWidget(brand_caption)
+        brand.setMinimumWidth(0)
+        brand.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         brand_layout.addWidget(brand_icon)
-        brand_layout.addLayout(brand_text, 1)
-        side.addWidget(brand_widget)
-        side.addSpacing(14)
+        brand_layout.addWidget(brand, 1)
+        version = QLabel(f"v{APP_VERSION}")
+        version.setObjectName("AppVersion")
+        brand_layout.addWidget(version)
+        root.addWidget(app_bar)
+
         self.stack = QStackedWidget()
         self.home_page = HomePage(self.extractor, self.settings)
         self.downloads_page = DownloadsPage(self.queue)
@@ -96,27 +97,36 @@ class MainWindow(QMainWindow):
             ("Configurações", "settings", self.settings_page),
             ("Sobre", "info", self.about_page),
         ]
+        self.page_titles = [label for label, _icon, _page in pages]
+        nav = QFrame()
+        nav.setObjectName("BottomNav")
+        nav_layout = QHBoxLayout(nav)
+        nav_layout.setContentsMargins(4, 4, 4, 4)
+        nav_layout.setSpacing(0)
         group = QButtonGroup(self)
+        self.nav_buttons: list[BottomNavButton] = []
         for index, (label, icon_name, page) in enumerate(pages):
-            button = SidebarButton(label, icon_name)
+            nav_label = "Ajustes" if label == "Configurações" else label
+            button = BottomNavButton(nav_label, icon_name)
             button.clicked.connect(lambda checked=False, page_index=index: self._navigate(page_index))
             group.addButton(button)
-            side.addWidget(button)
+            self.nav_buttons.append(button)
+            nav_layout.addWidget(button, 1)
             self.stack.addWidget(page)
             if index == 0:
                 button.setChecked(True)
-        side.addStretch()
-        version = QLabel(f"v{APP_VERSION}")
-        version.setObjectName("Muted")
-        version.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        side.addWidget(version)
-        root.addWidget(sidebar)
         root.addWidget(self.stack, 1)
+        root.addWidget(nav)
         self.setCentralWidget(central)
         self.home_page.download_requested.connect(self._queue_media)
         self.home_page.configure_spotify_requested.connect(lambda: self._navigate(3))
         self.history_page.redownload_requested.connect(self._redownload)
         self.settings_page.theme_changed.connect(lambda theme: apply_theme(QApplication.instance(), theme))
+        self.queue.item_added.connect(lambda _item: self._update_download_nav())
+        self.queue.item_updated.connect(lambda _item: self._update_download_nav())
+        self.queue.item_finished.connect(lambda _item: self._update_download_nav())
+        self.queue.active_count_changed.connect(lambda _count: self._update_download_nav())
+        self._update_download_nav()
 
     def _build_shortcuts(self) -> None:
         settings_action = QAction(self)
@@ -126,8 +136,27 @@ class MainWindow(QMainWindow):
 
     def _navigate(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
+        if 0 <= index < len(self.nav_buttons):
+            self.nav_buttons[index].setChecked(True)
+            title = self.page_titles[index]
+            self.setWindowTitle(f"{APP_NAME} — {title}")
+            self.setAccessibleDescription(f"Seção atual: {title}.")
         if index == 2:
             self.history_page.reload()
+        header = self.stack.currentWidget().findChild(PageHeader)
+        if header is not None:
+            header.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _update_download_nav(self) -> None:
+        if len(self.nav_buttons) < 2:
+            return
+        pending = sum(not item.status.terminal for item in self.queue.items.values())
+        button = self.nav_buttons[1]
+        description = (
+            f"Downloads, {pending} item(ns) ativo(s)." if pending else "Downloads, nenhuma atividade."
+        )
+        button.setAccessibleName(description)
+        button.setToolTip(description)
 
     def _queue_media(self, media: MediaInfo, options: DownloadOptions, entries: list) -> None:
         if not media.download_supported:
@@ -160,7 +189,7 @@ class MainWindow(QMainWindow):
             )
             self.queue.add(item, item_options)
         # Keep the analysis and URL visible. Downloads remain available from the
-        # sidebar without unexpectedly replacing the form the user is working in.
+        # bottom navigation without unexpectedly replacing the form in progress.
 
     def _redownload(self, old: DownloadItem) -> None:
         options = DownloadOptions.from_dict(old.options)

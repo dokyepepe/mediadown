@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, Qt, QUrl
+from PySide6.QtCore import QEvent, QSize, Qt, QUrl
 from PySide6.QtGui import QPalette, QPixmap
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
-    QComboBox, QHBoxLayout, QLabel, QPushButton, QSpinBox, QVBoxLayout, QWidget,
+    QAbstractItemView, QAbstractScrollArea, QComboBox, QHBoxLayout, QLabel, QPushButton,
+    QScroller, QSizePolicy, QSpinBox, QToolButton, QVBoxLayout, QWidget,
 )
 
 from mediadownloader.models import DownloadStatus
@@ -20,6 +21,10 @@ class WheelSafeComboBox(QComboBox):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.setMinimumContentsLength(8)
+        self.setMinimumWidth(0)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         self.setAccessibleDescription(
             "Use as setas do teclado ou abra a lista. A roda do mouse não altera esta seleção."
         )
@@ -34,6 +39,7 @@ class WheelSafeSpinBox(QSpinBox):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setAccessibleDescription(
             "Digite um valor ou use as setas. A roda do mouse não altera este número."
         )
@@ -47,7 +53,7 @@ class PrimaryButton(QPushButton):
         super().__init__(text, parent)
         self.setProperty("role", "primary")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setMinimumHeight(38)
+        self.setMinimumHeight(44)
         self.setAccessibleName(text.replace("&", ""))
         if icon_name:
             set_button_icon(self, icon_name, "#FFFFFF")
@@ -57,20 +63,27 @@ class SecondaryButton(QPushButton):
     def __init__(self, text: str, parent: QWidget | None = None, icon_name: str = "") -> None:
         super().__init__(text, parent)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setMinimumHeight(36)
+        self.setMinimumHeight(44)
         self.setAccessibleName(text.replace("&", ""))
         if icon_name:
             set_button_icon(self, icon_name)
 
 
-class SidebarButton(QPushButton):
+class BottomNavButton(QToolButton):
+    """Touch-friendly navigation item used by the compact application shell."""
+
     def __init__(self, text: str, icon_name: str, parent: QWidget | None = None) -> None:
-        super().__init__(text, parent)
-        self.setObjectName("SidebarButton")
+        super().__init__(parent)
+        self.setText(text)
+        self.setObjectName("BottomNavButton")
         self.setCheckable(True)
         self.setAutoExclusive(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setMinimumHeight(44)
+        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        self.setIconSize(QSize(22, 22))
+        self.setMinimumHeight(62)
+        self.setMinimumWidth(0)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         self.setAccessibleName(text)
         self.setAccessibleDescription(f"Abrir a seção {text}.")
         self.icon_name = icon_name
@@ -79,7 +92,7 @@ class SidebarButton(QPushButton):
 
     def _refresh_icon(self, checked: bool) -> None:
         role = QPalette.ColorRole.Link if checked else QPalette.ColorRole.ButtonText
-        set_button_icon(self, self.icon_name, self.palette().color(role).name(), 19)
+        set_button_icon(self, self.icon_name, self.palette().color(role).name(), 22)
 
     def changeEvent(self, event: QEvent) -> None:
         super().changeEvent(event)
@@ -87,25 +100,51 @@ class SidebarButton(QPushButton):
             self._refresh_icon(self.isChecked())
 
 
+class ThemedIconLabel(QLabel):
+    """Palette-aware SVG label that stays legible after a live theme switch."""
+
+    def __init__(self, icon_name: str, icon_size: int, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.icon_name = icon_name
+        self.icon_size = icon_size
+        self._refresh_icon()
+
+    def _refresh_icon(self) -> None:
+        color = self.palette().color(QPalette.ColorRole.Link).name()
+        self.setPixmap(svg_pixmap(self.icon_name, self.icon_size, color))
+
+    def changeEvent(self, event: QEvent) -> None:
+        super().changeEvent(event)
+        if event.type() in {QEvent.Type.PaletteChange, QEvent.Type.StyleChange} and hasattr(self, "icon_name"):
+            self._refresh_icon()
+
+
 class PageHeader(QWidget):
     def __init__(self, title: str, subtitle: str, icon_name: str) -> None:
         super().__init__()
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.setAccessibleName(title)
         self.setAccessibleDescription(subtitle)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 4)
-        layout.setSpacing(14)
-        icon = QLabel()
+        layout.setSpacing(11)
+        icon = ThemedIconLabel(icon_name, 22)
         icon.setObjectName("PageHeaderIcon")
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon.setFixedSize(46, 46)
-        icon.setPixmap(svg_pixmap(icon_name, 25, "#2E8B57"))
+        icon.setFixedSize(40, 40)
         text = QVBoxLayout()
         text.setSpacing(2)
         title_label = QLabel(title)
         title_label.setObjectName("PageTitle")
+        title_label.setWordWrap(True)
+        title_label.setMinimumWidth(0)
+        title_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         subtitle_label = QLabel(subtitle)
         subtitle_label.setObjectName("PageSubtitle")
+        subtitle_label.setWordWrap(True)
+        subtitle_label.setMinimumWidth(0)
+        subtitle_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         text.addWidget(title_label)
         text.addWidget(subtitle_label)
         layout.addWidget(icon)
@@ -115,6 +154,7 @@ class PageHeader(QWidget):
 class EmptyState(QWidget):
     def __init__(self, title: str, subtitle: str, icon_name: str = "downloads") -> None:
         super().__init__()
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
         self.setAccessibleName(title)
         self.setAccessibleDescription(subtitle)
         layout = QVBoxLayout(self)
@@ -127,9 +167,15 @@ class EmptyState(QWidget):
         title_label = QLabel(title)
         title_label.setObjectName("SectionTitle")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_label.setWordWrap(True)
+        title_label.setMinimumWidth(0)
+        title_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         subtitle_label = QLabel(subtitle)
         subtitle_label.setObjectName("Muted")
         subtitle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        subtitle_label.setWordWrap(True)
+        subtitle_label.setMinimumWidth(0)
+        subtitle_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         layout.addWidget(icon)
         layout.addWidget(title_label)
         layout.addWidget(subtitle_label)
@@ -196,3 +242,10 @@ class ThumbnailLabel(QLabel):
                     self.setText("")
         finally:
             reply.deleteLater()
+
+
+def enable_touch_scrolling(view: QAbstractScrollArea) -> None:
+    """Enable smooth per-pixel and kinetic scrolling on touch-capable screens."""
+    if isinstance(view, QAbstractItemView):
+        view.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+    QScroller.grabGesture(view.viewport(), QScroller.ScrollerGestureType.TouchGesture)

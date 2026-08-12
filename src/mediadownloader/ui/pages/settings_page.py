@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel,
-    QLineEdit, QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QLineEdit, QMessageBox, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
 )
 
 from mediadownloader.core import FFmpegManager, QueueManager
@@ -17,9 +15,10 @@ from mediadownloader.services.update_service import UpdateService
 from mediadownloader.utils.filenames import validate_template
 from mediadownloader.version import APP_VERSION
 
-from ..icons import set_button_icon, svg_pixmap
+from ..icons import set_button_icon
 from ..widgets import (
-    PageHeader, PrimaryButton, SecondaryButton, WheelSafeComboBox, WheelSafeSpinBox,
+    PageHeader, PrimaryButton, ThemedIconLabel, WheelSafeComboBox, WheelSafeSpinBox,
+    enable_touch_scrolling,
 )
 
 
@@ -46,14 +45,17 @@ class SettingsSection(QFrame):
     def __init__(self, title: str, description: str = "", icon_name: str = "settings") -> None:
         super().__init__()
         self.setObjectName("Card")
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(18, 16, 18, 18)
+        self.layout.setContentsMargins(14, 14, 14, 16)
         heading = QHBoxLayout()
-        heading_icon = QLabel()
-        heading_icon.setPixmap(svg_pixmap(icon_name, 20, "#2E8B57"))
+        heading_icon = ThemedIconLabel(icon_name, 20)
         heading_icon.setFixedWidth(26)
         title_label = QLabel(title)
         title_label.setObjectName("SectionTitle")
+        title_label.setWordWrap(True)
+        title_label.setMinimumWidth(0)
+        title_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         heading.addWidget(heading_icon)
         heading.addWidget(title_label)
         heading.addStretch()
@@ -62,10 +64,13 @@ class SettingsSection(QFrame):
             label = QLabel(description)
             label.setObjectName("Muted")
             label.setWordWrap(True)
+            label.setMinimumWidth(0)
+            label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
             self.layout.addWidget(label)
         self.form = QFormLayout()
-        self.form.setHorizontalSpacing(24)
-        self.form.setVerticalSpacing(11)
+        self.form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
+        self.form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        self.form.setVerticalSpacing(9)
         self.layout.addLayout(self.form)
 
 
@@ -92,11 +97,12 @@ class SettingsPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        enable_touch_scrolling(scroll)
         content = QWidget()
         content.setObjectName("Page")
         root = QVBoxLayout(content)
-        root.setContentsMargins(34, 28, 34, 34)
-        root.setSpacing(14)
+        root.setContentsMargins(16, 18, 16, 22)
+        root.setSpacing(12)
         root.addWidget(PageHeader(
             "Configurações", "Preferências locais do aplicativo.", "settings"
         ))
@@ -110,7 +116,7 @@ class SettingsPage(QWidget):
         browse = QPushButton("Procurar"); set_button_icon(browse, "folder"); browse.clicked.connect(self._browse_download_dir); directory_layout.addWidget(browse)
         self.open_folder = QCheckBox("Abrir pasta ao concluir")
         self.notifications = QCheckBox("Mostrar notificação")
-        self.confirm_close = QCheckBox("Confirmar antes de fechar com downloads ativos")
+        self.confirm_close = QCheckBox("Confirmar ao fechar")
         general.form.addRow("Idioma", self.language)
         general.form.addRow("Tema", self.theme)
         general.form.addRow("Pasta padrão", directory_row)
@@ -125,7 +131,7 @@ class SettingsPage(QWidget):
         self.video_quality = WheelSafeComboBox(); self.video_quality.addItems(["auto", "2160", "1440", "1080", "720", "480", "360"])
         self.audio_format = WheelSafeComboBox(); self.audio_format.addItems(["mp3", "m4a", "aac", "opus", "flac", "wav"])
         self.audio_quality = WheelSafeComboBox(); self.audio_quality.addItems(["128", "192", "256", "320"])
-        self.embed_thumbnail = QCheckBox("Incorporar thumbnail/capa")
+        self.embed_thumbnail = QCheckBox("Incorporar capa")
         self.add_metadata = QCheckBox("Adicionar metadados")
         downloads.form.addRow("Downloads simultâneos", self.concurrent)
         downloads.form.addRow("Formato de vídeo", self.video_format)
@@ -161,7 +167,7 @@ class SettingsPage(QWidget):
         self.cookie_source = WheelSafeComboBox(); self.cookie_source.addItem("Nenhum", "none"); self.cookie_source.addItem("Importar cookies.txt", "file"); self.cookie_source.addItem("Importar do navegador", "browser")
         self.cookies_file = QLineEdit()
         cookie_file_row = QWidget(); cookie_layout = QHBoxLayout(cookie_file_row); cookie_layout.setContentsMargins(0, 0, 0, 0); cookie_layout.addWidget(self.cookies_file, 1)
-        choose_cookie = QPushButton("Escolher"); set_button_icon(choose_cookie, "file"); choose_cookie.clicked.connect(self._browse_cookies); cookie_layout.addWidget(choose_cookie)
+        self.choose_cookie = QPushButton("Escolher"); set_button_icon(self.choose_cookie, "file"); self.choose_cookie.clicked.connect(self._browse_cookies); cookie_layout.addWidget(self.choose_cookie)
         self.browser = WheelSafeComboBox(); self.browser.addItems(["chrome", "edge", "firefox", "brave", "opera", "vivaldi"])
         cookies.form.addRow("Fonte", self.cookie_source)
         cookies.form.addRow("cookies.txt", cookie_file_row)
@@ -190,7 +196,7 @@ class SettingsPage(QWidget):
         spotify_action_layout = QVBoxLayout(spotify_actions)
         spotify_action_layout.setContentsMargins(0, 0, 0, 0)
         spotify_action_layout.setSpacing(8)
-        account_actions = QHBoxLayout()
+        account_actions = QVBoxLayout()
         account_actions.setContentsMargins(0, 0, 0, 0)
         self.spotify_connect = QPushButton("Conectar conta")
         set_button_icon(self.spotify_connect, "external")
@@ -198,7 +204,7 @@ class SettingsPage(QWidget):
         self.spotify_disconnect = QPushButton("Desconectar")
         set_button_icon(self.spotify_disconnect, "cancel")
         self.spotify_disconnect.clicked.connect(self._disconnect_spotify)
-        self.spotify_dashboard = QPushButton("Abrir Developer Dashboard")
+        self.spotify_dashboard = QPushButton("Abrir painel")
         set_button_icon(self.spotify_dashboard, "external")
         self.spotify_dashboard.setAccessibleName("Abrir painel de desenvolvedor do Spotify")
         self.spotify_dashboard.clicked.connect(
@@ -206,9 +212,8 @@ class SettingsPage(QWidget):
         )
         account_actions.addWidget(self.spotify_connect)
         account_actions.addWidget(self.spotify_disconnect)
-        account_actions.addStretch()
         spotify_action_layout.addLayout(account_actions)
-        spotify_action_layout.addWidget(self.spotify_dashboard, 0, Qt.AlignmentFlag.AlignLeft)
+        spotify_action_layout.addWidget(self.spotify_dashboard)
         spotify.form.addRow("Client ID", self.spotify_client_id)
         spotify.form.addRow("Redirect URI", self.spotify_redirect)
         spotify.form.addRow("Estado", self.spotify_status)
@@ -219,21 +224,31 @@ class SettingsPage(QWidget):
         self.app_version = QLabel(APP_VERSION)
         self.ytdlp_version = QLabel(self.updates.current_ytdlp_version())
         self.ffmpeg_version = QLabel(self.ffmpeg.version())
-        component_actions = QWidget(); action_layout = QHBoxLayout(component_actions); action_layout.setContentsMargins(0, 0, 0, 0)
-        check_update = QPushButton("Verificar atualização"); set_button_icon(check_update, "analyze"); check_update.clicked.connect(self._check_update)
+        component_actions = QWidget(); action_layout = QVBoxLayout(component_actions); action_layout.setContentsMargins(0, 0, 0, 0)
+        check_update = QPushButton("Verificar"); set_button_icon(check_update, "analyze"); check_update.clicked.connect(self._check_update)
         update = QPushButton("Atualizar yt-dlp"); set_button_icon(update, "downloads"); update.clicked.connect(self._update_ytdlp)
-        action_layout.addWidget(check_update); action_layout.addWidget(update); action_layout.addStretch()
+        action_layout.addWidget(check_update); action_layout.addWidget(update)
         components.form.addRow("Aplicativo", self.app_version)
         components.form.addRow("yt-dlp", self.ytdlp_version)
         components.form.addRow("FFmpeg", self.ffmpeg_version)
         components.form.addRow("", component_actions)
         root.addWidget(components)
 
-        save_row = QHBoxLayout(); save_row.addStretch()
-        save = PrimaryButton("SALVAR CONFIGURAÇÕES", icon_name="check"); save.clicked.connect(self.save)
-        save_row.addWidget(save); root.addLayout(save_row); root.addStretch()
-        scroll.setWidget(content); outer.addWidget(scroll)
+        root.addStretch()
+        scroll.setWidget(content)
+        outer.addWidget(scroll, 1)
+        save_bar = QFrame()
+        save_bar.setObjectName("StickyFooter")
+        save_layout = QVBoxLayout(save_bar)
+        save_layout.setContentsMargins(16, 10, 16, 10)
+        self.save_button = PrimaryButton("SALVAR CONFIGURAÇÕES", icon_name="check")
+        self.save_button.clicked.connect(self.save)
+        save_layout.addWidget(self.save_button)
+        outer.addWidget(save_bar)
         self._load()
+        self.proxy_type.currentIndexChanged.connect(self._update_dependencies)
+        self.cookie_source.currentIndexChanged.connect(self._update_dependencies)
+        self._update_dependencies()
         self._configure_accessibility()
 
     def _configure_accessibility(self) -> None:
@@ -260,8 +275,26 @@ class SettingsPage(QWidget):
         }
         for control, name in controls.items():
             control.setAccessibleName(name)
+        for checkbox in self.findChildren(QCheckBox):
+            checkbox.setMinimumWidth(0)
+            checkbox.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        for line_edit in self.findChildren(QLineEdit):
+            line_edit.setMinimumWidth(0)
         self.theme.setToolTip("A alteração é aplicada ao salvar as configurações.")
         self.concurrent.setToolTip("A roda do mouse não altera este valor; use as setas ou digite.")
+
+    def _update_dependencies(self, *_: object) -> None:
+        proxy_enabled = self.proxy_type.currentData() != "none"
+        self.proxy_url.setEnabled(proxy_enabled)
+        self.proxy_url.setAccessibleDescription(
+            "Endereço do proxy selecionado." if proxy_enabled else "Ative um tipo de proxy para editar."
+        )
+        cookie_source = self.cookie_source.currentData()
+        file_enabled = cookie_source == "file"
+        browser_enabled = cookie_source == "browser"
+        self.cookies_file.setEnabled(file_enabled)
+        self.choose_cookie.setEnabled(file_enabled)
+        self.browser.setEnabled(browser_enabled)
 
     @staticmethod
     def _select_data(combo: QComboBox, value: str) -> None:
