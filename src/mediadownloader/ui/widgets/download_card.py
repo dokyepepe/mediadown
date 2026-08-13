@@ -5,10 +5,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
-    QApplication, QFrame, QHBoxLayout, QLabel, QMessageBox, QProgressBar, QPushButton,
-    QSizePolicy, QVBoxLayout,
+    QApplication, QFrame, QHBoxLayout, QLabel, QMessageBox, QProgressBar, QPushButton, QVBoxLayout,
 )
 
 from mediadownloader.models import DownloadItem, DownloadStatus
@@ -28,13 +27,12 @@ class DownloadCard(QFrame):
         super().__init__()
         self.item_id = item.id
         self.setObjectName("Card")
-        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-        root = QVBoxLayout(self)
-        root.setContentsMargins(13, 13, 13, 13)
-        root.setSpacing(10)
-        self.thumbnail = ThumbnailLabel(240, 135)
+        root = QHBoxLayout(self)
+        root.setContentsMargins(14, 14, 14, 14)
+        root.setSpacing(14)
+        self.thumbnail = ThumbnailLabel(120, 68)
         self.thumbnail.load(item.thumbnail)
-        root.addWidget(self.thumbnail, 0, Qt.AlignmentFlag.AlignHCenter)
+        root.addWidget(self.thumbnail)
 
         center = QVBoxLayout()
         center.setSpacing(5)
@@ -42,49 +40,37 @@ class DownloadCard(QFrame):
         self.title = QLabel(item.title)
         self.title.setObjectName("SectionTitle")
         self.title.setWordWrap(True)
-        self.title.setMinimumWidth(0)
-        self.title.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.badge = StatusBadge()
         title_row.addWidget(self.title, 1)
         title_row.addWidget(self.badge)
         self.meta = QLabel()
         self.meta.setObjectName("Muted")
-        self.meta.setWordWrap(True)
-        self.meta.setMinimumWidth(0)
-        self.meta.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.progress = QProgressBar()
         self.progress.setRange(0, 1000)
         self.progress.setTextVisible(False)
         self.progress.setAccessibleName("Progresso do download")
         self.stats = QLabel()
         self.stats.setObjectName("Muted")
-        self.stats.setWordWrap(True)
-        self.stats.setMinimumWidth(0)
-        self.stats.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.error = QLabel()
         self.error.setObjectName("ErrorText")
         self.error.setWordWrap(True)
-        self.error.setMinimumWidth(0)
-        self.error.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.error.hide()
         center.addLayout(title_row)
         center.addWidget(self.meta)
         center.addWidget(self.progress)
         center.addWidget(self.stats)
         center.addWidget(self.error)
-        root.addLayout(center)
+        root.addLayout(center, 1)
 
         actions = QVBoxLayout()
-        actions.setSpacing(7)
         self.primary_action = QPushButton()
         self.primary_action.clicked.connect(self._primary_clicked)
         self.folder_button = QPushButton("Abrir pasta")
         set_button_icon(self.folder_button, "folder")
         self.folder_button.clicked.connect(self._open_folder)
         self.remove_button = QPushButton("Remover")
-        self.remove_button.setProperty("role", "danger")
         set_button_icon(self.remove_button, "trash")
-        self.remove_button.clicked.connect(self._request_remove)
+        self.remove_button.clicked.connect(lambda: self.remove_requested.emit(self.item_id))
         self.copy_details_button = QPushButton("Copiar detalhes")
         set_button_icon(self.copy_details_button, "copy")
         self.copy_details_button.clicked.connect(self._copy_details)
@@ -92,10 +78,7 @@ class DownloadCard(QFrame):
         actions.addWidget(self.folder_button)
         actions.addWidget(self.copy_details_button)
         actions.addWidget(self.remove_button)
-        self.primary_action.setProperty("compactAction", True)
-        self.folder_button.setProperty("compactAction", True)
-        self.remove_button.setProperty("compactAction", True)
-        self.copy_details_button.setProperty("compactAction", True)
+        actions.addStretch()
         root.addLayout(actions)
         self._item = item
         self.setAccessibleName(f"Download: {item.title}")
@@ -121,6 +104,7 @@ class DownloadCard(QFrame):
             self.stats.setText(f"{speed}   •   {downloaded} / {total}   •   {eta}")
         self.error.setText(item.error)
         self.error.setVisible(bool(item.error))
+        active = not item.status.terminal
         self.primary_action.setText(
             "Tentar novamente" if item.status in {DownloadStatus.ERROR, DownloadStatus.CANCELLED}
             else "Abrir arquivo" if item.status == DownloadStatus.COMPLETED
@@ -165,14 +149,3 @@ class DownloadCard(QFrame):
 
     def _copy_details(self) -> None:
         QApplication.clipboard().setText(self._item.technical_error or self._item.error)
-
-    def _request_remove(self) -> None:
-        answer = QMessageBox.question(
-            self,
-            "Remover download",
-            "Remover este item da fila? O arquivo baixado e o histórico serão preservados.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer == QMessageBox.StandardButton.Yes:
-            self.remove_requested.emit(self.item_id)

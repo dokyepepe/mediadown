@@ -1,7 +1,7 @@
 """Analyzed media summary card."""
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
 
 from mediadownloader.models import MediaInfo
 from mediadownloader.utils.formatting import format_duration
@@ -13,34 +13,26 @@ class MediaPreviewCard(QFrame):
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("Card")
-        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.setAccessibleName("Resumo da mídia analisada")
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(11)
-        self.thumbnail = ThumbnailLabel(240, 135)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(16)
+        self.thumbnail = ThumbnailLabel(190, 107)
         text = QVBoxLayout()
         text.setSpacing(6)
         self.title = QLabel()
         self.title.setObjectName("SectionTitle")
         self.title.setWordWrap(True)
-        self.title.setMinimumWidth(0)
-        self.title.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.author = QLabel()
         self.author.setObjectName("Muted")
-        self.author.setWordWrap(True)
-        self.author.setMinimumWidth(0)
-        self.author.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.details = QLabel()
         self.details.setObjectName("Muted")
-        self.details.setWordWrap(True)
-        self.details.setMinimumWidth(0)
-        self.details.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         text.addWidget(self.title)
         text.addWidget(self.author)
         text.addWidget(self.details)
-        layout.addWidget(self.thumbnail, 0, Qt.AlignmentFlag.AlignHCenter)
-        layout.addLayout(text)
+        text.addStretch()
+        layout.addWidget(self.thumbnail)
+        layout.addLayout(text, 1)
 
     def set_media(self, media: MediaInfo) -> None:
         kind = "playlist" if media.is_playlist else "mídia"

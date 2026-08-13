@@ -1,8 +1,8 @@
 # Media Downloader
 
-Aplicativo para Android 8+ e Windows 10/11 que analisa, baixa e converte vídeos, áudios e playlists com **yt-dlp** e **FFmpeg**. No Android, a interface é nativa em Kotlin/Jetpack Compose; no Windows, usa PySide6/Qt. O aplicativo não exige conta própria e não envia telemetria nem histórico; a conexão opcional com o Spotify está disponível na edição desktop e serve somente para consultar metadados e playlists autorizadas.
+Aplicativo para Android 8+ e Windows 10/11 que analisa, baixa e converte vídeos, áudios e playlists. As duas edições são independentes: o **APK Android** usa Kotlin/Jetpack Compose, enquanto o **setup.exe para Windows** usa PySide6/Qt e mantém uma interface própria de desktop. O aplicativo não exige conta própria e não envia telemetria nem histórico; a conexão opcional com o Spotify está disponível somente na edição desktop e serve para consultar metadados e playlists autorizadas.
 
-A interface adapta-se a telas compactas e usa rolagem vertical nas telas mais longas. Este repositório gera APK para Android e executável/instalador para Windows; não inclui IPA nem suporte a iOS.
+O APK e o instalador Windows têm código, interface, testes e scripts de build separados. Alterações em `android/` geram o APK; alterações em `src/mediadownloader/` geram o executável desktop. A edição Windows abre em `1100 × 720`, tem mínimo de `900 × 620`, menu lateral e layouts horizontais adequados a mouse e teclado. Não há IPA nem suporte a iOS.
 
 > Use o aplicativo somente para conteúdo que você tem direito de acessar e baixar. O projeto não remove nem contorna DRM.
 
@@ -10,11 +10,11 @@ A interface adapta-se a telas compactas e usa rolagem vertical nas telas mais lo
 
 Versão 1.1.0. O MVP implementa o fluxo completo de análise, seleção, fila, download, pós-processamento e histórico. A cobertura real de sites acompanha os extractors do yt-dlp; alterações nas plataformas podem exigir uma atualização do componente.
 
-![Mockup do estado analisado no layout compacto](docs/screenshots/home-placeholder.svg)
+![Mockup da interface desktop](docs/screenshots/home-placeholder.svg)
 
 ## Recursos
 
-- interface compacta com barra superior, navegação inferior, alvos de toque, onboarding, estados vazios e tema claro/escuro/sistema;
+- interface desktop com menu lateral, área de trabalho ampla, onboarding, estados vazios e tema claro/escuro/sistema;
 - conjunto próprio de ícones SVG vetoriais, com renderização HiDPI pelo Qt;
 - análise assíncrona de URL, título, autor, duração, origem, miniatura e formatos;
 - playlists enumeradas com ações para baixar um item, ignorar itens, baixar a seleção ou baixar tudo;
@@ -23,7 +23,7 @@ Versão 1.1.0. O MVP implementa o fluxo completo de análise, seleção, fila, d
 - legendas oficiais/automáticas, download ou incorporação;
 - fila concorrente limitada de 1 a 5, cancelamento, tentativa novamente e pausa de agendamento;
 - progresso, velocidade, ETA, bytes e estados de FFmpeg sem exibir 100% prematuramente, com eventos limitados para downloads longos;
-- histórico SQLite pesquisável em cartões, com filtros e ações de arquivo/pasta/URL;
+- histórico SQLite pesquisável em tabela, com filtros e ações de arquivo/pasta/URL;
 - página Sobre com catálogo das principais plataformas, validado contra os extractors instalados do yt-dlp e integrações nativas;
 - reconhecimento de links Spotify com metadados via oEmbed, abertura no serviço e playlists autorizadas via OAuth 2.0 PKCE;
 - preferências persistentes, templates de nome, proxy e cookies consentidos;
@@ -114,6 +114,8 @@ O build é `onedir`, mais previsível para Qt e FFmpeg e mais rápido na inicial
 
 ## Gerar o APK Android
 
+Este fluxo compila exclusivamente o aplicativo nativo contido em `android/`; ele não usa nem altera a interface Qt do Windows.
+
 Requisitos: Windows, PowerShell e JDK 17 em `C:\Program Files\Java\jdk-17`. Na primeira execução, instale o SDK local do projeto e aceite as licenças:
 
 ```powershell
@@ -130,6 +132,8 @@ release/MediaDownloader-android-debug.apk
 Para instalar em um aparelho conectado com depuração USB, acrescente `-Install`. Uma versão de distribuição exige uma chave de assinatura própria; o script interrompe o fluxo caso `Release` seja gerado sem assinatura.
 
 ## Gerar o instalador
+
+Este fluxo compila exclusivamente a aplicação desktop em `src/mediadownloader/`; ele não inclui a interface nem os artefatos do APK.
 
 Instale [Inno Setup 6](https://jrsoftware.org/isinfo.php) ou use:
 

@@ -1,13 +1,12 @@
 """Visual bounded queue and its global controls."""
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QMessageBox, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QMessageBox, QScrollArea, QVBoxLayout, QWidget
 
 from mediadownloader.core import QueueManager
 from mediadownloader.models import DownloadItem, DownloadStatus
 
 from ..icons import set_button_icon
-from ..widgets import DownloadCard, EmptyState, PageHeader, SecondaryButton, enable_touch_scrolling
+from ..widgets import DownloadCard, EmptyState, PageHeader, SecondaryButton
 
 
 class DownloadsPage(QWidget):
@@ -17,13 +16,14 @@ class DownloadsPage(QWidget):
         self.queue = queue
         self.cards: dict[str, DownloadCard] = {}
         root = QVBoxLayout(self)
-        root.setContentsMargins(16, 18, 16, 22)
-        root.setSpacing(12)
-        root.addWidget(PageHeader(
+        root.setContentsMargins(34, 28, 34, 34)
+        root.setSpacing(14)
+        header = QHBoxLayout()
+        title_box = QVBoxLayout()
+        title_box.addWidget(PageHeader(
             "Downloads", "Acompanhe a fila e o processamento de mídia.", "downloads"
         ))
-        controls = QVBoxLayout()
-        controls.setSpacing(7)
+        controls = QHBoxLayout()
         self.pause_button = SecondaryButton("Pausar fila", icon_name="pause")
         self.pause_button.clicked.connect(self._toggle_pause)
         self.cancel_all_button = SecondaryButton("Cancelar todos", icon_name="cancel")
@@ -34,13 +34,14 @@ class DownloadsPage(QWidget):
         controls.addWidget(self.pause_button)
         controls.addWidget(self.cancel_all_button)
         controls.addWidget(self.clear_button)
-        root.addLayout(controls)
+        header.addLayout(title_box)
+        header.addStretch()
+        header.addLayout(controls)
+        root.addLayout(header)
         self.empty = EmptyState("Nenhum download em andamento", "Os downloads adicionados aparecerão aqui.", "downloads")
         root.addWidget(self.empty, 1)
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
-        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        enable_touch_scrolling(self.scroll)
         container = QWidget()
         self.list_layout = QVBoxLayout(container)
         self.list_layout.setContentsMargins(0, 0, 0, 0)

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QSize, Qt, QUrl
+from PySide6.QtCore import QEvent, Qt, QUrl
 from PySide6.QtGui import QPalette, QPixmap
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
-    QAbstractItemView, QAbstractScrollArea, QComboBox, QHBoxLayout, QLabel, QPushButton,
-    QScroller, QSizePolicy, QSpinBox, QToolButton, QVBoxLayout, QWidget,
+    QComboBox, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QSpinBox, QVBoxLayout,
+    QWidget,
 )
 
 from mediadownloader.models import DownloadStatus
@@ -69,21 +69,16 @@ class SecondaryButton(QPushButton):
             set_button_icon(self, icon_name)
 
 
-class BottomNavButton(QToolButton):
-    """Touch-friendly navigation item used by the compact application shell."""
+class SidebarButton(QPushButton):
+    """Desktop navigation item with a palette-aware icon."""
 
     def __init__(self, text: str, icon_name: str, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setText(text)
-        self.setObjectName("BottomNavButton")
+        super().__init__(text, parent)
+        self.setObjectName("SidebarButton")
         self.setCheckable(True)
         self.setAutoExclusive(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
-        self.setIconSize(QSize(22, 22))
-        self.setMinimumHeight(62)
-        self.setMinimumWidth(0)
-        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        self.setMinimumHeight(44)
         self.setAccessibleName(text)
         self.setAccessibleDescription(f"Abrir a seção {text}.")
         self.icon_name = icon_name
@@ -92,7 +87,7 @@ class BottomNavButton(QToolButton):
 
     def _refresh_icon(self, checked: bool) -> None:
         role = QPalette.ColorRole.Link if checked else QPalette.ColorRole.ButtonText
-        set_button_icon(self, self.icon_name, self.palette().color(role).name(), 22)
+        set_button_icon(self, self.icon_name, self.palette().color(role).name(), 19)
 
     def changeEvent(self, event: QEvent) -> None:
         super().changeEvent(event)
@@ -242,10 +237,3 @@ class ThumbnailLabel(QLabel):
                     self.setText("")
         finally:
             reply.deleteLater()
-
-
-def enable_touch_scrolling(view: QAbstractScrollArea) -> None:
-    """Enable smooth per-pixel and kinetic scrolling on touch-capable screens."""
-    if isinstance(view, QAbstractItemView):
-        view.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
-    QScroller.grabGesture(view.viewport(), QScroller.ScrollerGestureType.TouchGesture)

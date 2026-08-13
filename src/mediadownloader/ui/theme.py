@@ -1,4 +1,4 @@
-"""Central Qt stylesheet for the compact, touch-friendly visual language."""
+"""Central Qt stylesheet for the desktop visual language."""
 
 from __future__ import annotations
 
@@ -72,10 +72,7 @@ def apply_theme(app: QApplication, preference: str = "system") -> None:
     app.setStyleSheet(f"""
         * {{ font-family: "Segoe UI"; font-size: 10pt; color: {c['text']}; }}
         QMainWindow, QDialog, QWidget#Page {{ background: {c['bg']}; }}
-        QWidget#AppShell {{ background: {c['bg']}; }}
-        QFrame#AppBar {{ background: {c['card']}; border-bottom: 1px solid {c['border']}; }}
-        QFrame#BottomNav, QFrame#StickyFooter {{ background: {c['card']}; border-top: 1px solid {c['border']}; }}
-        QLabel#AppVersion {{ color: {c['muted']}; font-size: 8.5pt; }}
+        QWidget#Sidebar {{ background: {c['card']}; border-right: 1px solid {c['border']}; }}
         QLabel#PageTitle {{ font-size: 18pt; font-weight: 650; }}
         QLabel#PageSubtitle, QLabel#Muted {{ color: {c['muted']}; }}
         QLabel#SectionTitle {{ font-size: 12pt; font-weight: 600; }}
@@ -127,14 +124,9 @@ def apply_theme(app: QApplication, preference: str = "system") -> None:
         QPushButton[role="primary"]:hover, QPushButton[role="primary"]:pressed {{ background: {c['action_hover']}; }}
         QPushButton[role="danger"] {{ color: {c['danger']}; }}
         QPushButton[segment="true"]:checked {{ color: {c['primary']}; background: {c['selection']}; border-color: {c['primary']}; font-weight: 600; }}
-        QToolButton#BottomNavButton {{
-            border: 0; border-radius: 7px; background: transparent; padding: 5px 2px 4px 2px;
-            font-size: 8pt; font-weight: 550;
-        }}
-        QToolButton#BottomNavButton:hover {{ background: {c['bg']}; }}
-        QToolButton#BottomNavButton:focus {{ border: 2px solid {c['primary']}; padding: 3px 0 2px 0; }}
-        QToolButton#BottomNavButton:pressed {{ background: {c['selection']}; }}
-        QToolButton#BottomNavButton:checked {{ color: {c['primary']}; background: {c['selection']}; font-weight: 700; }}
+        QPushButton#SidebarButton {{ text-align: left; padding: 10px 14px; border: 0; background: transparent; }}
+        QPushButton#SidebarButton:hover {{ background: {c['bg']}; }}
+        QPushButton#SidebarButton:checked {{ color: {c['primary']}; background: {c['selection']}; border-left: 3px solid {c['primary']}; font-weight: 600; }}
         QProgressBar {{ border: 0; border-radius: 3px; background: {c['border']}; height: 7px; text-align: center; }}
         QProgressBar::chunk {{ border-radius: 3px; background: {c['primary']}; }}
         QScrollArea {{ border: 0; background: transparent; }}
