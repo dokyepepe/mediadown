@@ -12,8 +12,8 @@ android {
         applicationId = "com.mediadownloader.mobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10100
-        versionName = "1.1.0"
+        versionCode = 10200
+        versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

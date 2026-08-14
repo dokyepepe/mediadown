@@ -23,6 +23,9 @@ import com.mediadownloader.mobile.data.MediaType
 import com.mediadownloader.mobile.data.VideoContainer
 import com.mediadownloader.mobile.download.AndroidDownloadEngine
 import com.mediadownloader.mobile.download.DownloadService
+import com.mediadownloader.mobile.site.AndroidSiteFileService
+import com.mediadownloader.mobile.site.SiteFile
+import com.mediadownloader.mobile.site.SiteFileKind
 import com.mediadownloader.mobile.ui.AppTab
 import com.mediadownloader.mobile.ui.ChoiceUi
 import com.mediadownloader.mobile.ui.DownloadFilter
@@ -37,6 +40,10 @@ import com.mediadownloader.mobile.ui.MobileUiAction
 import com.mediadownloader.mobile.ui.MobileUiController
 import com.mediadownloader.mobile.ui.MobileUiState
 import com.mediadownloader.mobile.ui.SettingsUiState
+import com.mediadownloader.mobile.ui.SiteFileKindUi
+import com.mediadownloader.mobile.ui.SiteFileStatus
+import com.mediadownloader.mobile.ui.SiteFileUi
+import com.mediadownloader.mobile.ui.SiteFilesUiState
 import com.mediadownloader.mobile.ui.ThemePreference
 import com.mediadownloader.mobile.ui.UiMessage
 import com.mediadownloader.mobile.ui.YtDlpUpdateState
@@ -63,6 +70,7 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
     private val appContext = application.applicationContext
     private val repository = DownloadRepository.getInstance(appContext)
     private val engine = AndroidDownloadEngine(appContext)
+    private val siteFileService = AndroidSiteFileService(appContext)
     private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     private val analysisMutex = Mutex()
     private val ytDlpUpdateManager = (application as? MediaDownloaderApplication)
@@ -86,6 +94,8 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
 
     private var currentAnalysis: MediaAnalysis? = null
     private var analysisJob: Job? = null
+    private var siteFilesJob: Job? = null
+    private var siteFileAssets: Map<String, SiteFile> = emptyMap()
     private var messageSequence = 0L
     private var requestStoragePermission: ((() -> Unit) -> Unit)? = null
     private var pendingStorageAction: (() -> Unit)? = null
@@ -133,6 +143,30 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             is MobileUiAction.SetDownloadPlaylist -> updateHome { it.copy(downloadPlaylist = action.enabled) }
             is MobileUiAction.SetIncludeSubtitles -> updateHome { it.copy(includeSubtitles = action.enabled) }
             MobileUiAction.StartDownload -> startDownload()
+            is MobileUiAction.SiteUrlChanged -> changeSiteUrl(action.value)
+            MobileUiAction.PasteSiteUrl -> pasteSiteUrl()
+            is MobileUiAction.SetSiteIncludePdfs -> updateSiteFiles {
+                it.copy(
+                    includePdfs = action.enabled,
+                    pageTitle = null,
+                    items = emptyList(),
+                    urlError = null,
+                )
+            }
+            is MobileUiAction.SetSiteIncludeImages -> updateSiteFiles {
+                it.copy(
+                    includeImages = action.enabled,
+                    pageTitle = null,
+                    items = emptyList(),
+                    urlError = null,
+                )
+            }
+            MobileUiAction.ScanSiteFiles -> scanSiteFiles()
+            is MobileUiAction.ToggleSiteFile -> toggleSiteFile(action.id)
+            is MobileUiAction.SelectAllSiteFiles -> selectAllSiteFiles(action.selected)
+            MobileUiAction.DownloadSelectedSiteFiles -> downloadSelectedSiteFiles()
+            MobileUiAction.CancelSiteFileDownloads -> cancelSiteFileDownloads()
+            is MobileUiAction.OpenSiteFile -> openSiteFile(action.id)
             is MobileUiAction.SelectDownloadFilter -> updateState {
                 it.copy(downloads = it.downloads.copy(selectedFilter = action.filter))
             }
@@ -317,6 +351,219 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             Unit
         }
         requestStoragePermission?.invoke(startAction) ?: startAction()
+    }
+
+    private fun changeSiteUrl(value: String) {
+        if (_state.value.siteFiles.isDownloading) return
+        siteFilesJob?.cancel()
+        siteFileAssets = emptyMap()
+        updateSiteFiles { current ->
+            SiteFilesUiState(
+                url = value,
+                includePdfs = current.includePdfs,
+                includeImages = current.includeImages,
+            )
+        }
+    }
+
+    private fun pasteSiteUrl() {
+        if (_state.value.siteFiles.isDownloading) return
+        val clipboard = appContext.getSystemService(ClipboardManager::class.java)
+        val raw = clipboard?.primaryClip?.getItemAt(0)?.coerceToText(appContext)?.toString().orEmpty()
+        val url = extractHttpUrl(raw)
+        if (url == null) {
+            updateSiteFiles { it.copy(urlError = "A área de transferência não contém um link válido.") }
+        } else {
+            changeSiteUrl(url)
+        }
+    }
+
+    private fun scanSiteFiles() {
+        val current = _state.value.siteFiles
+        val url = current.url.trim()
+        if (!isHttpUrl(url)) {
+            updateSiteFiles { it.copy(urlError = "Informe uma URL HTTP ou HTTPS válida.") }
+            return
+        }
+        if (!current.includePdfs && !current.includeImages) {
+            updateSiteFiles { it.copy(urlError = "Selecione PDFs, imagens ou ambos.") }
+            return
+        }
+        siteFilesJob?.cancel()
+        siteFileAssets = emptyMap()
+        siteFilesJob = viewModelScope.launch {
+            updateSiteFiles {
+                it.copy(
+                    isScanning = true,
+                    urlError = null,
+                    pageTitle = null,
+                    items = emptyList(),
+                    completedDownloads = 0,
+                    totalDownloads = 0,
+                )
+            }
+            try {
+                val result = siteFileService.discover(
+                    url = url,
+                    includePdfs = current.includePdfs,
+                    includeImages = current.includeImages,
+                )
+                siteFileAssets = result.files.associateBy(SiteFile::url)
+                updateSiteFiles {
+                    it.copy(
+                        isScanning = false,
+                        pageTitle = result.pageTitle,
+                        items = result.files.map { it.toUi() },
+                    )
+                }
+                if (result.files.isEmpty()) {
+                    showMessage("Nenhum PDF ou imagem pública foi encontrado nesta página.")
+                } else {
+                    showMessage("${result.files.size} arquivo(s) encontrado(s).")
+                }
+            } catch (_: CancellationException) {
+                throw CancellationException()
+            } catch (error: Throwable) {
+                siteFileAssets = emptyMap()
+                updateSiteFiles {
+                    it.copy(
+                        isScanning = false,
+                        pageTitle = null,
+                        items = emptyList(),
+                        urlError = readableError(error, "Não foi possível analisar este site."),
+                    )
+                }
+            }
+        }
+    }
+
+    private fun toggleSiteFile(id: String) {
+        if (_state.value.siteFiles.isDownloading) return
+        updateSiteFiles { state ->
+            state.copy(items = state.items.map { item ->
+                if (item.id == id && item.status != SiteFileStatus.SAVED) {
+                    item.copy(selected = !item.selected)
+                } else item
+            })
+        }
+    }
+
+    private fun selectAllSiteFiles(selected: Boolean) {
+        if (_state.value.siteFiles.isDownloading) return
+        updateSiteFiles { state ->
+            state.copy(items = state.items.map { item ->
+                item.copy(selected = selected && item.status != SiteFileStatus.SAVED)
+            })
+        }
+    }
+
+    private fun downloadSelectedSiteFiles() {
+        val selected = _state.value.siteFiles.items
+            .filter { it.selected && it.status != SiteFileStatus.SAVED }
+            .mapNotNull { siteFileAssets[it.id] }
+        if (selected.isEmpty()) {
+            showMessage("Selecione pelo menos um arquivo para baixar.")
+            return
+        }
+        val startAction: () -> Unit = {
+            siteFilesJob?.cancel()
+            siteFilesJob = viewModelScope.launch {
+                updateSiteFiles {
+                    it.copy(
+                        isDownloading = true,
+                        completedDownloads = 0,
+                        totalDownloads = selected.size,
+                    )
+                }
+                var saved = 0
+                var failed = 0
+                try {
+                    selected.forEachIndexed { index, asset ->
+                        updateSiteFile(asset.url) {
+                            it.copy(
+                                status = SiteFileStatus.DOWNLOADING,
+                                progress = null,
+                                progressText = "Conectando…",
+                                errorMessage = null,
+                            )
+                        }
+                        try {
+                            val published = siteFileService.download(asset) { downloaded, total ->
+                                updateSiteFile(asset.url) { item ->
+                                    item.copy(
+                                        progress = total?.takeIf { it > 0 }
+                                            ?.let { (downloaded.toFloat() / it).coerceIn(0f, 1f) },
+                                        progressText = if (total != null) {
+                                            "${formatBytes(downloaded)} de ${formatBytes(total)}"
+                                        } else {
+                                            formatBytes(downloaded)
+                                        },
+                                    )
+                                }
+                            }
+                            saved += 1
+                            updateSiteFile(asset.url) {
+                                it.copy(
+                                    selected = false,
+                                    status = SiteFileStatus.SAVED,
+                                    progress = 1f,
+                                    progressText = "Salvo em Downloads/MediaDownloader",
+                                    savedUri = published.uri,
+                                    mimeType = published.mimeType,
+                                )
+                            }
+                        } catch (_: CancellationException) {
+                            throw CancellationException()
+                        } catch (error: Throwable) {
+                            failed += 1
+                            updateSiteFile(asset.url) {
+                                it.copy(
+                                    status = SiteFileStatus.FAILED,
+                                    progress = null,
+                                    progressText = null,
+                                    errorMessage = readableError(error, "Falha ao baixar este arquivo."),
+                                )
+                            }
+                        }
+                        updateSiteFiles { it.copy(completedDownloads = index + 1) }
+                    }
+                    updateSiteFiles { it.copy(isDownloading = false) }
+                    when {
+                        failed == 0 -> showMessage("$saved arquivo(s) salvo(s) em Downloads/MediaDownloader.")
+                        saved == 0 -> showMessage("Nenhum arquivo foi salvo. Revise os erros e tente novamente.")
+                        else -> showMessage("$saved arquivo(s) salvo(s) e $failed com falha.")
+                    }
+                } catch (_: CancellationException) {
+                    updateSiteFiles { state ->
+                        state.copy(
+                            isDownloading = false,
+                            items = state.items.map { item ->
+                                if (item.status == SiteFileStatus.DOWNLOADING) {
+                                    item.copy(
+                                        status = SiteFileStatus.READY,
+                                        progress = null,
+                                        progressText = null,
+                                    )
+                                } else item
+                            },
+                        )
+                    }
+                }
+            }
+            Unit
+        }
+        requestStoragePermission?.invoke(startAction) ?: startAction()
+    }
+
+    private fun cancelSiteFileDownloads() {
+        if (!_state.value.siteFiles.isDownloading) return
+        siteFilesJob?.cancel()
+        showMessage("Cancelando os downloads de arquivos…")
+    }
+
+    private fun openSiteFile(id: String) {
+        val item = _state.value.siteFiles.items.firstOrNull { it.id == id }
+        openUri(item?.savedUri, item?.mimeType)
     }
 
     private fun cancelDownload(id: String) {
@@ -647,6 +894,12 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
     private fun updateState(transform: (MobileUiState) -> MobileUiState) = _state.update(transform)
     private fun updateHome(transform: (HomeUiState) -> HomeUiState) =
         updateState { it.copy(home = transform(it.home)) }
+    private fun updateSiteFiles(transform: (SiteFilesUiState) -> SiteFilesUiState) =
+        updateState { it.copy(siteFiles = transform(it.siteFiles)) }
+    private fun updateSiteFile(id: String, transform: (SiteFileUi) -> SiteFileUi) =
+        updateSiteFiles { state ->
+            state.copy(items = state.items.map { if (it.id == id) transform(it) else it })
+        }
     private fun updateSettings(transform: (SettingsUiState) -> SettingsUiState) =
         updateState { it.copy(settings = transform(it.settings)) }
 
@@ -785,6 +1038,18 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
         thumbnailUrl = item.thumbnailUrl,
         canOpen = item.fileUri.isNotBlank(),
         canShare = item.fileUri.isNotBlank(),
+    )
+
+    private fun SiteFile.toUi(): SiteFileUi = SiteFileUi(
+        id = url,
+        url = url,
+        name = name,
+        sourceHost = Uri.parse(url).host.orEmpty().removePrefix("www.").ifBlank { "Site" },
+        kind = when (kind) {
+            SiteFileKind.PDF -> SiteFileKindUi.PDF
+            SiteFileKind.IMAGE -> SiteFileKindUi.IMAGE
+        },
+        mimeType = mimeType,
     )
 
     companion object {

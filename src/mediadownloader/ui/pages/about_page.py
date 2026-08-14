@@ -96,11 +96,12 @@ class AboutPage(QWidget):
         root.setContentsMargins(34, 28, 34, 34)
         root.setSpacing(16)
         root.addWidget(PageHeader(
-            "Sobre", "Informações do aplicativo, compatibilidade e componentes.", "info"
+            "Sobre", "Tecnologia, privacidade e compatibilidade em uma visão clara.", "info"
         ))
 
         hero = QFrame()
-        hero.setObjectName("Card")
+        hero.setObjectName("HeroCard")
+        hero.setAccessibleName("Identidade do Media Downloader")
         hero_layout = QHBoxLayout(hero)
         hero_layout.setContentsMargins(24, 22, 24, 22)
         hero_layout.setSpacing(20)

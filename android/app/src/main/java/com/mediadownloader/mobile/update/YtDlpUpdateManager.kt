@@ -11,10 +11,6 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.net.URL
-import java.nio.file.AtomicMoveNotSupportedException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
-import java.security.MessageDigest
 import java.util.Properties
 import java.util.UUID
 import javax.net.ssl.HttpsURLConnection
@@ -204,7 +200,7 @@ class YtDlpUpdateManager private constructor(context: Context) {
     ): YtDlpInstallResult {
         requireActiveBinary()
         prepareManagerDirectory()
-        copySynced(activeBinary, pendingBackup)
+        YtDlpArtifactIntegrity.copyVerified(activeBinary, pendingBackup)
         val prepared = YtDlpTransactionJournal(
             kind = YtDlpTransactionKind.UPDATE,
             phase = YtDlpTransactionPhase.PREPARED,
@@ -212,6 +208,7 @@ class YtDlpUpdateManager private constructor(context: Context) {
             targetVersion = release.version,
         )
         writeJournal(prepared)
+        var transaction = prepared
 
         try {
             val updateStatus = YoutubeDL.getInstance().updateYoutubeDL(
@@ -222,15 +219,25 @@ class YtDlpUpdateManager private constructor(context: Context) {
                 throw IOException("O instalador não aplicou a versão ${release.version}")
             }
             writeJournal(prepared.copy(phase = YtDlpTransactionPhase.SWAPPED))
-            val installedVersion = smokeTestLocked(expectedVersion = release.version)
-            finalizeTargetLocked(prepared, installedVersion)
+            val installedVersion = smokeTestLocked()
+            if (
+                YtDlpUpdatePolicy.compareVersions(installedVersion, release.version)
+                    ?.let { it >= 0 } != true
+            ) {
+                throw IOException(
+                    "A versão instalada ($installedVersion) é anterior à esperada (${release.version})",
+                )
+            }
+            transaction = prepared.copy(targetVersion = installedVersion)
+            writeJournal(transaction.copy(phase = YtDlpTransactionPhase.SWAPPED))
+            finalizeTargetLocked(transaction, installedVersion)
             return YtDlpInstallResult(
                 outcome = YtDlpInstallOutcome.UPDATED,
                 status = statusFromMetadata(installedVersion),
             )
         } catch (error: Throwable) {
             if (error is InterruptedException) Thread.currentThread().interrupt()
-            val (restored, didRestore) = settleFailedTransactionLocked(prepared)
+            val (restored, didRestore) = settleFailedTransactionLocked(transaction)
             return YtDlpInstallResult(
                 outcome = if (didRestore) {
                     YtDlpInstallOutcome.RESTORED_AFTER_FAILURE
@@ -238,7 +245,7 @@ class YtDlpUpdateManager private constructor(context: Context) {
                     YtDlpInstallOutcome.FAILED
                 },
                 status = statusFromMetadata(restored),
-                failedVersion = release.version,
+                failedVersion = transaction.targetVersion,
             )
         }
     }
@@ -258,7 +265,7 @@ class YtDlpUpdateManager private constructor(context: Context) {
         }
 
         prepareManagerDirectory()
-        copySynced(activeBinary, pendingBackup)
+        YtDlpArtifactIntegrity.copyVerified(activeBinary, pendingBackup)
         val prepared = YtDlpTransactionJournal(
             kind = YtDlpTransactionKind.MANUAL_ROLLBACK,
             phase = YtDlpTransactionPhase.PREPARED,
@@ -269,8 +276,8 @@ class YtDlpUpdateManager private constructor(context: Context) {
 
         try {
             val stagedPrevious = File(managerDirectory, STAGED_PREVIOUS_NAME)
-            copySynced(previousBinary, stagedPrevious)
-            atomicReplace(stagedPrevious, activeBinary)
+            YtDlpArtifactIntegrity.copyVerified(previousBinary, stagedPrevious)
+            YtDlpArtifactIntegrity.atomicReplace(stagedPrevious, activeBinary)
             writeJournal(prepared.copy(phase = YtDlpTransactionPhase.SWAPPED))
             val restoredVersion = smokeTestLocked(expectedVersion = previousVersion)
             finalizeTargetLocked(prepared, restoredVersion)
@@ -380,7 +387,7 @@ class YtDlpUpdateManager private constructor(context: Context) {
         }
         writeJournal(journal.copy(phase = YtDlpTransactionPhase.RESTORING))
         prepareActiveDirectory()
-        atomicReplace(pendingBackup, activeBinary)
+        YtDlpArtifactIntegrity.atomicReplace(pendingBackup, activeBinary)
         val restored = smokeTestLocked(expectedVersion = journal.originalVersion)
         preferences.edit()
             .putString(KEY_CURRENT_VERSION, restored)
@@ -392,7 +399,7 @@ class YtDlpUpdateManager private constructor(context: Context) {
 
     private fun finalizeTargetLocked(journal: YtDlpTransactionJournal, installedVersion: String) {
         if (pendingBackup.isFile) {
-            atomicReplace(pendingBackup, previousBinary)
+            YtDlpArtifactIntegrity.atomicReplace(pendingBackup, previousBinary)
         }
         val editor = preferences.edit()
             .putString(KEY_CURRENT_VERSION, installedVersion)
@@ -505,58 +512,6 @@ class YtDlpUpdateManager private constructor(context: Context) {
         }
     }
 
-    private fun copySynced(source: File, destination: File) {
-        if (!source.isFile) throw IOException("Arquivo de origem ausente: ${source.name}")
-        val sourceDigest = sha256(source)
-        destination.parentFile?.let { parent ->
-            if (!parent.exists() && !parent.mkdirs()) {
-                throw IOException("Não foi possível preparar ${parent.name}")
-            }
-        }
-        destination.delete()
-        FileInputStream(source).use { input ->
-            FileOutputStream(destination).use { output ->
-                input.copyTo(output)
-                output.fd.sync()
-            }
-        }
-        if (destination.length() != source.length() || sha256(destination) != sourceDigest) {
-            destination.delete()
-            throw IOException("O backup do yt-dlp não passou na verificação de integridade")
-        }
-    }
-
-    private fun sha256(file: File): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        FileInputStream(file).use { input ->
-            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-            while (true) {
-                val count = input.read(buffer)
-                if (count < 0) break
-                if (count > 0) digest.update(buffer, 0, count)
-            }
-        }
-        return digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
-    }
-
-    private fun atomicReplace(source: File, destination: File) {
-        destination.parentFile?.let { parent ->
-            if (!parent.exists() && !parent.mkdirs()) {
-                throw IOException("Não foi possível preparar ${parent.name}")
-            }
-        }
-        try {
-            Files.move(
-                source.toPath(),
-                destination.toPath(),
-                StandardCopyOption.ATOMIC_MOVE,
-                StandardCopyOption.REPLACE_EXISTING,
-            )
-        } catch (_: AtomicMoveNotSupportedException) {
-            Files.move(source.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
-        }
-    }
-
     private fun writeJournal(journal: YtDlpTransactionJournal) {
         runtimePrepared = false
         prepareManagerDirectory()
@@ -571,7 +526,7 @@ class YtDlpUpdateManager private constructor(context: Context) {
             properties.store(output, null)
             output.fd.sync()
         }
-        atomicReplace(temporary, journalFile)
+        YtDlpArtifactIntegrity.atomicReplace(temporary, journalFile)
     }
 
     private fun readJournal(): YtDlpTransactionJournal? {

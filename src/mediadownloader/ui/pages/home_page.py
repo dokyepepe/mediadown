@@ -25,6 +25,7 @@ from mediadownloader.utils.validators import is_valid_url, validate_url
 from ..icons import set_button_icon, svg_asset_pixmap, svg_icon
 from ..widgets import (
     MediaPreviewCard, PageHeader, PrimaryButton, SecondaryButton, WheelSafeComboBox,
+    WorkflowStep,
 )
 
 
@@ -57,13 +58,33 @@ class HomePage(QWidget):
         self.layout.setSpacing(18)
 
         self.layout.addWidget(PageHeader(
-            "Baixar mídia", "Cole o link de um vídeo, música ou playlist.", "home"
+            "Baixar mídia", "Analise o link, escolha o formato e acompanhe tudo em um só lugar.", "home"
         ))
 
+        self.analyzer_card = QFrame()
+        self.analyzer_card.setObjectName("HeroCard")
+        self.analyzer_card.setAccessibleName("Analisador de mídia")
+        hero_layout = QVBoxLayout(self.analyzer_card)
+        hero_layout.setContentsMargins(24, 22, 24, 22)
+        hero_layout.setSpacing(12)
+        hero_eyebrow = QLabel("COMECE POR AQUI")
+        hero_eyebrow.setObjectName("SectionEyebrow")
+        hero_title = QLabel("Cole um link. O resto fica simples.")
+        hero_title.setObjectName("HeroTitle")
+        hero_title.setWordWrap(True)
+        hero_subtitle = QLabel(
+            "Vídeos, músicas e playlists compatíveis com o yt-dlp, sem sair do aplicativo."
+        )
+        hero_subtitle.setObjectName("HeroSubtitle")
+        hero_subtitle.setWordWrap(True)
+        hero_layout.addWidget(hero_eyebrow)
+        hero_layout.addWidget(hero_title)
+        hero_layout.addWidget(hero_subtitle)
+
         url_row = QHBoxLayout()
-        url_row.setSpacing(8)
+        url_row.setSpacing(9)
         self.url_input = QLineEdit()
-        self.url_input.setPlaceholderText("Cole uma URL aqui...")
+        self.url_input.setPlaceholderText("https://…  Cole a URL da mídia")
         self.url_input.setAccessibleName("URL da mídia")
         self.url_input.setAccessibleDescription(
             "Cole uma URL pública suportada e pressione Enter ou o botão Analisar."
@@ -81,7 +102,18 @@ class HomePage(QWidget):
         url_row.addWidget(self.url_input, 1)
         url_row.addWidget(self.paste_button)
         url_row.addWidget(self.analyze_button)
-        self.layout.addLayout(url_row)
+        hero_layout.addLayout(url_row)
+
+        trust_row = QHBoxLayout()
+        trust_row.setSpacing(8)
+        compatibility = QLabel("VÍDEO • ÁUDIO • PLAYLISTS")
+        compatibility.setObjectName("MetaPill")
+        local_hint = QLabel("Análise segura e processamento local")
+        local_hint.setObjectName("Muted")
+        trust_row.addWidget(compatibility, 0, Qt.AlignmentFlag.AlignLeft)
+        trust_row.addWidget(local_hint)
+        trust_row.addStretch()
+        hero_layout.addLayout(trust_row)
 
         self.notice = QLabel()
         self.notice.setObjectName("Notice")
@@ -89,7 +121,46 @@ class HomePage(QWidget):
         self.notice.setAccessibleName("Mensagem do aplicativo")
         self.notice.setWordWrap(True)
         self.notice.hide()
-        self.layout.addWidget(self.notice)
+        hero_layout.addWidget(self.notice)
+        self.layout.addWidget(self.analyzer_card)
+
+        self.onboarding = QWidget()
+        onboarding_layout = QVBoxLayout(self.onboarding)
+        onboarding_layout.setContentsMargins(0, 2, 0, 0)
+        onboarding_layout.setSpacing(11)
+        onboarding_heading = QVBoxLayout()
+        onboarding_heading.setSpacing(2)
+        onboarding_title = QLabel("Do link ao arquivo em três passos")
+        onboarding_title.setObjectName("SectionTitle")
+        onboarding_caption = QLabel("Sem configurações obrigatórias para começar")
+        onboarding_caption.setObjectName("Muted")
+        onboarding_caption.setWordWrap(True)
+        onboarding_caption.setMinimumWidth(0)
+        onboarding_heading.addWidget(onboarding_title)
+        onboarding_heading.addWidget(onboarding_caption)
+        onboarding_layout.addLayout(onboarding_heading)
+        steps = QHBoxLayout()
+        steps.setSpacing(10)
+        steps.addWidget(WorkflowStep(
+            1,
+            "Cole o endereço",
+            "Use uma URL pública ou importe da área de transferência.",
+            "paste",
+        ), 1)
+        steps.addWidget(WorkflowStep(
+            2,
+            "Escolha o resultado",
+            "Defina qualidade, formato, legendas e pasta de destino.",
+            "settings",
+        ), 1)
+        steps.addWidget(WorkflowStep(
+            3,
+            "Acompanhe a fila",
+            "Veja progresso, velocidade e pós-processamento em tempo real.",
+            "downloads",
+        ), 1)
+        onboarding_layout.addLayout(steps)
+        self.layout.addWidget(self.onboarding)
 
         self.result = QWidget()
         result_layout = QVBoxLayout(self.result)
@@ -143,6 +214,8 @@ class HomePage(QWidget):
         self.playlist_frame = QFrame()
         self.playlist_frame.setObjectName("Card")
         playlist_layout = QVBoxLayout(self.playlist_frame)
+        playlist_layout.setContentsMargins(18, 16, 18, 18)
+        playlist_layout.setSpacing(11)
         playlist_header = QHBoxLayout()
         self.playlist_title = QLabel("Itens da playlist")
         self.playlist_title.setObjectName("SectionTitle")
@@ -179,6 +252,7 @@ class HomePage(QWidget):
 
         self.options_card = QFrame()
         self.options_card.setObjectName("Card")
+        self.options_card.setProperty("accent", "true")
         options_layout = QVBoxLayout(self.options_card)
         options_layout.setContentsMargins(18, 16, 18, 18)
         options_layout.setSpacing(14)
@@ -262,6 +336,8 @@ class HomePage(QWidget):
         self.destination_card = QFrame()
         self.destination_card.setObjectName("Card")
         destination_layout = QVBoxLayout(self.destination_card)
+        destination_layout.setContentsMargins(18, 16, 18, 18)
+        destination_layout.setSpacing(11)
         destination_title = QLabel("Destino")
         destination_title.setObjectName("SectionTitle")
         destination_row = QHBoxLayout()
@@ -372,6 +448,7 @@ class HomePage(QWidget):
         self._configure_result_mode(media)
         self.result.setEnabled(True)
         self.result.show()
+        self.onboarding.hide()
         self.notice.hide()
         self.analyze_button.setEnabled(True)
         self.analyze_button.setText("ANALISAR")
@@ -380,6 +457,8 @@ class HomePage(QWidget):
 
     def _analysis_failed(self, error: FriendlyError) -> None:
         self._show_notice(error.message, error=True)
+        self.onboarding.setVisible(self.media is None)
+        self.result.setEnabled(True)
         self.analyze_button.setEnabled(True)
         self.analyze_button.setText("ANALISAR")
         self.analysis_changed.emit(False)

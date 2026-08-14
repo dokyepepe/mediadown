@@ -54,6 +54,27 @@ class YtDlpUpdatePolicyTest {
     }
 
     @Test
+    fun aNewerInstalledVersionIsNeverOfferedAsADowngrade() {
+        assertEquals(
+            YtDlpAvailability.UP_TO_DATE,
+            YtDlpUpdatePolicy.availability(
+                currentVersion = "2026.09.01",
+                latestVersion = "2026.08.12",
+                rejectedVersion = null,
+            ),
+        )
+        assertEquals(1, YtDlpUpdatePolicy.compareVersions("2026.08.12.1", "2026.08.12"))
+        assertEquals(
+            YtDlpAvailability.INVALID,
+            YtDlpUpdatePolicy.availability(
+                currentVersion = "2026.08.01",
+                latestVersion = "not-a-release",
+                rejectedVersion = null,
+            ),
+        )
+    }
+
+    @Test
     fun interruptedSwapFinalizesOnlyAHealthyExpectedTarget() {
         val journal = journal()
 
@@ -72,6 +93,30 @@ class YtDlpUpdatePolicyTest {
         assertEquals(
             YtDlpRecoveryAction.RESTORE_ORIGINAL,
             recoveryAction(journal, observedVersion = "unexpected", smokePassed = true),
+        )
+        assertEquals(
+            YtDlpRecoveryAction.FINALIZE_TARGET,
+            recoveryAction(journal, observedVersion = "2026.08.13", smokePassed = true),
+        )
+        val legacyDowngradeJournal = journal.copy(
+            originalVersion = "2026.08.13",
+            targetVersion = "2026.08.12",
+        )
+        assertEquals(
+            YtDlpRecoveryAction.KEEP_ORIGINAL,
+            recoveryAction(
+                legacyDowngradeJournal,
+                observedVersion = legacyDowngradeJournal.originalVersion,
+                smokePassed = true,
+            ),
+        )
+        assertEquals(
+            YtDlpRecoveryAction.RESTORE_ORIGINAL,
+            recoveryAction(
+                journal.copy(kind = YtDlpTransactionKind.MANUAL_ROLLBACK),
+                observedVersion = "2026.08.13",
+                smokePassed = true,
+            ),
         )
     }
 

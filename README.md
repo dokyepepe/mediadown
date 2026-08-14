@@ -1,11 +1,11 @@
 <div align="center">
   <img src="assets/app.svg" width="112" height="112" alt="Ícone do Media Downloader">
   <h1>Media Downloader</h1>
-  <p><strong>Baixe, organize e converta vídeos, áudios e playlists sem sair do seu dispositivo.</strong></p>
-  <p>Uma experiência nativa para Windows e Android, com fila controlada, histórico local e opções detalhadas de formato e qualidade.</p>
+  <p><strong>Baixe, organize e converta vídeos, áudios, documentos e imagens sem sair do seu dispositivo.</strong></p>
+  <p>Uma experiência nativa para Windows e Android, com fila controlada, extração de arquivos de sites e opções detalhadas de formato e qualidade.</p>
 
   <p>
-    <img src="https://img.shields.io/badge/vers%C3%A3o-1.1.0-2E8B57?style=flat-square" alt="Versão 1.1.0">
+    <img src="https://img.shields.io/badge/vers%C3%A3o-1.2.0-2E8B57?style=flat-square" alt="Versão 1.2.0">
     <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=flat-square&amp;logo=windows&amp;logoColor=white" alt="Windows 10 e 11">
     <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&amp;logo=android&amp;logoColor=white" alt="Android 8.0 ou superior">
     <img src="https://img.shields.io/badge/Python-3.12%2B-3776AB?style=flat-square&amp;logo=python&amp;logoColor=white" alt="Python 3.12 ou superior">
@@ -51,6 +51,7 @@ Não existe uma WebView compartilhada entre elas: interface, engine, persistênc
 | **Análise** | Título, autor, duração, plataforma, miniatura, playlist e formatos disponíveis sem bloquear a interface |
 | **Vídeo** | Seleção automática ou MP4, MKV e WEBM, com limite de resolução |
 | **Áudio** | MP3, M4A, OPUS, FLAC e WAV; a edição desktop também oferece AAC |
+| **Arquivos de sites** | Descoberta e seleção de PDFs vinculados/incorporados e imagens públicas, incluindo URLs relativas e imagens responsivas |
 | **Playlists** | Download integral nas duas edições e seleção item a item no desktop |
 | **Legendas** | Legendas oficiais ou automáticas, com opções de download/incorporação conforme a edição |
 | **Fila** | Progresso, velocidade, ETA, cancelamento, nova tentativa e estados separados de download e pós-processamento |
@@ -64,6 +65,7 @@ Não existe uma WebView compartilhada entre elas: interface, engine, persistênc
 | --- | :---: | :---: |
 | Interface nativa | PySide6 / Qt | Kotlin / Compose |
 | Vídeo e áudio | ✅ | ✅ |
+| PDFs e imagens de sites | seleção e pasta configurável | seleção e `Downloads/MediaDownloader` |
 | Playlists | seleção ou playlist completa | playlist completa |
 | Processamento da fila | até 5 downloads concorrentes | persistente, em serviço de primeiro plano |
 | Histórico local | pesquisável e filtrável | abrir e compartilhar |
@@ -90,6 +92,10 @@ A cobertura acompanha os extractors disponíveis no **yt-dlp**. Entre as platafo
 3. Escolha **Vídeo** ou **Áudio**, a qualidade, o formato e as opções adicionais.
 4. Inicie o download e acompanhe o progresso na fila.
 5. Abra o arquivo concluído pelo histórico.
+
+Para extrair documentos e imagens de uma página, abra **Arquivos do site**, cole a URL,
+marque **PDFs**, **Imagens** ou ambos, analise e escolha os resultados que deseja salvar. O
+extrator lê o HTML público; conteúdo criado somente após login ou por JavaScript pode não aparecer.
 
 Os builds finais já incluem os componentes necessários. Python, FFmpeg, Deno ou Android SDK só são exigidos para desenvolver ou gerar os artefatos localmente.
 
@@ -226,6 +232,10 @@ O instalador cria atalhos opcionais, inclui um desinstalador e pergunta se confi
 powershell -ExecutionPolicy Bypass -File .\scripts\build_android.ps1 -Variant Debug
 ```
 
+O build executa os testes unitários e o lint da variante antes de gerar o APK. Para uma
+compilação local de diagnóstico, esses gates só podem ser ignorados explicitamente com
+`-SkipChecks`.
+
 As alterações de cada aplicação permanecem isoladas:
 
 - `src/mediadownloader/` e `MediaDownloader.spec` geram a edição Windows;
@@ -243,7 +253,7 @@ As alterações de cada aplicação permanecem isoladas:
 | `setup_ffmpeg.ps1` | Baixa e valida FFmpeg/FFprobe |
 | `setup_deno.ps1` | Baixa e valida o runtime Deno |
 | `setup_android.ps1` | Instala o Android SDK local e gera `local.properties` |
-| `build_android.ps1` | Compila, copia, calcula o SHA-256 e opcionalmente instala o APK |
+| `build_android.ps1` | Testa, executa lint, compila, copia, calcula o SHA-256 e opcionalmente instala o APK |
 
 ## Arquitetura
 
@@ -388,6 +398,6 @@ Ao redistribuir FFmpeg, yt-dlp, Deno, Qt ou qualquer outro componente, preserve 
 ---
 
 <div align="center">
-  <strong>Media Downloader 1.1.0</strong><br>
+  <strong>Media Downloader 1.2.0</strong><br>
   <sub>Feito para manter seus downloads organizados, locais e sob seu controle.</sub>
 </div>

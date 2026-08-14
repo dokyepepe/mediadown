@@ -1,6 +1,8 @@
 """Visual bounded queue and its global controls."""
 
-from PySide6.QtWidgets import QHBoxLayout, QMessageBox, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QFrame, QHBoxLayout, QLabel, QMessageBox, QScrollArea, QVBoxLayout, QWidget,
+)
 
 from mediadownloader.core import QueueManager
 from mediadownloader.models import DownloadItem, DownloadStatus
@@ -17,13 +19,26 @@ class DownloadsPage(QWidget):
         self.cards: dict[str, DownloadCard] = {}
         root = QVBoxLayout(self)
         root.setContentsMargins(34, 28, 34, 34)
-        root.setSpacing(14)
-        header = QHBoxLayout()
-        title_box = QVBoxLayout()
-        title_box.addWidget(PageHeader(
+        root.setSpacing(16)
+        root.addWidget(PageHeader(
             "Downloads", "Acompanhe a fila e o processamento de mídia.", "downloads"
         ))
+
+        toolbar = QFrame()
+        toolbar.setObjectName("Toolbar")
+        toolbar_layout = QVBoxLayout(toolbar)
+        toolbar_layout.setContentsMargins(15, 12, 15, 12)
+        toolbar_layout.setSpacing(12)
+        summary = QVBoxLayout()
+        summary.setSpacing(1)
+        self.queue_summary = QLabel("Fila pronta")
+        self.queue_summary.setObjectName("SectionTitle")
+        self.queue_caption = QLabel("Adicione uma mídia para começar")
+        self.queue_caption.setObjectName("Muted")
+        summary.addWidget(self.queue_summary)
+        summary.addWidget(self.queue_caption)
         controls = QHBoxLayout()
+        controls.setSpacing(7)
         self.pause_button = SecondaryButton("Pausar fila", icon_name="pause")
         self.pause_button.clicked.connect(self._toggle_pause)
         self.cancel_all_button = SecondaryButton("Cancelar todos", icon_name="cancel")
@@ -34,11 +49,15 @@ class DownloadsPage(QWidget):
         controls.addWidget(self.pause_button)
         controls.addWidget(self.cancel_all_button)
         controls.addWidget(self.clear_button)
-        header.addLayout(title_box)
-        header.addStretch()
-        header.addLayout(controls)
-        root.addLayout(header)
-        self.empty = EmptyState("Nenhum download em andamento", "Os downloads adicionados aparecerão aqui.", "downloads")
+        controls.addStretch()
+        toolbar_layout.addLayout(summary)
+        toolbar_layout.addLayout(controls)
+        root.addWidget(toolbar)
+        self.empty = EmptyState(
+            "Sua fila está livre",
+            "Quando você adicionar uma mídia, progresso, velocidade e ações aparecerão aqui.",
+            "downloads",
+        )
         root.addWidget(self.empty, 1)
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
@@ -110,6 +129,7 @@ class DownloadsPage(QWidget):
             self.queue.pause()
             self.pause_button.setText("Continuar fila")
             set_button_icon(self.pause_button, "play")
+        self._update_controls()
 
     def _update_empty(self) -> None:
         empty = not self.cards
@@ -122,3 +142,21 @@ class DownloadsPage(QWidget):
         self.pause_button.setEnabled(active)
         self.cancel_all_button.setEnabled(active)
         self.clear_button.setEnabled(completed)
+        in_progress = sum(not item.status.terminal for item in self.queue.items.values())
+        failed = sum(item.status == DownloadStatus.ERROR for item in self.queue.items.values())
+        finished = sum(item.status == DownloadStatus.COMPLETED for item in self.queue.items.values())
+        if self.queue.paused and active:
+            title = "Fila pausada"
+            caption = f"{in_progress} item(ns) aguardando continuação"
+        elif in_progress:
+            title = f"{in_progress} item(ns) em andamento"
+            caption = f"{finished} concluído(s)  •  {failed} com erro"
+        elif self.cards:
+            title = "Fila processada"
+            caption = f"{finished} concluído(s)  •  {failed} com erro"
+        else:
+            title = "Fila pronta"
+            caption = "Adicione uma mídia para começar"
+        self.queue_summary.setText(title)
+        self.queue_caption.setText(caption)
+        self.queue_summary.setAccessibleName(f"Estado da fila: {title}. {caption}")

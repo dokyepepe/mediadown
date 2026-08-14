@@ -8,6 +8,7 @@ Esta distribuição incorpora componentes mantidos por projetos independentes:
 - **Deno** — MIT License. Runtime JavaScript recomendado pelo yt-dlp para suporte completo ao YouTube: <https://github.com/denoland/deno>
 - **PySide6 / Qt** — PySide6 é disponibilizado sob LGPLv3/GPLv3/licença comercial. Licenças: <https://www.qt.io/licensing/open-source-lgpl-obligations>
 - **Python** — Python Software Foundation License: <https://docs.python.org/3/license.html>
+- **packaging** — Apache License 2.0 ou BSD 2-Clause. Fonte: <https://github.com/pypa/packaging>
 - **platformdirs** — MIT License: <https://github.com/tox-dev/platformdirs>
 - **PyInstaller** (ferramenta de build) — GPLv2 com exceção para distribuir aplicações: <https://pyinstaller.org/en/stable/license.html>
 - **Spotify attribution asset** — o logotipo completo preto é um asset oficial não modificado, usado somente para atribuir metadados obtidos do Spotify. Spotify é marca da Spotify AB e não endossa este aplicativo. Fonte e regras de uso: <https://developer.spotify.com/documentation/design>. Consulte também `assets/third_party/spotify/SOURCE.md`.

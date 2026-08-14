@@ -17,6 +17,7 @@ interface MobileUiController {
 data class MobileUiState(
     val selectedTab: AppTab = AppTab.HOME,
     val home: HomeUiState = HomeUiState(),
+    val siteFiles: SiteFilesUiState = SiteFilesUiState(),
     val downloads: DownloadsUiState = DownloadsUiState(),
     val history: HistoryUiState = HistoryUiState(),
     val settings: SettingsUiState = SettingsUiState(),
@@ -31,9 +32,59 @@ data class UiMessage(
 
 enum class AppTab(val label: String, val glyph: String) {
     HOME("Início", "⌂"),
+    SITE_FILES("Arquivos", "▤"),
     DOWNLOADS("Downloads", "⇩"),
     HISTORY("Histórico", "↶"),
     SETTINGS("Ajustes", "⚙"),
+}
+
+data class SiteFilesUiState(
+    val url: String = "",
+    val urlError: String? = null,
+    val includePdfs: Boolean = true,
+    val includeImages: Boolean = true,
+    val isScanning: Boolean = false,
+    val pageTitle: String? = null,
+    val items: List<SiteFileUi> = emptyList(),
+    val isDownloading: Boolean = false,
+    val completedDownloads: Int = 0,
+    val totalDownloads: Int = 0,
+) {
+    val selectedCount: Int
+        get() = items.count { it.selected && it.status != SiteFileStatus.SAVED }
+
+    val canScan: Boolean
+        get() = url.isNotBlank() && (includePdfs || includeImages) && !isScanning && !isDownloading
+
+    val canDownload: Boolean
+        get() = selectedCount > 0 && !isScanning && !isDownloading
+}
+
+data class SiteFileUi(
+    val id: String,
+    val url: String,
+    val name: String,
+    val sourceHost: String,
+    val kind: SiteFileKindUi,
+    val selected: Boolean = true,
+    val status: SiteFileStatus = SiteFileStatus.READY,
+    val progress: Float? = null,
+    val progressText: String? = null,
+    val errorMessage: String? = null,
+    val savedUri: String? = null,
+    val mimeType: String? = null,
+)
+
+enum class SiteFileKindUi(val label: String) {
+    PDF("PDF"),
+    IMAGE("Imagem"),
+}
+
+enum class SiteFileStatus(val label: String) {
+    READY("Pronto"),
+    DOWNLOADING("Baixando"),
+    SAVED("Salvo"),
+    FAILED("Falhou"),
 }
 
 data class HomeUiState(
@@ -201,6 +252,17 @@ sealed interface MobileUiAction {
     data class SetDownloadPlaylist(val enabled: Boolean) : MobileUiAction
     data class SetIncludeSubtitles(val enabled: Boolean) : MobileUiAction
     object StartDownload : MobileUiAction
+
+    data class SiteUrlChanged(val value: String) : MobileUiAction
+    object PasteSiteUrl : MobileUiAction
+    data class SetSiteIncludePdfs(val enabled: Boolean) : MobileUiAction
+    data class SetSiteIncludeImages(val enabled: Boolean) : MobileUiAction
+    object ScanSiteFiles : MobileUiAction
+    data class ToggleSiteFile(val id: String) : MobileUiAction
+    data class SelectAllSiteFiles(val selected: Boolean) : MobileUiAction
+    object DownloadSelectedSiteFiles : MobileUiAction
+    object CancelSiteFileDownloads : MobileUiAction
+    data class OpenSiteFile(val id: String) : MobileUiAction
 
     data class SelectDownloadFilter(val filter: DownloadFilter) : MobileUiAction
     data class CancelDownload(val id: String) : MobileUiAction

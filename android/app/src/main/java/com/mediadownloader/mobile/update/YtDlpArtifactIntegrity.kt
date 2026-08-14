@@ -9,29 +9,13 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 
+/**
+ * Verifica as cópias locais usadas pelo journal e pelo rollback.
+ *
+ * A obtenção do runtime remoto continua a cargo da API pública de youtubedl-android; estas
+ * rotinas não alegam autenticar o artefato de rede.
+ */
 internal object YtDlpArtifactIntegrity {
-    private val sha256Pattern = Regex("^[a-fA-F0-9]{64}$")
-
-    fun normalizeSha256(value: String?): String? {
-        val candidate = value
-            ?.trim()
-            ?.removePrefix("sha256:")
-            ?.lowercase()
-            ?: return null
-        return candidate.takeIf(sha256Pattern::matches)
-    }
-
-    fun checksumFromManifest(manifest: String, assetName: String): String? = manifest
-        .lineSequence()
-        .map(String::trim)
-        .mapNotNull { line ->
-            val separator = line.indexOfFirst(Char::isWhitespace)
-            if (separator <= 0) return@mapNotNull null
-            val digest = normalizeSha256(line.substring(0, separator)) ?: return@mapNotNull null
-            val name = line.substring(separator).trim().removePrefix("*")
-            digest.takeIf { name == assetName }
-        }
-        .firstOrNull()
 
     fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")

@@ -47,25 +47,37 @@ class SettingsSection(QFrame):
     def __init__(self, title: str, description: str = "", icon_name: str = "settings") -> None:
         super().__init__()
         self.setObjectName("Card")
+        self.setAccessibleName(title)
+        if description:
+            self.setAccessibleDescription(description)
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(18, 16, 18, 18)
+        self.layout.setContentsMargins(20, 18, 20, 20)
+        self.layout.setSpacing(13)
         heading = QHBoxLayout()
+        heading.setSpacing(12)
         heading_icon = ThemedIconLabel(icon_name, 20)
-        heading_icon.setFixedWidth(26)
+        heading_icon.setObjectName("StepIcon")
+        heading_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        heading_icon.setFixedSize(40, 40)
+        heading_text = QVBoxLayout()
+        heading_text.setSpacing(2)
         title_label = QLabel(title)
         title_label.setObjectName("SectionTitle")
         heading.addWidget(heading_icon)
-        heading.addWidget(title_label)
-        heading.addStretch()
-        self.layout.addLayout(heading)
+        heading_text.addWidget(title_label)
         if description:
             label = QLabel(description)
             label.setObjectName("Muted")
             label.setWordWrap(True)
-            self.layout.addWidget(label)
+            label.setMinimumWidth(0)
+            heading_text.addWidget(label)
+        heading.addLayout(heading_text, 1)
+        self.layout.addLayout(heading)
         self.form = QFormLayout()
-        self.form.setHorizontalSpacing(24)
-        self.form.setVerticalSpacing(11)
+        self.form.setHorizontalSpacing(26)
+        self.form.setVerticalSpacing(12)
+        self.form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        self.form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.layout.addLayout(self.form)
 
 
@@ -96,12 +108,44 @@ class SettingsPage(QWidget):
         content.setObjectName("Page")
         root = QVBoxLayout(content)
         root.setContentsMargins(34, 28, 34, 34)
-        root.setSpacing(14)
+        root.setSpacing(16)
         root.addWidget(PageHeader(
-            "Configurações", "Preferências locais do aplicativo.", "settings"
+            "Configurações", "Personalize downloads, privacidade e integrações locais.", "settings"
         ))
 
-        general = SettingsSection("Geral", icon_name="settings")
+        overview = QFrame()
+        overview.setObjectName("Toolbar")
+        overview_layout = QHBoxLayout(overview)
+        overview_layout.setContentsMargins(16, 13, 16, 13)
+        overview_layout.setSpacing(12)
+        overview_icon = ThemedIconLabel("shield", 20)
+        overview_icon.setObjectName("StepIcon")
+        overview_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        overview_icon.setFixedSize(40, 40)
+        overview_text = QVBoxLayout()
+        overview_text.setSpacing(1)
+        overview_title = QLabel("Preferências sob seu controle")
+        overview_title.setObjectName("SectionTitle")
+        overview_caption = QLabel(
+            "As alterações são salvas localmente e nenhuma conta é obrigatória."
+        )
+        overview_caption.setObjectName("Muted")
+        overview_caption.setWordWrap(True)
+        local_badge = QLabel("ARMAZENAMENTO LOCAL")
+        local_badge.setObjectName("MetaPill")
+        overview_text.addWidget(overview_title)
+        overview_text.addWidget(overview_caption)
+        overview_layout.addWidget(overview_icon)
+        overview_layout.addLayout(overview_text, 1)
+        overview_layout.addWidget(local_badge)
+        root.addWidget(overview)
+
+        general = SettingsSection(
+            "Geral",
+            "Aparência, destino padrão e comportamento do aplicativo.",
+            "settings",
+        )
+        general.setProperty("accent", "true")
         self.language = WheelSafeComboBox(); self.language.addItem("Português (Brasil)", "pt_BR")
         self.theme = WheelSafeComboBox(); self.theme.addItem("Sistema", "system"); self.theme.addItem("Claro", "light"); self.theme.addItem("Escuro", "dark")
         self.download_dir = QLineEdit()
@@ -119,7 +163,11 @@ class SettingsPage(QWidget):
         general.form.addRow("", self.confirm_close)
         root.addWidget(general)
 
-        downloads = SettingsSection("Downloads", icon_name="downloads")
+        downloads = SettingsSection(
+            "Downloads",
+            "Defina os padrões usados ao preparar uma nova mídia.",
+            "downloads",
+        )
         self.concurrent = WheelSafeSpinBox(); self.concurrent.setRange(1, 5)
         self.video_format = WheelSafeComboBox(); self.video_format.addItems(["auto", "mp4", "mkv", "webm"])
         self.video_quality = WheelSafeComboBox(); self.video_quality.addItems(["auto", "2160", "1440", "1080", "720", "480", "360"])
@@ -150,7 +198,11 @@ class SettingsPage(QWidget):
         filenames.form.addRow("Arquivo existente", self.duplicate_policy)
         root.addWidget(filenames)
 
-        network = SettingsSection("Rede", icon_name="globe")
+        network = SettingsSection(
+            "Rede",
+            "Deixe o proxy desativado quando sua conexão não exigir configuração manual.",
+            "globe",
+        )
         self.proxy_type = WheelSafeComboBox(); self.proxy_type.addItem("Nenhum", "none"); self.proxy_type.addItem("HTTP", "http"); self.proxy_type.addItem("HTTPS", "https"); self.proxy_type.addItem("SOCKS", "socks")
         self.proxy_url = QLineEdit(); self.proxy_url.setPlaceholderText("http://host:porta (evite credenciais no campo)")
         network.form.addRow("Proxy", self.proxy_type)
@@ -229,6 +281,12 @@ class SettingsPage(QWidget):
         self.ytdlp_update_status.setObjectName("Muted")
         self.ytdlp_update_status.setWordWrap(True)
         self.ytdlp_update_status.setMinimumWidth(0)
+        self.ytdlp_status_panel = QFrame()
+        self.ytdlp_status_panel.setObjectName("ComponentStatus")
+        self.ytdlp_status_panel.setProperty("state", "ready")
+        status_layout = QHBoxLayout(self.ytdlp_status_panel)
+        status_layout.setContentsMargins(10, 8, 10, 8)
+        status_layout.addWidget(self.ytdlp_update_status, 1)
         component_actions = QWidget()
         action_rows = QVBoxLayout(component_actions)
         action_rows.setContentsMargins(0, 0, 0, 0)
@@ -259,13 +317,23 @@ class SettingsPage(QWidget):
         components.form.addRow("yt-dlp em uso", self.ytdlp_version)
         components.form.addRow("Versão de recuperação", self.ytdlp_previous_version)
         components.form.addRow("FFmpeg", self.ffmpeg_version)
-        components.form.addRow("Estado", self.ytdlp_update_status)
+        components.form.addRow("Estado", self.ytdlp_status_panel)
         components.form.addRow("", component_actions)
         root.addWidget(components)
 
-        save_row = QHBoxLayout(); save_row.addStretch()
-        save = PrimaryButton("SALVAR CONFIGURAÇÕES", icon_name="check"); save.clicked.connect(self.save)
-        save_row.addWidget(save); root.addLayout(save_row); root.addStretch()
+        save_bar = QFrame()
+        save_bar.setObjectName("Toolbar")
+        save_row = QHBoxLayout(save_bar)
+        save_row.setContentsMargins(15, 12, 15, 12)
+        save_hint = QLabel("Revise as preferências e aplique quando estiver pronto.")
+        save_hint.setObjectName("Muted")
+        save_hint.setWordWrap(True)
+        self.save_button = PrimaryButton("SALVAR CONFIGURAÇÕES", icon_name="check")
+        self.save_button.clicked.connect(self.save)
+        save_row.addWidget(save_hint, 1)
+        save_row.addWidget(self.save_button)
+        root.addWidget(save_bar)
+        root.addStretch()
         scroll.setWidget(content); outer.addWidget(scroll)
         self._component_busy = False
         self._available_ytdlp_version: str | None = None
@@ -445,6 +513,15 @@ class SettingsPage(QWidget):
             message = "Componente verificado. Uma versão de recuperação será criada na próxima atualização."
         self.ytdlp_update_status.setText(message)
         self.ytdlp_update_status.setAccessibleDescription(message)
+        if status.restart_required:
+            visual_state = "pending"
+        elif status.last_event == "automatic_rollback":
+            visual_state = "error"
+        elif status.previous_version or status.last_event in {"updated", "rolled_back"}:
+            visual_state = "ready"
+        else:
+            visual_state = "neutral"
+        self._set_component_panel_state(visual_state)
 
         update_text = "ATUALIZAR YT-DLP"
         update_enabled = not status.restart_required
@@ -491,6 +568,7 @@ class SettingsPage(QWidget):
         if message:
             self.ytdlp_update_status.setText(message)
             self.ytdlp_update_status.setAccessibleDescription(message)
+            self._set_component_panel_state("pending")
         for button in (
             self.check_update_button,
             self.update_ytdlp_button,
@@ -500,6 +578,12 @@ class SettingsPage(QWidget):
             button.setEnabled(not busy)
         if not busy:
             self._refresh_component_status()
+
+    def _set_component_panel_state(self, state: str) -> None:
+        self.ytdlp_status_panel.setProperty("state", state)
+        self.ytdlp_status_panel.style().unpolish(self.ytdlp_status_panel)
+        self.ytdlp_status_panel.style().polish(self.ytdlp_status_panel)
+        self.ytdlp_status_panel.update()
 
     def _run_component_task(self, function, success, busy_message: str) -> None:
         if self._component_busy:
@@ -524,6 +608,7 @@ class SettingsPage(QWidget):
         message = f"Não foi possível concluir a operação. {error}"
         self.ytdlp_update_status.setText(message)
         self.ytdlp_update_status.setAccessibleDescription(message)
+        self._set_component_panel_state("error")
         QMessageBox.warning(self, "Atualização do yt-dlp", message)
 
     def _check_update(self) -> None:

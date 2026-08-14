@@ -6,8 +6,8 @@ from PySide6.QtCore import QEvent, Qt, QUrl
 from PySide6.QtGui import QPalette, QPixmap
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
-    QComboBox, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QSpinBox, QVBoxLayout,
-    QWidget,
+    QApplication, QComboBox, QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy,
+    QSpinBox, QVBoxLayout, QWidget,
 )
 
 from mediadownloader.models import DownloadStatus
@@ -53,7 +53,7 @@ class PrimaryButton(QPushButton):
         super().__init__(text, parent)
         self.setProperty("role", "primary")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setMinimumHeight(44)
+        self.setMinimumHeight(45)
         self.setAccessibleName(text.replace("&", ""))
         if icon_name:
             set_button_icon(self, icon_name, "#FFFFFF")
@@ -63,7 +63,7 @@ class SecondaryButton(QPushButton):
     def __init__(self, text: str, parent: QWidget | None = None, icon_name: str = "") -> None:
         super().__init__(text, parent)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setMinimumHeight(44)
+        self.setMinimumHeight(45)
         self.setAccessibleName(text.replace("&", ""))
         if icon_name:
             set_button_icon(self, icon_name)
@@ -86,8 +86,14 @@ class SidebarButton(QPushButton):
         self._refresh_icon(False)
 
     def _refresh_icon(self, checked: bool) -> None:
-        role = QPalette.ColorRole.Link if checked else QPalette.ColorRole.ButtonText
-        set_button_icon(self, self.icon_name, self.palette().color(role).name(), 19)
+        app = QApplication.instance()
+        app_color = app.property("sidebarActiveText" if checked else "sidebarText") if app else None
+        if app_color:
+            color = str(app_color)
+        else:
+            role = QPalette.ColorRole.Link if checked else QPalette.ColorRole.ButtonText
+            color = self.palette().color(role).name()
+        set_button_icon(self, self.icon_name, color, 19)
 
     def changeEvent(self, event: QEvent) -> None:
         super().changeEvent(event)
@@ -98,14 +104,23 @@ class SidebarButton(QPushButton):
 class ThemedIconLabel(QLabel):
     """Palette-aware SVG label that stays legible after a live theme switch."""
 
-    def __init__(self, icon_name: str, icon_size: int, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        icon_name: str,
+        icon_size: int,
+        parent: QWidget | None = None,
+        color_property: str = "",
+    ) -> None:
         super().__init__(parent)
         self.icon_name = icon_name
         self.icon_size = icon_size
+        self.color_property = color_property
         self._refresh_icon()
 
     def _refresh_icon(self) -> None:
-        color = self.palette().color(QPalette.ColorRole.Link).name()
+        app = QApplication.instance()
+        themed_color = app.property(self.color_property) if app and self.color_property else None
+        color = str(themed_color) if themed_color else self.palette().color(QPalette.ColorRole.Link).name()
         self.setPixmap(svg_pixmap(self.icon_name, self.icon_size, color))
 
     def changeEvent(self, event: QEvent) -> None:
@@ -122,12 +137,12 @@ class PageHeader(QWidget):
         self.setAccessibleName(title)
         self.setAccessibleDescription(subtitle)
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 4)
-        layout.setSpacing(11)
-        icon = ThemedIconLabel(icon_name, 22)
+        layout.setContentsMargins(0, 0, 0, 8)
+        layout.setSpacing(14)
+        icon = ThemedIconLabel(icon_name, 23)
         icon.setObjectName("PageHeaderIcon")
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon.setFixedSize(40, 40)
+        icon.setFixedSize(48, 48)
         text = QVBoxLayout()
         text.setSpacing(2)
         title_label = QLabel(title)
@@ -149,16 +164,19 @@ class PageHeader(QWidget):
 class EmptyState(QWidget):
     def __init__(self, title: str, subtitle: str, icon_name: str = "downloads") -> None:
         super().__init__()
+        self.setObjectName("EmptyState")
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
+        self.setMinimumHeight(260)
         self.setAccessibleName(title)
         self.setAccessibleDescription(subtitle)
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(32, 34, 32, 34)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.setSpacing(8)
-        icon = QLabel()
+        layout.setSpacing(10)
+        icon = ThemedIconLabel(icon_name, 31)
+        icon.setObjectName("StepIcon")
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon.setPixmap(svg_pixmap(icon_name, 48, "#7E8983"))
-        icon.setFixedHeight(58)
+        icon.setFixedSize(64, 64)
         title_label = QLabel(title)
         title_label.setObjectName("SectionTitle")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -174,6 +192,42 @@ class EmptyState(QWidget):
         layout.addWidget(icon)
         layout.addWidget(title_label)
         layout.addWidget(subtitle_label)
+
+
+class WorkflowStep(QFrame):
+    """Compact instructional card used by first-use and empty workflows."""
+
+    def __init__(self, step: int, title: str, subtitle: str, icon_name: str) -> None:
+        super().__init__()
+        self.setObjectName("WorkflowStep")
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.setMinimumHeight(142)
+        self.setAccessibleName(f"Passo {step}: {title}")
+        self.setAccessibleDescription(subtitle)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(7)
+        top = QHBoxLayout()
+        icon = ThemedIconLabel(icon_name, 18)
+        icon.setObjectName("StepIcon")
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon.setFixedSize(38, 38)
+        number = QLabel(f"PASSO {step}")
+        number.setObjectName("SectionEyebrow")
+        top.addWidget(icon)
+        top.addStretch()
+        top.addWidget(number, 0, Qt.AlignmentFlag.AlignTop)
+        title_label = QLabel(title)
+        title_label.setObjectName("SectionTitle")
+        title_label.setWordWrap(True)
+        subtitle_label = QLabel(subtitle)
+        subtitle_label.setObjectName("Muted")
+        subtitle_label.setWordWrap(True)
+        subtitle_label.setMinimumWidth(0)
+        layout.addLayout(top)
+        layout.addWidget(title_label)
+        layout.addWidget(subtitle_label)
+        layout.addStretch()
 
 
 class StatusBadge(QLabel):

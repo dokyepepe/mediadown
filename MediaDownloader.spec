@@ -17,7 +17,9 @@ datas = [
     (str(root / "assets"), "assets"),
     (str(root / "licenses"), "licenses"),
 ]
-for distribution_name in ("PySide6", "shiboken6", "yt-dlp", "yt-dlp-ejs", "platformdirs"):
+for distribution_name in (
+    "PySide6", "shiboken6", "yt-dlp", "yt-dlp-ejs", "packaging", "platformdirs",
+):
     try:
         package = distribution(distribution_name)
         for relative in package.files or []:

@@ -10,12 +10,20 @@ from mediadownloader.services.settings_service import SettingsService
 from mediadownloader.ui.main_window import MainWindow
 from mediadownloader.ui.pages.history_page import HistoryPage
 from mediadownloader.ui.pages.home_page import HomePage
+from mediadownloader.ui.pages.settings_page import SettingsSection
 from mediadownloader.ui.theme import apply_theme
 from mediadownloader.ui.widgets import SidebarButton
 
 
 class FakeExtractor:
     pass
+
+
+def test_settings_section_allows_a_title_without_description(qtbot) -> None:
+    section = SettingsSection("Seção simples")
+    qtbot.addWidget(section)
+
+    assert section.accessibleName() == "Seção simples"
 
 
 def test_main_window_uses_desktop_dimensions_and_sidebar(monkeypatch, qapp, qtbot, tmp_path: Path) -> None:
@@ -37,10 +45,11 @@ def test_main_window_uses_desktop_dimensions_and_sidebar(monkeypatch, qapp, qtbo
     assert window.minimumWidth() == 900
     assert window.minimumHeight() == 620
     assert window.maximumWidth() > 480
-    assert len(window.nav_buttons) == 5
+    assert len(window.nav_buttons) == 6
     assert all(isinstance(button, SidebarButton) for button in window.nav_buttons)
     assert window.nav_buttons[0].text() == "Início"
     assert window.nav_buttons[3].text() == "Configurações"
+    assert window.nav_buttons[4].text() == "Arquivos do site"
 
     qtbot.mouseClick(window.nav_buttons[3], Qt.MouseButton.LeftButton)
     assert window.stack.currentIndex() == 3

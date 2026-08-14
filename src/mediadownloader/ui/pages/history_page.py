@@ -7,7 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QApplication, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMenu,
+    QApplication, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMenu,
     QMessageBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -29,13 +29,17 @@ class HistoryPage(QWidget):
         self._items: dict[str, DownloadItem] = {}
         root = QVBoxLayout(self)
         root.setContentsMargins(34, 28, 34, 34)
-        root.setSpacing(14)
+        root.setSpacing(16)
         root.addWidget(PageHeader(
             "Histórico", "Downloads concluídos ficam salvos somente neste computador.", "history"
         ))
-        tools = QHBoxLayout()
+        toolbar = QFrame()
+        toolbar.setObjectName("Toolbar")
+        tools = QHBoxLayout(toolbar)
+        tools.setContentsMargins(14, 12, 14, 12)
+        tools.setSpacing(9)
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Pesquisar histórico...")
+        self.search.setPlaceholderText("Pesquisar por título, site ou formato…")
         self.search.setAccessibleName("Pesquisar histórico")
         self.search.setClearButtonEnabled(True)
         self.search.addAction(svg_icon("analyze", 17), QLineEdit.ActionPosition.LeadingPosition)
@@ -46,19 +50,30 @@ class HistoryPage(QWidget):
         self.filter.addItem("Vídeo", "video")
         self.filter.addItem("Áudio", "audio")
         self.filter.currentIndexChanged.connect(self.reload)
+        self.count_label = QLabel("0 itens")
+        self.count_label.setObjectName("Muted")
         clear = SecondaryButton("Limpar histórico", icon_name="trash")
         clear.clicked.connect(self._clear)
         tools.addWidget(self.search, 1)
         tools.addWidget(self.filter)
+        tools.addWidget(self.count_label)
         tools.addWidget(clear)
-        root.addLayout(tools)
-        self.empty = EmptyState("Seu histórico está vazio", "Downloads concluídos aparecerão aqui.", "history")
+        root.addWidget(toolbar)
+        self.empty = EmptyState(
+            "Seu histórico está vazio",
+            "Downloads concluídos serão organizados aqui, somente neste computador.",
+            "history",
+        )
         root.addWidget(self.empty, 1)
         self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels(["Título", "Origem", "Formato", "Qualidade", "Data", "Status", "Arquivo"])
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.setAlternatingRowColors(True)
+        self.table.setShowGrid(False)
+        self.table.setWordWrap(False)
+        self.table.verticalHeader().setDefaultSectionSize(44)
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.setAccessibleName("Histórico de downloads concluídos")
         self.table.setAccessibleDescription("Use as setas para navegar pelas linhas e Shift+F10 para abrir as ações.")
@@ -82,10 +97,16 @@ class HistoryPage(QWidget):
                 item.status.label, item.final_file,
             ]
             for column, value in enumerate(values):
-                cell = QTableWidgetItem(value)
+                display_value = Path(value).name if column == 6 and value else value
+                cell = QTableWidgetItem(display_value)
+                if column == 6 and value:
+                    cell.setToolTip(value)
                 if column == 0:
                     cell.setData(Qt.ItemDataRole.UserRole, item.id)
                 self.table.setItem(row, column, cell)
+        count = len(items)
+        self.count_label.setText(f"{count} item" if count == 1 else f"{count} itens")
+        self.count_label.setAccessibleName(f"{count} itens no histórico")
         empty = not items
         self.empty.setVisible(empty)
         self.table.setVisible(not empty)

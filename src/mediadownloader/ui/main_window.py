@@ -7,7 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeySequence
 from PySide6.QtWidgets import (
-    QApplication, QButtonGroup, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
+    QApplication, QButtonGroup, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
     QStackedWidget, QSystemTrayIcon, QVBoxLayout, QWidget,
 )
 
@@ -19,7 +19,7 @@ from mediadownloader.utils.filenames import sanitize_filename
 from mediadownloader.utils.paths import asset_path, reveal_in_explorer
 from mediadownloader.version import APP_NAME, APP_VERSION
 
-from .pages import AboutPage, DownloadsPage, HistoryPage, HomePage, SettingsPage
+from .pages import AboutPage, DownloadsPage, HistoryPage, HomePage, SettingsPage, SiteFilesPage
 from .theme import apply_theme
 from .widgets import PageHeader, SidebarButton, ThemedIconLabel
 
@@ -38,8 +38,10 @@ class MainWindow(QMainWindow):
         )
         self.setWindowTitle(APP_NAME)
         self.setAccessibleName(APP_NAME)
-        self.setAccessibleDescription("Utilitário para analisar, baixar e converter mídias.")
-        self.resize(1100, 720)
+        self.setAccessibleDescription(
+            "Utilitário para analisar, baixar e converter mídias, PDFs e imagens de sites."
+        )
+        self.resize(1180, 780)
         self.setMinimumSize(900, 620)
         icon = QIcon(str(asset_path("app.ico")))
         if not icon.isNull():
@@ -59,40 +61,49 @@ class MainWindow(QMainWindow):
         root.setSpacing(0)
         sidebar = QWidget()
         sidebar.setObjectName("Sidebar")
-        sidebar.setFixedWidth(220)
+        sidebar.setFixedWidth(236)
+        sidebar.setAccessibleName("Navegação principal")
         side = QVBoxLayout(sidebar)
-        side.setContentsMargins(14, 20, 14, 16)
-        side.setSpacing(5)
+        side.setContentsMargins(16, 22, 16, 16)
+        side.setSpacing(6)
         brand_widget = QWidget()
         brand_layout = QHBoxLayout(brand_widget)
         brand_layout.setContentsMargins(7, 3, 4, 3)
-        brand_layout.setSpacing(10)
-        brand_icon = ThemedIconLabel("brand", 30)
-        brand_icon.setFixedSize(34, 34)
+        brand_layout.setSpacing(11)
+        brand_icon = ThemedIconLabel("brand", 31, color_property="sidebarText")
+        brand_icon.setFixedSize(36, 36)
         brand_text = QVBoxLayout()
-        brand_text.setSpacing(0)
+        brand_text.setSpacing(1)
         brand = QLabel("Media Downloader")
         brand.setObjectName("BrandName")
-        brand_caption = QLabel("MÍDIA • ÁUDIO • VÍDEO")
+        brand_caption = QLabel("MÍDIA • ÁUDIO • ARQUIVOS")
         brand_caption.setObjectName("BrandCaption")
         brand_text.addWidget(brand)
         brand_text.addWidget(brand_caption)
         brand_layout.addWidget(brand_icon)
         brand_layout.addLayout(brand_text, 1)
         side.addWidget(brand_widget)
-        side.addSpacing(14)
+        side.addSpacing(22)
+
+        navigation_label = QLabel("NAVEGAÇÃO")
+        navigation_label.setObjectName("SidebarSection")
+        navigation_label.setContentsMargins(10, 0, 0, 4)
+        side.addWidget(navigation_label)
 
         self.stack = QStackedWidget()
+        self.stack.setObjectName("MainStack")
         self.home_page = HomePage(self.extractor, self.settings)
         self.downloads_page = DownloadsPage(self.queue)
         self.history_page = HistoryPage(self.history)
         self.settings_page = SettingsPage(self.settings, self.queue, self.ffmpeg, self.spotify)
+        self.site_files_page = SiteFilesPage(self.settings)
         self.about_page = AboutPage()
         pages = [
             ("Início", "home", self.home_page),
             ("Downloads", "downloads", self.downloads_page),
             ("Histórico", "history", self.history_page),
             ("Configurações", "settings", self.settings_page),
+            ("Arquivos do site", "file", self.site_files_page),
             ("Sobre", "info", self.about_page),
         ]
         self.page_titles = [label for label, _icon, _page in pages]
@@ -108,8 +119,32 @@ class MainWindow(QMainWindow):
             if index == 0:
                 button.setChecked(True)
         side.addStretch()
-        version = QLabel(f"v{APP_VERSION}")
-        version.setObjectName("Muted")
+
+        footer = QFrame()
+        footer.setObjectName("SidebarFooter")
+        footer.setAccessibleName("Privacidade do aplicativo")
+        footer.setAccessibleDescription("Histórico e preferências permanecem neste computador.")
+        footer_layout = QHBoxLayout(footer)
+        footer_layout.setContentsMargins(12, 11, 12, 11)
+        footer_layout.setSpacing(9)
+        privacy_icon = ThemedIconLabel("shield", 18, color_property="sidebarText")
+        privacy_icon.setFixedSize(24, 24)
+        privacy_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        privacy_text = QVBoxLayout()
+        privacy_text.setSpacing(1)
+        privacy_title = QLabel("Privado por padrão")
+        privacy_title.setObjectName("SidebarFooterTitle")
+        privacy_caption = QLabel("Seus dados ficam neste PC")
+        privacy_caption.setObjectName("SidebarFooterCaption")
+        privacy_caption.setWordWrap(True)
+        privacy_text.addWidget(privacy_title)
+        privacy_text.addWidget(privacy_caption)
+        footer_layout.addWidget(privacy_icon, 0, Qt.AlignmentFlag.AlignTop)
+        footer_layout.addLayout(privacy_text, 1)
+        side.addWidget(footer)
+        side.addSpacing(5)
+        version = QLabel(f"Media Downloader  •  v{APP_VERSION}")
+        version.setObjectName("SidebarVersion")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         side.addWidget(version)
         root.addWidget(sidebar)
@@ -208,7 +243,8 @@ class MainWindow(QMainWindow):
                 reveal_in_explorer(item.final_file, select_file=True)
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        if self.queue.has_active and self.settings.get("general.confirm_close_active", True):
+        has_active = self.queue.has_active or self.site_files_page.has_active_downloads
+        if has_active and self.settings.get("general.confirm_close_active", True):
             answer = QMessageBox.question(
                 self,
                 "Downloads ativos",
@@ -220,4 +256,5 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
             self.queue.cancel_all()
+            self.site_files_page.cancel_downloads()
         event.accept()

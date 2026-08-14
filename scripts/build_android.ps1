@@ -1,7 +1,8 @@
 param(
     [ValidateSet("Debug", "Release")]
     [string]$Variant = "Debug",
-    [switch]$Install
+    [switch]$Install,
+    [switch]$SkipChecks
 )
 
 $ErrorActionPreference = "Stop"
@@ -21,10 +22,18 @@ if (-not (Test-Path -LiteralPath (Join-Path $sdkRoot "platforms\android-36\andro
     throw "Android SDK ausente. Execute scripts/setup_android.ps1 -AcceptSdkLicenses."
 }
 
-$task = "assemble$Variant"
+$assembleTask = "assemble$Variant"
+$checkTasks = @("test${Variant}UnitTest", "lint$Variant")
 Push-Location $androidRoot
 try {
-    & $gradleWrapper --no-daemon --stacktrace $task
+    if (-not $SkipChecks) {
+        & $gradleWrapper --no-daemon --stacktrace @checkTasks
+        if ($LASTEXITCODE -ne 0) {
+            throw "Testes unitários ou lint Android terminaram com código $LASTEXITCODE"
+        }
+    }
+
+    & $gradleWrapper --no-daemon --stacktrace $assembleTask
     if ($LASTEXITCODE -ne 0) {
         throw "Build Android terminou com código $LASTEXITCODE"
     }
