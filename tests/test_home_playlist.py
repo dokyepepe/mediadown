@@ -80,3 +80,19 @@ def test_adding_download_keeps_home_page_visible(tmp_path) -> None:
 
     assert len(window.queue.items) == 1
     assert window.navigation == []
+
+
+def test_media_type_switches_to_its_own_destination(qtbot, tmp_path) -> None:
+    settings = SettingsService(tmp_path / "settings.json")
+    video_dir = tmp_path / "videos"
+    audio_dir = tmp_path / "audios"
+    settings.set("storage.video_dir", str(video_dir))
+    settings.set("storage.audio_dir", str(audio_dir))
+    page = HomePage(FakeExtractor(), settings)  # type: ignore[arg-type]
+    qtbot.addWidget(page)
+
+    assert page.destination.text() == str(video_dir)
+    page.audio_button.click()
+    assert page.destination.text() == str(audio_dir)
+    page.video_button.click()
+    assert page.destination.text() == str(video_dir)

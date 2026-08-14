@@ -26,10 +26,29 @@ class MainActivity : ComponentActivity() {
         viewModel.onStoragePermissionResult(granted)
     }
 
+    private val downloadLocation = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        val persistedLocation = uri?.let { selected ->
+            runCatching {
+                contentResolver.takePersistableUriPermission(
+                    selected,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+                selected.toString()
+            }.getOrElse {
+                viewModel.onDownloadLocationSelectionFailed()
+                null
+            }
+        }
+        viewModel.onDownloadLocationSelected(persistedLocation)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestNotificationPermissionIfNeeded()
         viewModel.setStoragePermissionRequester(::requestStoragePermissionIfNeeded)
+        viewModel.setDownloadLocationRequester { downloadLocation.launch(null) }
         viewModel.receiveIntent(intent)
         setContent {
             MediaDownloaderApp(controller = viewModel)

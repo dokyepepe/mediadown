@@ -1,7 +1,15 @@
+param(
+    [string]$PythonExe
+)
+
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $Exe = Join-Path $ProjectRoot 'dist\MediaDownloader\MediaDownloader.exe'
-if (-not (Test-Path $Exe)) { & (Join-Path $PSScriptRoot 'build.ps1') }
+if (-not (Test-Path $Exe)) {
+    $BuildArguments = @{}
+    if ($PythonExe) { $BuildArguments['PythonExe'] = $PythonExe }
+    & (Join-Path $PSScriptRoot 'build.ps1') @BuildArguments
+}
 $Candidates = @(
     (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
     (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe'),

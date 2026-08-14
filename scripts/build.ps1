@@ -1,7 +1,14 @@
+param(
+    [string]$PythonExe
+)
+
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$PythonExe = Join-Path $ProjectRoot '.venv\Scripts\python.exe'
-if (-not (Test-Path $PythonExe)) { throw 'Ambiente não configurado. Execute scripts\setup_dev.ps1.' }
+if (-not $PythonExe) { $PythonExe = Join-Path $ProjectRoot '.venv\Scripts\python.exe' }
+if (-not (Test-Path -LiteralPath $PythonExe)) {
+    throw 'Ambiente não configurado. Execute scripts\setup_dev.ps1 ou informe -PythonExe.'
+}
+$PythonExe = (Resolve-Path -LiteralPath $PythonExe).Path
 if (-not (Test-Path (Join-Path $ProjectRoot 'resources\ffmpeg\ffmpeg.exe'))) {
     & (Join-Path $PSScriptRoot 'setup_ffmpeg.ps1')
 }

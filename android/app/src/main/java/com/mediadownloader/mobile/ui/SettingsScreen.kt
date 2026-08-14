@@ -207,68 +207,87 @@ private fun StorageCard(
         Column(verticalArrangement = Arrangement.spacedBy(15.dp)) {
             SectionTitle(
                 title = "Armazenamento",
-                supportingText = "Limpar o histórico nunca apaga os arquivos salvos.",
+                supportingText = "Escolha uma pasta independente para cada tipo de arquivo.",
                 icon = Icons.Rounded.Folder,
             )
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceContainer,
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+            state.storageLocations.forEach { location ->
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceContainer,
                 ) {
-                    Surface(
-                        modifier = Modifier.size(42.dp),
-                        shape = MaterialTheme.shapes.small,
-                        color = MaterialTheme.colorScheme.tertiaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Rounded.FolderOpen,
-                                contentDescription = null,
-                                modifier = Modifier.size(23.dp),
-                            )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(42.dp),
+                                shape = MaterialTheme.shapes.small,
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.FolderOpen,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(23.dp),
+                                    )
+                                }
+                            }
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                Text(
+                                    text = location.category.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    text = location.locationLabel,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    onAction(MobileUiAction.ChooseDownloadLocation(location.category))
+                                },
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text(if (location.isCustom) "Alterar pasta" else "Escolher pasta")
+                            }
+                            if (location.isCustom) {
+                                OutlinedButton(
+                                    onClick = {
+                                        onAction(MobileUiAction.ResetDownloadLocation(location.category))
+                                    },
+                                ) {
+                                    Text("Usar padrão")
+                                }
+                            }
                         }
                     }
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text(
-                            text = "Pasta de destino",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = state.downloadLocationLabel,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
                 }
             }
-            if (state.canChooseDownloadLocation) {
-                OutlinedButton(
-                    onClick = { onAction(MobileUiAction.ChooseDownloadLocation) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 50.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.FolderOpen,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Text("Escolher pasta", modifier = Modifier.padding(start = 9.dp))
-                }
-            }
+            Text(
+                text = "Sem uma pasta personalizada, os arquivos continuam em Downloads/MediaDownloader. " +
+                    "Limpar o histórico nunca apaga os arquivos salvos.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

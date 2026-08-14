@@ -76,4 +76,12 @@ class MobileUiStateTest {
         val rollingBack = available.copy(updateState = YtDlpUpdateState.ROLLING_BACK)
         assertTrue(rollingBack.isYtDlpOperationBusy)
     }
+
+    @Test
+    fun settingsExposeOneDestinationForEachFileCategory() {
+        val state = SettingsUiState()
+
+        assertEquals(3, state.storageLocations.size)
+        assertTrue(state.storageLocations.all { it.locationLabel == "Downloads/MediaDownloader" })
+    }
 }

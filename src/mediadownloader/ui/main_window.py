@@ -154,6 +154,8 @@ class MainWindow(QMainWindow):
         self.home_page.configure_spotify_requested.connect(lambda: self._navigate(3))
         self.history_page.redownload_requested.connect(self._redownload)
         self.settings_page.theme_changed.connect(lambda theme: apply_theme(QApplication.instance(), theme))
+        self.settings_page.storage_changed.connect(self.home_page.reload_storage_defaults)
+        self.settings_page.storage_changed.connect(self.site_files_page.reload_storage_defaults)
         self.queue.item_added.connect(lambda _item: self._update_download_nav())
         self.queue.item_updated.connect(lambda _item: self._update_download_nav())
         self.queue.item_finished.connect(lambda _item: self._update_download_nav())

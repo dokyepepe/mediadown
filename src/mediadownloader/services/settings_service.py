@@ -22,6 +22,11 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "confirm_close_active": True,
         "first_run": True,
     },
+    "storage": {
+        "video_dir": str(default_download_dir()),
+        "audio_dir": str(default_download_dir()),
+        "site_files_dir": str(default_download_dir()),
+    },
     "downloads": {
         "concurrent": 2,
         "video_format": "auto",
@@ -53,7 +58,25 @@ class SettingsService:
                 return
             try:
                 loaded = json.loads(self.path.read_text(encoding="utf-8"))
+                if not isinstance(loaded, dict):
+                    raise TypeError("settings root must be an object")
                 self._merge(self._data, loaded)
+                # Before per-type destinations existed, every download used
+                # general.download_dir. Preserve that choice during migration.
+                loaded_storage = loaded.get("storage", {})
+                loaded_general = loaded.get("general", {})
+                legacy_directory = (
+                    loaded_general.get("download_dir")
+                    if isinstance(loaded_general, dict)
+                    else None
+                )
+                if isinstance(loaded_storage, dict) and isinstance(legacy_directory, str):
+                    target_storage = self._data.get("storage")
+                    if not isinstance(target_storage, dict):
+                        raise TypeError("storage settings must be an object")
+                    for key in ("video_dir", "audio_dir", "site_files_dir"):
+                        if key not in loaded_storage:
+                            target_storage[key] = legacy_directory
             except (OSError, json.JSONDecodeError, TypeError):
                 backup = self.path.with_suffix(".invalid.json")
                 try:

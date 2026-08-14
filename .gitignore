@@ -1,4 +1,5 @@
 .venv/
+.venv-*/
 .build/
 build/
 dist/
@@ -18,6 +19,7 @@ __pycache__/
 .gradle-dist/
 .gradle/
 android/.gradle/
+android/.kotlin/
 android/local.properties
 android/**/build/
 android/.idea/

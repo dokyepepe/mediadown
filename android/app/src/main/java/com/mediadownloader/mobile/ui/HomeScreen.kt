@@ -256,6 +256,7 @@ private fun PreviewCard(
             Box(modifier = Modifier.fillMaxWidth()) {
                 thumbnail(
                     preview.thumbnailUrl,
+                    preview.sourceUrl,
                     "Miniatura de ${preview.title}",
                     Modifier
                         .fillMaxWidth()

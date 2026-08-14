@@ -160,7 +160,10 @@ class SiteFilesPage(QWidget):
         results_layout.addWidget(destination_label)
         destination_row = QHBoxLayout()
         self.destination_input = QLineEdit(
-            str(self.settings.get("general.download_dir", str(Path.home() / "Downloads")))
+            str(self.settings.get(
+                "storage.site_files_dir",
+                self.settings.get("general.download_dir", str(Path.home() / "Downloads")),
+            ))
         )
         self.destination_input.setAccessibleName("Pasta de destino dos arquivos do site")
         self.browse_button = SecondaryButton("Escolher pasta", icon_name="folder")
@@ -418,6 +421,13 @@ class SiteFilesPage(QWidget):
         )
         if selected:
             self.destination_input.setText(selected)
+            self.settings.set("storage.site_files_dir", selected)
+
+    def reload_storage_defaults(self) -> None:
+        if self.has_active_downloads:
+            return
+        legacy = self.settings.get("general.download_dir", str(Path.home() / "Downloads"))
+        self.destination_input.setText(self.settings.get("storage.site_files_dir", legacy))
 
     def _open_destination(self) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(self.destination_input.text()).resolve())))

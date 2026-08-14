@@ -3,6 +3,7 @@ package com.mediadownloader.mobile.site
 import android.content.Context
 import com.mediadownloader.mobile.BuildConfig
 import com.mediadownloader.mobile.data.PublishedFile
+import com.mediadownloader.mobile.data.StorageCategory
 import com.mediadownloader.mobile.download.DownloadCancelledException
 import com.mediadownloader.mobile.download.MediaStorePublisher
 import kotlinx.coroutines.CancellationException
@@ -141,7 +142,7 @@ class AndroidSiteFileService(context: Context) {
             }
             if (stagedFile.length() == 0L) throw IOException("O servidor devolveu um arquivo vazio.")
             try {
-                publisher.publish(stagedFile, isCancelled)
+                publisher.publish(stagedFile, StorageCategory.SITE_FILES, isCancelled)
             } catch (_: DownloadCancelledException) {
                 throw CancellationException("Download cancelado")
             }

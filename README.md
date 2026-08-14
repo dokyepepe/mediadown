@@ -52,6 +52,7 @@ Não existe uma WebView compartilhada entre elas: interface, engine, persistênc
 | **Vídeo** | Seleção automática ou MP4, MKV e WEBM, com limite de resolução |
 | **Áudio** | MP3, M4A, OPUS, FLAC e WAV; a edição desktop também oferece AAC |
 | **Arquivos de sites** | Descoberta e seleção de PDFs vinculados/incorporados e imagens públicas, incluindo URLs relativas e imagens responsivas |
+| **Destinos separados** | Pastas independentes para vídeos, áudios e arquivos extraídos de sites |
 | **Playlists** | Download integral nas duas edições e seleção item a item no desktop |
 | **Legendas** | Legendas oficiais ou automáticas, com opções de download/incorporação conforme a edição |
 | **Fila** | Progresso, velocidade, ETA, cancelamento, nova tentativa e estados separados de download e pós-processamento |
@@ -96,6 +97,10 @@ A cobertura acompanha os extractors disponíveis no **yt-dlp**. Entre as platafo
 Para extrair documentos e imagens de uma página, abra **Arquivos do site**, cole a URL,
 marque **PDFs**, **Imagens** ou ambos, analise e escolha os resultados que deseja salvar. O
 extrator lê o HTML público; conteúdo criado somente após login ou por JavaScript pode não aparecer.
+
+Em **Configurações > Armazenamento**, escolha destinos diferentes para vídeos, áudios e
+PDFs/imagens. No Android, o seletor de pastas do sistema concede acesso somente aos locais
+escolhidos; sem personalização, os arquivos permanecem em `Downloads/MediaDownloader`.
 
 Os builds finais já incluem os componentes necessários. Python, FFmpeg, Deno ou Android SDK só são exigidos para desenvolver ou gerar os artefatos localmente.
 
@@ -146,6 +151,9 @@ O setup instala Android SDK 36 em `.android-sdk/`, sem depender de uma instalaç
 powershell -ExecutionPolicy Bypass -File .\scripts\setup_android.ps1 -AcceptSdkLicenses
 powershell -ExecutionPolicy Bypass -File .\scripts\build_android.ps1 -Variant Debug
 ```
+
+Os scripts usam o JDK 17 indicado por `JAVA_HOME`. Se ele estiver em outro local,
+informe `-JavaHome C:\caminho\para\jdk-17` ao executar qualquer um dos dois scripts.
 
 O APK de desenvolvimento será copiado para:
 
@@ -200,6 +208,9 @@ Downloads reais não fazem parte das suítes unitárias. Antes de publicar uma v
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1
 ```
+
+Se o ambiente virtual estiver em outro local, informe o interpretador com
+`-PythonExe C:\caminho\para\python.exe`.
 
 O build executa os testes, empacota a aplicação com PyInstaller e faz um smoke test do binário resultante:
 

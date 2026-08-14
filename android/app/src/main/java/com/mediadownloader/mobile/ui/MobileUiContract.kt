@@ -1,5 +1,7 @@
 package com.mediadownloader.mobile.ui
 
+import com.mediadownloader.mobile.data.StorageCategory
+
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -113,6 +115,7 @@ data class MediaPreviewUi(
     val title: String,
     val creator: String? = null,
     val sourceName: String,
+    val sourceUrl: String? = null,
     val durationText: String? = null,
     val thumbnailUrl: String? = null,
     val isPlaylist: Boolean = false,
@@ -200,8 +203,9 @@ data class SettingsUiState(
     val canRollbackYtDlp: Boolean = false,
     val showYtDlpRollbackConfirmation: Boolean = false,
     val appVersion: String = "—",
-    val downloadLocationLabel: String = "Downloads/MediaDownloader",
-    val canChooseDownloadLocation: Boolean = false,
+    val storageLocations: List<StorageLocationUi> = StorageCategory.entries.map {
+        StorageLocationUi(category = it)
+    },
 ) {
     val isYtDlpOperationBusy: Boolean
         get() = updateState == YtDlpUpdateState.CHECKING ||
@@ -212,6 +216,12 @@ data class SettingsUiState(
         get() = updateState == YtDlpUpdateState.AVAILABLE &&
             !availableYtDlpVersion.isNullOrBlank()
 }
+
+data class StorageLocationUi(
+    val category: StorageCategory,
+    val locationLabel: String = "Downloads/MediaDownloader",
+    val isCustom: Boolean = false,
+)
 
 enum class ThemePreference(val label: String) {
     SYSTEM("Sistema"),
@@ -282,7 +292,8 @@ sealed interface MobileUiAction {
     object RequestYtDlpRollback : MobileUiAction
     object ConfirmYtDlpRollback : MobileUiAction
     object DismissYtDlpRollback : MobileUiAction
-    object ChooseDownloadLocation : MobileUiAction
+    data class ChooseDownloadLocation(val category: StorageCategory) : MobileUiAction
+    data class ResetDownloadLocation(val category: StorageCategory) : MobileUiAction
     data class OpenLegalDocument(val document: LegalDocument) : MobileUiAction
     object DismissLegalDocument : MobileUiAction
 

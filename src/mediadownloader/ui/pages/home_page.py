@@ -394,7 +394,7 @@ class HomePage(QWidget):
             QWidget.setTabOrder(current, following)
 
     def _load_defaults(self) -> None:
-        self.destination.setText(self.settings.get("general.download_dir"))
+        self.reload_storage_defaults()
         self.embed_thumbnail.setChecked(self.settings.get("downloads.embed_thumbnail", True))
         self.add_metadata.setChecked(self.settings.get("downloads.add_metadata", True))
         self.playlist_folder.setChecked(self.settings.get("downloads.create_playlist_folder", True))
@@ -641,12 +641,22 @@ class HomePage(QWidget):
         self.video_options.setVisible(not audio)
         self.audio_options.setVisible(audio)
         self.subtitle_mode.setEnabled(not audio)
+        self.reload_storage_defaults()
+
+    def _storage_key(self) -> str:
+        return "storage.audio_dir" if self.audio_button.isChecked() else "storage.video_dir"
+
+    def reload_storage_defaults(self) -> None:
+        legacy = self.settings.get("general.download_dir", str(Path.home() / "Downloads"))
+        self.destination.setText(self.settings.get(self._storage_key(), legacy))
 
     def choose_destination(self) -> None:
         directory = QFileDialog.getExistingDirectory(self, "Escolher pasta", self.destination.text())
         if directory:
             self.destination.setText(directory)
-            self.settings.set("general.download_dir", directory)
+            self.settings.set(self._storage_key(), directory)
+            if not self.audio_button.isChecked():
+                self.settings.set("general.download_dir", directory)
 
     def queue_download(self, entries_override: list | None = None) -> None:
         if not self.media:

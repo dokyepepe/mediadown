@@ -1,6 +1,7 @@
 package com.mediadownloader.mobile.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,12 +25,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -40,6 +45,7 @@ import androidx.compose.ui.unit.dp
 
 typealias ThumbnailRenderer = @Composable (
     url: String?,
+    referer: String?,
     contentDescription: String,
     modifier: Modifier,
 ) -> Unit
@@ -250,11 +256,19 @@ internal fun EmptyState(
 
 @Composable
 internal fun DefaultThumbnail(
-    @Suppress("UNUSED_PARAMETER") url: String?,
+    url: String?,
+    referer: String?,
     contentDescription: String,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
+    val image by produceState<ImageBitmap?>(
+        initialValue = null,
+        key1 = url,
+        key2 = referer,
+    ) {
+        value = ThumbnailImageLoader.load(url, referer)
+    }
     Box(
         modifier = modifier
             .heightIn(min = 96.dp)
@@ -271,19 +285,28 @@ internal fun DefaultThumbnail(
             .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {
-        Surface(
-            modifier = Modifier.size(54.dp),
-            shape = CircleShape,
-            color = colors.surface.copy(alpha = 0.90f),
-            contentColor = colors.primary,
-            shadowElevation = 5.dp,
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Rounded.PlayArrow,
-                    contentDescription = null,
-                    modifier = Modifier.size(31.dp),
-                )
+        if (image != null) {
+            Image(
+                bitmap = image!!,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Surface(
+                modifier = Modifier.size(54.dp),
+                shape = CircleShape,
+                color = colors.surface.copy(alpha = 0.90f),
+                contentColor = colors.primary,
+                shadowElevation = 5.dp,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Rounded.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(31.dp),
+                    )
+                }
             }
         }
     }

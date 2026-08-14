@@ -264,6 +264,7 @@ private fun DownloadCard(
             ) {
                 thumbnail(
                     item.thumbnailUrl,
+                    null,
                     "Miniatura de ${item.title}",
                     Modifier
                         .width(112.dp)

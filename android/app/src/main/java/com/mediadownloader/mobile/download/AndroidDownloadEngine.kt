@@ -11,6 +11,7 @@ import com.mediadownloader.mobile.data.DownloadResult
 import com.mediadownloader.mobile.data.MediaAnalysis
 import com.mediadownloader.mobile.data.MediaFormat
 import com.mediadownloader.mobile.data.MediaType
+import com.mediadownloader.mobile.data.StorageCategory
 import com.mediadownloader.mobile.data.VideoContainer
 import com.mediadownloader.mobile.update.YtDlpRuntimeGate
 import com.yausername.ffmpeg.FFmpeg
@@ -120,9 +121,15 @@ class AndroidDownloadEngine(context: Context) {
             }
 
             val published = mutableListOf<com.mediadownloader.mobile.data.PublishedFile>()
+            val storageCategory = when (item.options.mediaType) {
+                MediaType.VIDEO -> StorageCategory.VIDEO
+                MediaType.AUDIO -> StorageCategory.AUDIO
+            }
             stagedFiles.forEach { file ->
                 checkCancelled(item.id)
-                published += publisher.publish(file) { cancelledProcesses.contains(item.id) }
+                published += publisher.publish(file, storageCategory) {
+                    cancelledProcesses.contains(item.id)
+                }
             }
             DownloadResult(files = published, commandOutput = response.out)
         } finally {
@@ -253,7 +260,7 @@ class AndroidDownloadEngine(context: Context) {
                 ?: json.optNullableString("channel"),
             sourceName = json.optNullableString("extractor_key")
                 ?: json.optNullableString("extractor"),
-            thumbnailUrl = json.optNullableString("thumbnail"),
+            thumbnailUrl = findThumbnailUrl(json),
             durationSeconds = json.optPositiveLong("duration"),
             isPlaylist = isPlaylist,
             playlistItemCount = itemCount,
@@ -278,6 +285,32 @@ class AndroidDownloadEngine(context: Context) {
         }
         throw IOException("Não foi possível interpretar os metadados retornados pelo yt-dlp")
     }
+
+    private fun findThumbnailUrl(json: JSONObject): String? {
+        json.optNullableString("thumbnail")?.takeIf(::isHttpUrl)?.let { return it }
+        json.thumbnailFromArray()?.let { return it }
+        val entries = json.optJSONArray("entries") ?: return null
+        for (index in 0 until entries.length()) {
+            val entry = entries.optJSONObject(index) ?: continue
+            entry.optNullableString("thumbnail")?.takeIf(::isHttpUrl)?.let { return it }
+            entry.thumbnailFromArray()?.let { return it }
+        }
+        return null
+    }
+
+    private fun JSONObject.thumbnailFromArray(): String? {
+        val thumbnails = optJSONArray("thumbnails") ?: return null
+        for (index in thumbnails.length() - 1 downTo 0) {
+            val candidate = thumbnails.optJSONObject(index)
+                ?.optNullableString("url")
+                ?.takeIf(::isHttpUrl)
+            if (candidate != null) return candidate
+        }
+        return null
+    }
+
+    private fun isHttpUrl(value: String): Boolean =
+        URLUtil.isHttpUrl(value) || URLUtil.isHttpsUrl(value)
 
     private fun completedStagingFiles(directory: File): List<File> {
         val ignoredSuffixes = setOf("part", "ytdl", "temp", "tmp")

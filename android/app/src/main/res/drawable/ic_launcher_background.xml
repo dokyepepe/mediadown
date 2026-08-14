@@ -1,4 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="#247348" />
-</shape>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="315"
+                android:endColor="#146B4A"
+                android:startColor="#39A66B"
+                android:type="linear" />
+        </shape>
+    </item>
+    <item
+        android:bottom="62dp"
+        android:left="62dp"
+        android:right="-22dp"
+        android:top="-22dp">
+        <shape android:shape="oval">
+            <solid android:color="#1FFFFFFF" />
+        </shape>
+    </item>
+</layer-list>

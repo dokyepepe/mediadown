@@ -83,6 +83,7 @@ class SettingsSection(QFrame):
 
 class SettingsPage(QWidget):
     theme_changed = Signal(str)
+    storage_changed = Signal()
 
     def __init__(
         self,
@@ -148,16 +149,39 @@ class SettingsPage(QWidget):
         general.setProperty("accent", "true")
         self.language = WheelSafeComboBox(); self.language.addItem("Português (Brasil)", "pt_BR")
         self.theme = WheelSafeComboBox(); self.theme.addItem("Sistema", "system"); self.theme.addItem("Claro", "light"); self.theme.addItem("Escuro", "dark")
-        self.download_dir = QLineEdit()
-        directory_row = QWidget(); directory_layout = QHBoxLayout(directory_row); directory_layout.setContentsMargins(0, 0, 0, 0)
-        directory_layout.addWidget(self.download_dir, 1)
-        browse = QPushButton("Procurar"); set_button_icon(browse, "folder"); browse.clicked.connect(self._browse_download_dir); directory_layout.addWidget(browse)
+        self.video_download_dir = QLineEdit()
+        self.audio_download_dir = QLineEdit()
+        self.site_files_download_dir = QLineEdit()
+        # Compatibility alias for code that used the previous single field.
+        self.download_dir = self.video_download_dir
+
+        def make_directory_row(field: QLineEdit, title: str) -> QWidget:
+            row = QWidget()
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.addWidget(field, 1)
+            button = QPushButton("Procurar")
+            set_button_icon(button, "folder")
+            button.clicked.connect(
+                lambda _checked=False: self._browse_download_dir(field, title)
+            )
+            row_layout.addWidget(button)
+            return row
         self.open_folder = QCheckBox("Abrir pasta ao concluir")
         self.notifications = QCheckBox("Mostrar notificação")
         self.confirm_close = QCheckBox("Confirmar antes de fechar com downloads ativos")
         general.form.addRow("Idioma", self.language)
         general.form.addRow("Tema", self.theme)
-        general.form.addRow("Pasta padrão", directory_row)
+        general.form.addRow(
+            "Pasta de vídeos", make_directory_row(self.video_download_dir, "Pasta de vídeos")
+        )
+        general.form.addRow(
+            "Pasta de áudios", make_directory_row(self.audio_download_dir, "Pasta de áudios")
+        )
+        general.form.addRow(
+            "Pasta de PDFs e imagens",
+            make_directory_row(self.site_files_download_dir, "Pasta de arquivos do site"),
+        )
         general.form.addRow("", self.open_folder)
         general.form.addRow("", self.notifications)
         general.form.addRow("", self.confirm_close)
@@ -347,7 +371,9 @@ class SettingsPage(QWidget):
         controls = {
             self.language: "Idioma da interface",
             self.theme: "Tema da interface",
-            self.download_dir: "Pasta padrão de downloads",
+            self.video_download_dir: "Pasta padrão de vídeos",
+            self.audio_download_dir: "Pasta padrão de áudios",
+            self.site_files_download_dir: "Pasta padrão de PDFs e imagens extraídos de sites",
             self.concurrent: "Quantidade de downloads simultâneos",
             self.video_format: "Formato padrão de vídeo",
             self.video_quality: "Qualidade padrão de vídeo",
@@ -382,7 +408,10 @@ class SettingsPage(QWidget):
 
     def _load(self) -> None:
         self._select_data(self.theme, self.settings.get("general.theme", "system"))
-        self.download_dir.setText(self.settings.get("general.download_dir"))
+        legacy = self.settings.get("general.download_dir")
+        self.video_download_dir.setText(self.settings.get("storage.video_dir", legacy))
+        self.audio_download_dir.setText(self.settings.get("storage.audio_dir", legacy))
+        self.site_files_download_dir.setText(self.settings.get("storage.site_files_dir", legacy))
         self.open_folder.setChecked(self.settings.get("general.open_folder_on_complete", False))
         self.notifications.setChecked(self.settings.get("general.notifications", True))
         self.confirm_close.setChecked(self.settings.get("general.confirm_close_active", True))
@@ -407,9 +436,15 @@ class SettingsPage(QWidget):
             QMessageBox.warning(self, "Template inválido", message)
             return
         self.settings.update_section("general", {
-            "language": "pt_BR", "theme": self.theme.currentData(), "download_dir": self.download_dir.text(),
+            "language": "pt_BR", "theme": self.theme.currentData(),
+            "download_dir": self.video_download_dir.text(),
             "open_folder_on_complete": self.open_folder.isChecked(), "notifications": self.notifications.isChecked(),
             "confirm_close_active": self.confirm_close.isChecked(),
+        })
+        self.settings.update_section("storage", {
+            "video_dir": self.video_download_dir.text(),
+            "audio_dir": self.audio_download_dir.text(),
+            "site_files_dir": self.site_files_download_dir.text(),
         })
         self.settings.update_section("downloads", {
             "concurrent": self.concurrent.value(), "video_format": self.video_format.currentText(),
@@ -423,6 +458,7 @@ class SettingsPage(QWidget):
         self.settings.update_section("spotify", {"client_id": self.spotify_client_id.text().strip()})
         self.queue.set_concurrency(self.concurrent.value())
         self.theme_changed.emit(str(self.theme.currentData()))
+        self.storage_changed.emit()
         QMessageBox.information(self, "Configurações", "Configurações salvas.")
 
     def _connect_spotify(self) -> None:
@@ -476,9 +512,9 @@ class SettingsPage(QWidget):
         self.spotify_status.setAccessibleName(f"Estado do Spotify: {status}")
         self.spotify_disconnect.setEnabled(connected)
 
-    def _browse_download_dir(self) -> None:
-        if directory := QFileDialog.getExistingDirectory(self, "Pasta padrão", self.download_dir.text()):
-            self.download_dir.setText(directory)
+    def _browse_download_dir(self, field: QLineEdit, title: str) -> None:
+        if directory := QFileDialog.getExistingDirectory(self, title, field.text()):
+            field.setText(directory)
 
     def _browse_cookies(self) -> None:
         filename, _ = QFileDialog.getOpenFileName(self, "Importar cookies.txt", "", "Cookies Netscape (*.txt)")

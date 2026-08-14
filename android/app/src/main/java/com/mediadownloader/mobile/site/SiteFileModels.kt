@@ -227,7 +227,7 @@ object SiteFileDiscovery {
     }
 
     private fun decodeUrl(value: String): String = runCatching {
-        URLDecoder.decode(value, StandardCharsets.UTF_8)
+        URLDecoder.decode(value, StandardCharsets.UTF_8.name())
     }.getOrDefault(value)
 
     private fun decodeHtml(value: String): String {

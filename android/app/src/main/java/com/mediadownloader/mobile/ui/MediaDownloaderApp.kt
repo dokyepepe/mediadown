@@ -47,8 +47,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 fun MediaDownloaderApp(
     controller: MobileUiController,
     modifier: Modifier = Modifier,
-    thumbnail: ThumbnailRenderer = { url, description, thumbnailModifier ->
-        DefaultThumbnail(url, description, thumbnailModifier)
+    thumbnail: ThumbnailRenderer = { url, referer, description, thumbnailModifier ->
+        DefaultThumbnail(url, referer, description, thumbnailModifier)
     },
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
@@ -65,8 +65,8 @@ fun MediaDownloaderApp(
     state: MobileUiState,
     onAction: (MobileUiAction) -> Unit,
     modifier: Modifier = Modifier,
-    thumbnail: ThumbnailRenderer = { url, description, thumbnailModifier ->
-        DefaultThumbnail(url, description, thumbnailModifier)
+    thumbnail: ThumbnailRenderer = { url, referer, description, thumbnailModifier ->
+        DefaultThumbnail(url, referer, description, thumbnailModifier)
     },
 ) {
     MediaDownloaderTheme(preference = state.settings.theme) {
@@ -229,7 +229,7 @@ private fun MobileTopBar(selectedTab: AppTab) {
 private fun BrandMark(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(
                 Brush.linearGradient(
                     colors = listOf(
@@ -243,7 +243,7 @@ private fun BrandMark(modifier: Modifier = Modifier) {
         Icon(
             imageVector = Icons.Rounded.Download,
             contentDescription = null,
-            modifier = Modifier.size(30.dp),
+            modifier = Modifier.size(27.dp),
             tint = MaterialTheme.colorScheme.onPrimary,
         )
     }

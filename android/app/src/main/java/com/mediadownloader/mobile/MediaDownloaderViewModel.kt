@@ -20,6 +20,8 @@ import com.mediadownloader.mobile.data.HistoryItem
 import com.mediadownloader.mobile.data.MediaAnalysis
 import com.mediadownloader.mobile.data.MediaFormat
 import com.mediadownloader.mobile.data.MediaType
+import com.mediadownloader.mobile.data.StorageCategory
+import com.mediadownloader.mobile.data.StorageLocationStore
 import com.mediadownloader.mobile.data.VideoContainer
 import com.mediadownloader.mobile.download.AndroidDownloadEngine
 import com.mediadownloader.mobile.download.DownloadService
@@ -40,6 +42,7 @@ import com.mediadownloader.mobile.ui.MobileUiAction
 import com.mediadownloader.mobile.ui.MobileUiController
 import com.mediadownloader.mobile.ui.MobileUiState
 import com.mediadownloader.mobile.ui.SettingsUiState
+import com.mediadownloader.mobile.ui.StorageLocationUi
 import com.mediadownloader.mobile.ui.SiteFileKindUi
 import com.mediadownloader.mobile.ui.SiteFileStatus
 import com.mediadownloader.mobile.ui.SiteFileUi
@@ -72,6 +75,7 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
     private val engine = AndroidDownloadEngine(appContext)
     private val siteFileService = AndroidSiteFileService(appContext)
     private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+    private val storageLocations = StorageLocationStore(appContext)
     private val analysisMutex = Mutex()
     private val ytDlpUpdateManager = (application as? MediaDownloaderApplication)
         ?.ytDlpUpdateManager
@@ -87,6 +91,7 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
                 ytDlpVersion = initialYtDlpStatus.currentVersion,
                 previousYtDlpVersion = initialYtDlpStatus.previousVersion,
                 canRollbackYtDlp = initialYtDlpStatus.canRollback,
+                storageLocations = storageLocationUi(),
             ),
         ),
     )
@@ -99,6 +104,8 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
     private var messageSequence = 0L
     private var requestStoragePermission: ((() -> Unit) -> Unit)? = null
     private var pendingStorageAction: (() -> Unit)? = null
+    private var requestDownloadLocation: (() -> Unit)? = null
+    private var pendingDownloadLocation: StorageCategory? = null
 
     init {
         viewModelScope.launch {
@@ -192,9 +199,8 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
                 updateSettings { it.copy(showYtDlpRollbackConfirmation = false) }
                 rollbackYtDlp()
             }
-            MobileUiAction.ChooseDownloadLocation -> showMessage(
-                "O Android salva os arquivos em Downloads/MediaDownloader.",
-            )
+            is MobileUiAction.ChooseDownloadLocation -> chooseDownloadLocation(action.category)
+            is MobileUiAction.ResetDownloadLocation -> resetDownloadLocation(action.category)
             is MobileUiAction.OpenLegalDocument -> updateState { it.copy(legalDocument = action.document) }
             MobileUiAction.DismissLegalDocument -> updateState { it.copy(legalDocument = null) }
             is MobileUiAction.DismissMessage -> updateState {
@@ -226,6 +232,24 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
         if (granted) action?.invoke() else showMessage(
             "Permita o acesso ao armazenamento para salvar em Downloads neste Android.",
         )
+    }
+
+    fun setDownloadLocationRequester(requester: () -> Unit) {
+        requestDownloadLocation = requester
+    }
+
+    fun onDownloadLocationSelected(uri: String?) {
+        val category = pendingDownloadLocation
+        pendingDownloadLocation = null
+        if (category == null || uri.isNullOrBlank()) return
+        storageLocations.set(category, uri)
+        refreshStorageLocations()
+        showMessage("Nova pasta de ${category.label.lowercase()} salva.")
+    }
+
+    fun onDownloadLocationSelectionFailed() {
+        pendingDownloadLocation = null
+        showMessage("O Android não concedeu acesso permanente à pasta selecionada.")
     }
 
     private fun receiveUrl(raw: String) {
@@ -649,6 +673,32 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
         }
     }
 
+    private fun chooseDownloadLocation(category: StorageCategory) {
+        pendingDownloadLocation = category
+        requestDownloadLocation?.invoke() ?: run {
+            pendingDownloadLocation = null
+            showMessage("Não foi possível abrir o seletor de pastas.")
+        }
+    }
+
+    private fun resetDownloadLocation(category: StorageCategory) {
+        storageLocations.reset(category)
+        refreshStorageLocations()
+        showMessage("${category.label} voltarão para Downloads/MediaDownloader.")
+    }
+
+    private fun refreshStorageLocations() {
+        updateSettings { it.copy(storageLocations = storageLocationUi()) }
+    }
+
+    private fun storageLocationUi(): List<StorageLocationUi> = StorageCategory.entries.map { category ->
+        StorageLocationUi(
+            category = category,
+            locationLabel = storageLocations.label(category),
+            isCustom = storageLocations.uri(category) != null,
+        )
+    }
+
     private suspend fun refreshYtDlpStatus() {
         try {
             val status = ytDlpUpdateManager.refreshStatus()
@@ -930,6 +980,7 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             title = title,
             creator = uploader,
             sourceName = sourceName ?: Uri.parse(sourceUrl).host.orEmpty().ifBlank { "Origem da mídia" },
+            sourceUrl = sourceUrl,
             durationText = durationSeconds?.let(::formatDuration),
             thumbnailUrl = thumbnailUrl,
             isPlaylist = isPlaylist,

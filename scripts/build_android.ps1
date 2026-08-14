@@ -2,7 +2,8 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Variant = "Debug",
     [switch]$Install,
-    [switch]$SkipChecks
+    [switch]$SkipChecks,
+    [string]$JavaHome = $env:JAVA_HOME
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,7 +12,12 @@ $androidRoot = Join-Path $repoRoot "android"
 $gradleWrapper = Join-Path $androidRoot "gradlew.bat"
 $sdkRoot = Join-Path $repoRoot ".android-sdk"
 $adb = Join-Path $sdkRoot "platform-tools\adb.exe"
-$env:JAVA_HOME = "C:\Program Files\Java\jdk-17"
+$defaultJavaHome = "C:\Program Files\Java\jdk-17"
+$resolvedJavaHome = if ($JavaHome) { $JavaHome } else { $defaultJavaHome }
+if (-not (Test-Path -LiteralPath (Join-Path $resolvedJavaHome "bin\java.exe"))) {
+    throw "JDK 17 ausente em $resolvedJavaHome. Informe o caminho com -JavaHome ou JAVA_HOME."
+}
+$env:JAVA_HOME = (Resolve-Path -LiteralPath $resolvedJavaHome).Path
 $env:ANDROID_HOME = $sdkRoot
 $env:ANDROID_SDK_ROOT = $sdkRoot
 

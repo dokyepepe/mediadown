@@ -8,9 +8,12 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.provider.DocumentsContract
 import android.webkit.MimeTypeMap
 import androidx.annotation.RequiresApi
 import com.mediadownloader.mobile.data.PublishedFile
+import com.mediadownloader.mobile.data.StorageCategory
+import com.mediadownloader.mobile.data.StorageLocationStore
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
@@ -21,15 +24,77 @@ import java.util.concurrent.atomic.AtomicReference
 /** Publishes private staging files without requesting broad storage access on Android 10+. */
 internal class MediaStorePublisher(private val context: Context) {
     private val resolver = context.contentResolver
+    private val storageLocations = StorageLocationStore(context)
 
-    fun publish(source: File, isCancelled: () -> Boolean): PublishedFile {
+    fun publish(
+        source: File,
+        category: StorageCategory,
+        isCancelled: () -> Boolean,
+    ): PublishedFile {
         require(source.isFile) { "Arquivo temporário inexistente: ${source.name}" }
         if (isCancelled()) throw DownloadCancelledException()
+        storageLocations.uri(category)?.let { treeUri ->
+            return publishToTree(source, treeUri, isCancelled)
+        }
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             publishScoped(source, isCancelled)
         } else {
             publishLegacy(source, isCancelled)
         }
+    }
+
+    private fun publishToTree(
+        source: File,
+        rawTreeUri: String,
+        isCancelled: () -> Boolean,
+    ): PublishedFile {
+        val treeUri = Uri.parse(rawTreeUri)
+        val parent = DocumentsContract.buildDocumentUriUsingTree(
+            treeUri,
+            DocumentsContract.getTreeDocumentId(treeUri),
+        )
+        val displayName = uniqueTreeName(safeDisplayName(source.name), treeUri)
+        val mimeType = mimeTypeFor(displayName)
+        val uri = DocumentsContract.createDocument(resolver, parent, mimeType, displayName)
+            ?: throw IOException("O Android não criou o arquivo na pasta selecionada")
+        try {
+            resolver.openOutputStream(uri, "w")?.use { output ->
+                FileInputStream(source).use { input ->
+                    copyCheckingCancellation(input, output, isCancelled)
+                }
+            } ?: throw IOException("Não foi possível abrir a pasta selecionada")
+            return PublishedFile(uri.toString(), displayName, mimeType, source.length())
+        } catch (error: Throwable) {
+            runCatching { DocumentsContract.deleteDocument(resolver, uri) }
+            throw error
+        }
+    }
+
+    private fun uniqueTreeName(original: String, treeUri: Uri): String {
+        val existing = mutableSetOf<String>()
+        val children = DocumentsContract.buildChildDocumentsUriUsingTree(
+            treeUri,
+            DocumentsContract.getTreeDocumentId(treeUri),
+        )
+        resolver.query(
+            children,
+            arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            val nameColumn = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+            while (nameColumn >= 0 && cursor.moveToNext()) existing += cursor.getString(nameColumn)
+        }
+        val name = original.substringBeforeLast('.', original)
+        val extension = original.substringAfterLast('.', "").let { if (it.isBlank()) "" else ".$it" }
+        var candidate = original
+        var suffix = 1
+        while (candidate in existing) {
+            candidate = "$name ($suffix)$extension"
+            suffix += 1
+        }
+        return candidate
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)
