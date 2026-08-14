@@ -215,17 +215,51 @@ class SettingsPage(QWidget):
         spotify.form.addRow("", spotify_actions)
         root.addWidget(spotify)
 
-        components = SettingsSection("Componentes", icon_name="info")
+        components = SettingsSection(
+            "Compatibilidade com sites",
+            "O yt-dlp é preparado separadamente e validado antes da ativação. "
+            "A última versão funcional fica disponível para recuperação.",
+            "info",
+        )
         self.app_version = QLabel(APP_VERSION)
-        self.ytdlp_version = QLabel(self.updates.current_ytdlp_version())
+        self.ytdlp_version = QLabel()
+        self.ytdlp_previous_version = QLabel()
         self.ffmpeg_version = QLabel(self.ffmpeg.version())
-        component_actions = QWidget(); action_layout = QHBoxLayout(component_actions); action_layout.setContentsMargins(0, 0, 0, 0)
-        check_update = QPushButton("Verificar atualização"); set_button_icon(check_update, "analyze"); check_update.clicked.connect(self._check_update)
-        update = QPushButton("Atualizar yt-dlp"); set_button_icon(update, "downloads"); update.clicked.connect(self._update_ytdlp)
-        action_layout.addWidget(check_update); action_layout.addWidget(update); action_layout.addStretch()
+        self.ytdlp_update_status = QLabel()
+        self.ytdlp_update_status.setObjectName("Muted")
+        self.ytdlp_update_status.setWordWrap(True)
+        self.ytdlp_update_status.setMinimumWidth(0)
+        component_actions = QWidget()
+        action_rows = QVBoxLayout(component_actions)
+        action_rows.setContentsMargins(0, 0, 0, 0)
+        action_rows.setSpacing(8)
+        update_actions = QHBoxLayout()
+        self.check_update_button = QPushButton("Verificar atualização")
+        set_button_icon(self.check_update_button, "analyze")
+        self.check_update_button.clicked.connect(self._check_update)
+        self.update_ytdlp_button = PrimaryButton("ATUALIZAR YT-DLP", icon_name="downloads")
+        self.update_ytdlp_button.clicked.connect(self._update_ytdlp)
+        update_actions.addWidget(self.check_update_button)
+        update_actions.addWidget(self.update_ytdlp_button)
+        update_actions.addStretch()
+        recovery_actions = QHBoxLayout()
+        self.rollback_ytdlp_button = SecondaryButton(
+            "Restaurar versão de recuperação", icon_name="retry"
+        )
+        self.rollback_ytdlp_button.clicked.connect(self._rollback_ytdlp)
+        self.cancel_ytdlp_change_button = QPushButton("Cancelar alteração pendente")
+        set_button_icon(self.cancel_ytdlp_change_button, "cancel")
+        self.cancel_ytdlp_change_button.clicked.connect(self._cancel_ytdlp_change)
+        recovery_actions.addWidget(self.rollback_ytdlp_button)
+        recovery_actions.addWidget(self.cancel_ytdlp_change_button)
+        recovery_actions.addStretch()
+        action_rows.addLayout(update_actions)
+        action_rows.addLayout(recovery_actions)
         components.form.addRow("Aplicativo", self.app_version)
-        components.form.addRow("yt-dlp", self.ytdlp_version)
+        components.form.addRow("yt-dlp em uso", self.ytdlp_version)
+        components.form.addRow("Versão de recuperação", self.ytdlp_previous_version)
         components.form.addRow("FFmpeg", self.ffmpeg_version)
+        components.form.addRow("Estado", self.ytdlp_update_status)
         components.form.addRow("", component_actions)
         root.addWidget(components)
 
@@ -233,7 +267,11 @@ class SettingsPage(QWidget):
         save = PrimaryButton("SALVAR CONFIGURAÇÕES", icon_name="check"); save.clicked.connect(self.save)
         save_row.addWidget(save); root.addLayout(save_row); root.addStretch()
         scroll.setWidget(content); outer.addWidget(scroll)
+        self._component_busy = False
+        self._available_ytdlp_version: str | None = None
+        self._active_component_worker: TaskWorker | None = None
         self._load()
+        self._refresh_component_status()
         self._configure_accessibility()
 
     def _configure_accessibility(self) -> None:
@@ -260,6 +298,11 @@ class SettingsPage(QWidget):
         }
         for control, name in controls.items():
             control.setAccessibleName(name)
+        self.ytdlp_update_status.setAccessibleName("Estado da atualização do yt-dlp")
+        self.check_update_button.setAccessibleName("Verificar atualização do yt-dlp")
+        self.update_ytdlp_button.setAccessibleName("Atualizar yt-dlp")
+        self.rollback_ytdlp_button.setAccessibleName("Restaurar versão de recuperação do yt-dlp")
+        self.cancel_ytdlp_change_button.setAccessibleName("Cancelar alteração pendente do yt-dlp")
         self.theme.setToolTip("A alteração é aplicada ao salvar as configurações.")
         self.concurrent.setToolTip("A roda do mouse não altera este valor; use as setas ou digite.")
 
@@ -375,20 +418,217 @@ class SettingsPage(QWidget):
             self.cookies_file.setText(filename)
             self._select_data(self.cookie_source, "file")
 
-    def _run_task(self, function, success) -> None:
+    def _refresh_component_status(self) -> None:
+        status = self.updates.status()
+        self.ytdlp_version.setText(status.current_version)
+        self.ytdlp_previous_version.setText(status.previous_version or "Nenhuma")
+        self.cancel_ytdlp_change_button.setVisible(status.restart_required)
+
+        if status.pending_action == "update" and status.pending_version:
+            message = (
+                f"Atualização {status.pending_version} pronta. Reinicie o aplicativo "
+                "para validar e ativar; a versão atual será preservada."
+            )
+        elif status.pending_action == "rollback" and status.pending_version:
+            message = (
+                f"Restauração da versão {status.pending_version} pronta. "
+                "Reinicie o aplicativo para aplicar."
+            )
+        elif status.message:
+            message = status.message
+        elif status.previous_version:
+            message = (
+                f"Proteção ativa. A versão {status.previous_version} pode ser restaurada "
+                "se uma atualização causar problemas."
+            )
+        else:
+            message = "Componente verificado. Uma versão de recuperação será criada na próxima atualização."
+        self.ytdlp_update_status.setText(message)
+        self.ytdlp_update_status.setAccessibleDescription(message)
+
+        update_text = "ATUALIZAR YT-DLP"
+        update_enabled = not status.restart_required
+        if self._available_ytdlp_version:
+            if self.updates.versions_equal(
+                self._available_ytdlp_version, status.current_version
+            ):
+                update_text = "YT-DLP ATUALIZADO"
+                update_enabled = False
+            elif self.updates.version_is_newer(
+                status.current_version, self._available_ytdlp_version
+            ):
+                update_text = "VERSÃO ATUAL MAIS RECENTE"
+                update_enabled = False
+            elif status.rejected_version and self.updates.versions_equal(
+                self._available_ytdlp_version, status.rejected_version
+            ):
+                update_text = f"VERSÃO {self._available_ytdlp_version} BLOQUEADA"
+                update_enabled = False
+            else:
+                update_text = f"ATUALIZAR PARA {self._available_ytdlp_version}"
+        self.update_ytdlp_button.setText(update_text)
+        self.rollback_ytdlp_button.setText(
+            f"Restaurar {status.previous_version}"
+            if status.previous_version
+            else "Restaurar versão de recuperação"
+        )
+
+        enabled = not self._component_busy
+        self.check_update_button.setEnabled(enabled and not status.restart_required)
+        self.update_ytdlp_button.setEnabled(enabled and update_enabled)
+        self.rollback_ytdlp_button.setEnabled(
+            enabled and status.rollback_available and not status.restart_required
+        )
+        self.cancel_ytdlp_change_button.setEnabled(enabled and status.restart_required)
+        self.rollback_ytdlp_button.setToolTip(
+            "Use se sites deixaram de funcionar após uma atualização."
+            if status.rollback_available
+            else "Disponível depois que uma atualização for ativada com sucesso."
+        )
+
+    def _set_component_busy(self, busy: bool, message: str = "") -> None:
+        self._component_busy = busy
+        if message:
+            self.ytdlp_update_status.setText(message)
+            self.ytdlp_update_status.setAccessibleDescription(message)
+        for button in (
+            self.check_update_button,
+            self.update_ytdlp_button,
+            self.rollback_ytdlp_button,
+            self.cancel_ytdlp_change_button,
+        ):
+            button.setEnabled(not busy)
+        if not busy:
+            self._refresh_component_status()
+
+    def _run_component_task(self, function, success, busy_message: str) -> None:
+        if self._component_busy:
+            return
+        self._set_component_busy(True, busy_message)
         worker = TaskWorker(function)
-        worker.signals.done.connect(success)
-        worker.signals.failed.connect(lambda error: QMessageBox.warning(self, "Componentes", error))
+        self._active_component_worker = worker
+        worker.signals.done.connect(
+            lambda result: self._component_task_succeeded(success, result)
+        )
+        worker.signals.failed.connect(self._component_task_failed)
         self.pool.start(worker)
 
+    def _component_task_succeeded(self, callback, result: object) -> None:
+        self._active_component_worker = None
+        self._set_component_busy(False)
+        callback(result)
+
+    def _component_task_failed(self, error: str) -> None:
+        self._active_component_worker = None
+        self._set_component_busy(False)
+        message = f"Não foi possível concluir a operação. {error}"
+        self.ytdlp_update_status.setText(message)
+        self.ytdlp_update_status.setAccessibleDescription(message)
+        QMessageBox.warning(self, "Atualização do yt-dlp", message)
+
     def _check_update(self) -> None:
-        self._run_task(
+        self._run_component_task(
             self.updates.latest_ytdlp_version,
-            lambda version: QMessageBox.information(self, "yt-dlp", f"Versão instalada: {self.updates.current_ytdlp_version()}\nVersão mais recente: {version}"),
+            self._update_check_finished,
+            "Verificando a versão estável mais recente…",
         )
 
+    def _update_check_finished(self, version: object) -> None:
+        self._available_ytdlp_version = str(version)
+        self._refresh_component_status()
+        status = self.updates.status()
+        if status.restart_required:
+            # _refresh_component_status already explains which change is pending and
+            # that a restart is required; never replace that instruction here.
+            return
+        if self.updates.versions_equal(
+            self._available_ytdlp_version, status.current_version
+        ):
+            message = f"Você já usa a versão mais recente ({status.current_version})."
+        elif self.updates.version_is_newer(
+            status.current_version, self._available_ytdlp_version
+        ):
+            message = (
+                f"Sua versão {status.current_version} é mais recente que a versão estável "
+                f"publicada ({self._available_ytdlp_version}); nenhum downgrade será feito."
+            )
+        elif status.rejected_version and self.updates.versions_equal(
+            self._available_ytdlp_version, status.rejected_version
+        ):
+            message = (
+                f"A versão {self._available_ytdlp_version} falhou anteriormente e foi bloqueada. "
+                "Aguarde uma versão mais recente."
+            )
+        else:
+            message = f"Atualização {self._available_ytdlp_version} disponível."
+        self.ytdlp_update_status.setText(message)
+        self.ytdlp_update_status.setAccessibleDescription(message)
+
     def _update_ytdlp(self) -> None:
-        self._run_task(
+        self._run_component_task(
             self.updates.update_ytdlp,
-            lambda version: QMessageBox.information(self, "yt-dlp", f"yt-dlp {version} instalado com verificação SHA-256. Reinicie o aplicativo para ativá-lo."),
+            self._update_staged,
+            "Baixando e verificando a atualização…",
         )
+
+    def _update_staged(self, result: object) -> None:
+        self._available_ytdlp_version = None
+        self._refresh_component_status()
+        version = getattr(result, "version", str(result))
+        if getattr(result, "restart_required", False):
+            QMessageBox.information(
+                self,
+                "Atualização pronta",
+                f"O yt-dlp {version} foi verificado e está pronto.\n\n"
+                "Reinicie o aplicativo para validar e ativar a nova versão. "
+                "A versão atual será mantida para recuperação.",
+            )
+        else:
+            QMessageBox.information(
+                self,
+                "yt-dlp atualizado",
+                f"Você já usa a versão {version}.",
+            )
+
+    def _rollback_ytdlp(self) -> None:
+        status = self.updates.status()
+        if not status.previous_version:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Restaurar yt-dlp",
+            f"Trocar a versão {status.current_version} pela versão de recuperação "
+            f"{status.previous_version} no próximo reinício?\n\n"
+            "Use esta opção se sites deixaram de funcionar depois de uma atualização. "
+            "A versão atual continuará disponível para desfazer a restauração.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self._run_component_task(
+            self.updates.request_rollback,
+            self._rollback_staged,
+            "Preparando a versão de recuperação…",
+        )
+
+    def _rollback_staged(self, result: object) -> None:
+        self._available_ytdlp_version = None
+        self._refresh_component_status()
+        version = getattr(result, "version", str(result))
+        QMessageBox.information(
+            self,
+            "Restauração pronta",
+            f"A versão {version} será restaurada após reiniciar o aplicativo.",
+        )
+
+    def _cancel_ytdlp_change(self) -> None:
+        self._run_component_task(
+            self.updates.cancel_pending_change,
+            self._pending_change_cancelled,
+            "Cancelando a alteração pendente…",
+        )
+
+    def _pending_change_cancelled(self, _result: object) -> None:
+        self._available_ytdlp_version = None
+        self._refresh_component_status()

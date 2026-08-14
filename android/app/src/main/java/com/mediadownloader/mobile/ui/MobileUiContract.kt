@@ -144,10 +144,23 @@ data class SettingsUiState(
     val updateState: YtDlpUpdateState = YtDlpUpdateState.IDLE,
     val updateDetail: String? = null,
     val ytDlpVersion: String? = null,
+    val previousYtDlpVersion: String? = null,
+    val availableYtDlpVersion: String? = null,
+    val canRollbackYtDlp: Boolean = false,
+    val showYtDlpRollbackConfirmation: Boolean = false,
     val appVersion: String = "—",
     val downloadLocationLabel: String = "Downloads/MediaDownloader",
     val canChooseDownloadLocation: Boolean = false,
-)
+) {
+    val isYtDlpOperationBusy: Boolean
+        get() = updateState == YtDlpUpdateState.CHECKING ||
+            updateState == YtDlpUpdateState.UPDATING ||
+            updateState == YtDlpUpdateState.ROLLING_BACK
+
+    val canInstallYtDlpUpdate: Boolean
+        get() = updateState == YtDlpUpdateState.AVAILABLE &&
+            !availableYtDlpVersion.isNullOrBlank()
+}
 
 enum class ThemePreference(val label: String) {
     SYSTEM("Sistema"),
@@ -160,7 +173,10 @@ enum class YtDlpUpdateState {
     CHECKING,
     AVAILABLE,
     UPDATING,
+    ROLLING_BACK,
     UP_TO_DATE,
+    ROLLED_BACK,
+    REJECTED,
     FAILED,
 }
 
@@ -201,6 +217,9 @@ sealed interface MobileUiAction {
     data class SetAutoUpdateYtDlp(val enabled: Boolean) : MobileUiAction
     object CheckYtDlpUpdate : MobileUiAction
     object UpdateYtDlp : MobileUiAction
+    object RequestYtDlpRollback : MobileUiAction
+    object ConfirmYtDlpRollback : MobileUiAction
+    object DismissYtDlpRollback : MobileUiAction
     object ChooseDownloadLocation : MobileUiAction
     data class OpenLegalDocument(val document: LegalDocument) : MobileUiAction
     object DismissLegalDocument : MobileUiAction

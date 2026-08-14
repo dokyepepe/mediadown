@@ -69,7 +69,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $localProperties = Join-Path $repoRoot "android\local.properties"
-$escapedSdkRoot = $sdkRoot.Replace("\", "\\")
+$escapedSdkRoot = $sdkRoot.Replace("\", "\\").Replace(":", "\:")
 Set-Content -LiteralPath $localProperties -Encoding ASCII -Value "sdk.dir=$escapedSdkRoot"
 
 Write-Host "Android SDK pronto em $sdkRoot"

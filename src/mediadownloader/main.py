@@ -6,21 +6,43 @@ import sys
 
 
 def main() -> int:
-    # The verified user-local yt-dlp component must precede the bundled fallback.
+    if len(sys.argv) >= 3 and sys.argv[1] == "--internal-ytdlp-probe":
+        from mediadownloader.services.update_service import run_internal_ytdlp_probe
+
+        return run_internal_ytdlp_probe(sys.argv[2])
+
+    from PySide6.QtCore import QLockFile
+
+    from mediadownloader.utils.logger import configure_logging
+    from mediadownloader.utils.paths import app_data_dir
+
+    configure_logging()
+    instance_lock = QLockFile(str(app_data_dir() / "MediaDownloader.lock"))
+    if not instance_lock.tryLock(0):
+        from PySide6.QtWidgets import QApplication, QMessageBox
+
+        duplicate_app = QApplication(sys.argv)
+        QMessageBox.information(
+            None,
+            "Media Downloader já está aberto",
+            "Use a janela que já está aberta. Isso também protege atualizações e downloads em andamento.",
+        )
+        duplicate_app.quit()
+        return 0
+
+    # Select and probe the user-local yt-dlp component before any engine import.
     from mediadownloader.services.update_service import activate_updated_ytdlp
-    activate_updated_ytdlp()
+    activation = activate_updated_ytdlp()
 
     from PySide6.QtCore import QLocale, QTimer, Qt
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QMessageBox
 
     from mediadownloader.services import HistoryService, SettingsService
     from mediadownloader.ui.main_window import MainWindow
     from mediadownloader.ui.theme import apply_theme
     from mediadownloader.ui.welcome_dialog import WelcomeDialog
-    from mediadownloader.utils.logger import configure_logging
     from mediadownloader.version import APP_NAME, APP_VERSION, ORGANIZATION_NAME
 
-    configure_logging()
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
@@ -35,11 +57,24 @@ def main() -> int:
     window.show()
     if smoke_test:
         QTimer.singleShot(750, app.quit)
-    elif settings.get("general.first_run", True):
-        welcome = WelcomeDialog(window)
-        welcome.exec()
-        settings.set("general.first_run", False)
-    return app.exec()
+    else:
+        if activation.automatic_rollback:
+            QTimer.singleShot(
+                0,
+                lambda: QMessageBox.warning(
+                    window,
+                    "Componente restaurado",
+                    activation.message,
+                ),
+            )
+        if settings.get("general.first_run", True):
+            welcome = WelcomeDialog(window)
+            welcome.exec()
+            settings.set("general.first_run", False)
+    try:
+        return app.exec()
+    finally:
+        instance_lock.unlock()
 
 
 if __name__ == "__main__":

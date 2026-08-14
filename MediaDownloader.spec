@@ -44,7 +44,7 @@ a = Analysis(
         "yt_dlp", "yt_dlp.extractor", "yt_dlp.postprocessor",
         "PySide6.QtSvg", "PySide6.QtNetwork",
     ],
-    hookspath=[],
+    hookspath=[str(root / "hooks")],
     hooksconfig={},
     runtime_hooks=[],
     excludes=["tkinter", "unittest"],

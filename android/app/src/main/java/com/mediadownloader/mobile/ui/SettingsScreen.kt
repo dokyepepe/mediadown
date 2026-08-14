@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +31,9 @@ fun SettingsScreen(
     onAction: (MobileUiAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (state.showYtDlpRollbackConfirmation) {
+        YtDlpRollbackConfirmationDialog(state = state, onAction = onAction)
+    }
     ScreenContainer(modifier) {
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
@@ -115,8 +119,7 @@ private fun YtDlpUpdateCard(
     state: SettingsUiState,
     onAction: (MobileUiAction) -> Unit,
 ) {
-    val isBusy = state.updateState == YtDlpUpdateState.CHECKING ||
-        state.updateState == YtDlpUpdateState.UPDATING
+    val isBusy = state.isYtDlpOperationBusy
 
     SectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -136,9 +139,9 @@ private fun YtDlpUpdateCard(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    Text("Atualização automática", style = MaterialTheme.typography.bodyLarge)
+                    Text("Verificar automaticamente", style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        text = "Verificar ao abrir o aplicativo",
+                        text = "No máximo uma vez por dia; você decide quando instalar",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -150,23 +153,38 @@ private fun YtDlpUpdateCard(
                 )
             }
 
-            state.ytDlpVersion?.let { version ->
-                LabelValueRow(label = "Versão instalada", value = version)
+            LabelValueRow(label = "Versão atual", value = state.ytDlpVersion ?: "Não identificada")
+            state.previousYtDlpVersion?.let { version ->
+                LabelValueRow(label = "Versão anterior", value = version)
             }
 
             UpdateStatus(state = state)
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(
                     onClick = { onAction(MobileUiAction.CheckYtDlpUpdate) },
                     enabled = !isBusy,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Verificar e atualizar")
+                    Text("Verificar atualização")
+                }
+                if (state.canInstallYtDlpUpdate) {
+                    Button(
+                        onClick = { onAction(MobileUiAction.UpdateYtDlp) },
+                        enabled = !isBusy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Atualizar agora")
+                    }
+                }
+                if (state.canRollbackYtDlp) {
+                    TextButton(
+                        onClick = { onAction(MobileUiAction.RequestYtDlpRollback) },
+                        enabled = !isBusy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Restaurar versão anterior")
+                    }
                 }
             }
         }
@@ -180,12 +198,16 @@ private fun UpdateStatus(state: SettingsUiState) {
         YtDlpUpdateState.CHECKING -> "Procurando atualização…"
         YtDlpUpdateState.AVAILABLE -> "Há uma atualização disponível."
         YtDlpUpdateState.UPDATING -> "Instalando atualização…"
+        YtDlpUpdateState.ROLLING_BACK -> "Restaurando a versão anterior…"
         YtDlpUpdateState.UP_TO_DATE -> "Você já está usando a versão mais recente."
+        YtDlpUpdateState.ROLLED_BACK -> "A versão anterior está ativa."
+        YtDlpUpdateState.REJECTED -> "A versão problemática foi ignorada."
         YtDlpUpdateState.FAILED -> "Não foi possível verificar agora."
     }
     val color = when (state.updateState) {
         YtDlpUpdateState.FAILED -> MaterialTheme.colorScheme.error
-        YtDlpUpdateState.AVAILABLE -> MaterialTheme.colorScheme.primary
+        YtDlpUpdateState.AVAILABLE,
+        YtDlpUpdateState.ROLLED_BACK -> MaterialTheme.colorScheme.primary
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
@@ -195,7 +217,8 @@ private fun UpdateStatus(state: SettingsUiState) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (state.updateState == YtDlpUpdateState.CHECKING ||
-            state.updateState == YtDlpUpdateState.UPDATING
+            state.updateState == YtDlpUpdateState.UPDATING ||
+            state.updateState == YtDlpUpdateState.ROLLING_BACK
         ) {
             CircularProgressIndicator(
                 modifier = Modifier.size(20.dp),
@@ -209,6 +232,33 @@ private fun UpdateStatus(state: SettingsUiState) {
             color = color,
         )
     }
+}
+
+@Composable
+private fun YtDlpRollbackConfirmationDialog(
+    state: SettingsUiState,
+    onAction: (MobileUiAction) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = { onAction(MobileUiAction.DismissYtDlpRollback) },
+        title = { Text("Restaurar versão anterior?") },
+        text = {
+            Text(
+                "A versão ${state.previousYtDlpVersion ?: "anterior"} substituirá a " +
+                    "${state.ytDlpVersion ?: "atual"}. Downloads em andamento terminarão antes da troca.",
+            )
+        },
+        confirmButton = {
+            Button(onClick = { onAction(MobileUiAction.ConfirmYtDlpRollback) }) {
+                Text("Restaurar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { onAction(MobileUiAction.DismissYtDlpRollback) }) {
+                Text("Cancelar")
+            }
+        },
+    )
 }
 
 @Composable

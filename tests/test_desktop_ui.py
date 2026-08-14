@@ -21,8 +21,10 @@ class FakeExtractor:
 def test_main_window_uses_desktop_dimensions_and_sidebar(monkeypatch, qapp, qtbot, tmp_path: Path) -> None:
     from mediadownloader.services.secure_store import MemorySecretStore
     import mediadownloader.services.spotify_service as spotify_module
+    import mediadownloader.services.update_service as update_module
 
     monkeypatch.setattr(spotify_module, "default_secret_store", MemorySecretStore)
+    monkeypatch.setattr(update_module, "components_dir", lambda: tmp_path / "components")
     apply_theme(qapp, "light")
     settings = SettingsService(tmp_path / "settings.json")
     settings.set("general.download_dir", str(tmp_path))
@@ -44,6 +46,19 @@ def test_main_window_uses_desktop_dimensions_and_sidebar(monkeypatch, qapp, qtbo
     assert window.stack.currentIndex() == 3
     assert window.nav_buttons[3].isChecked()
     assert "Configurações" in window.windowTitle()
+    assert window.settings_page.check_update_button.text() == "Verificar atualização"
+    assert window.settings_page.rollback_ytdlp_button.isEnabled() is False
+    assert window.settings_page.ytdlp_update_status.wordWrap() is True
+    assert "recuperação" in window.settings_page.ytdlp_update_status.text().lower()
+
+    state = window.settings_page.updates._load_state()
+    state["pending"] = {"source": "local", "version": "2099.1.1", "path": "pending"}
+    state["pending_action"] = "update"
+    window.settings_page.updates._write_state(state)
+    window.settings_page._update_check_finished("2099.1.1")
+
+    assert "reinicie" in window.settings_page.ytdlp_update_status.text().lower()
+    assert window.settings_page.check_update_button.isEnabled() is False
 
 
 def test_home_uses_horizontal_desktop_url_actions(qapp, qtbot, tmp_path: Path) -> None:

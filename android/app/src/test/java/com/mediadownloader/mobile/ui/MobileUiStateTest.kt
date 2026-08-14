@@ -28,4 +28,21 @@ class MobileUiStateTest {
             ).canDownload,
         )
     }
+
+    @Test
+    fun ytDlpActionsExposeOnlyTheSafeNextStep() {
+        val available = SettingsUiState(
+            updateState = YtDlpUpdateState.AVAILABLE,
+            availableYtDlpVersion = "2026.08.12",
+        )
+        assertTrue(available.canInstallYtDlpUpdate)
+        assertFalse(available.isYtDlpOperationBusy)
+
+        val updating = available.copy(updateState = YtDlpUpdateState.UPDATING)
+        assertFalse(updating.canInstallYtDlpUpdate)
+        assertTrue(updating.isYtDlpOperationBusy)
+
+        val rollingBack = available.copy(updateState = YtDlpUpdateState.ROLLING_BACK)
+        assertTrue(rollingBack.isYtDlpOperationBusy)
+    }
 }

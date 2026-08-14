@@ -40,9 +40,11 @@ import com.mediadownloader.mobile.ui.SettingsUiState
 import com.mediadownloader.mobile.ui.ThemePreference
 import com.mediadownloader.mobile.ui.UiMessage
 import com.mediadownloader.mobile.ui.YtDlpUpdateState
-import com.yausername.youtubedl_android.YoutubeDL
+import com.mediadownloader.mobile.update.YtDlpCheckOutcome
+import com.mediadownloader.mobile.update.YtDlpInstallOutcome
+import com.mediadownloader.mobile.update.YtDlpRuntimeStatus
+import com.mediadownloader.mobile.update.YtDlpUpdateManager
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -53,7 +55,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.io.File
 import java.util.Date
@@ -64,6 +65,10 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
     private val engine = AndroidDownloadEngine(appContext)
     private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     private val analysisMutex = Mutex()
+    private val ytDlpUpdateManager = (application as? MediaDownloaderApplication)
+        ?.ytDlpUpdateManager
+        ?: YtDlpUpdateManager.getInstance(appContext)
+    private val initialYtDlpStatus = ytDlpUpdateManager.snapshot()
 
     private val _state = MutableStateFlow(
         MobileUiState(
@@ -71,8 +76,9 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
                 theme = savedTheme(),
                 autoUpdateYtDlp = preferences.getBoolean(KEY_AUTO_UPDATE, true),
                 appVersion = appVersion(),
-                ytDlpVersion = YoutubeDL.getInstance().versionName(appContext)
-                    ?: YoutubeDL.getInstance().version(appContext),
+                ytDlpVersion = initialYtDlpStatus.currentVersion,
+                previousYtDlpVersion = initialYtDlpStatus.previousVersion,
+                canRollbackYtDlp = initialYtDlpStatus.canRollback,
             ),
         ),
     )
@@ -97,8 +103,14 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
                 }
             }
         }
-        if (_state.value.settings.autoUpdateYtDlp) {
-            updateYtDlp(showUpToDateMessage = false)
+        viewModelScope.launch {
+            refreshYtDlpStatus()
+            ytDlpUpdateManager.consumeRecoveryNotice()?.let(::showMessage)
+            if (_state.value.settings.autoUpdateYtDlp &&
+                ytDlpUpdateManager.shouldCheckAutomatically()
+            ) {
+                checkYtDlpUpdate(showResultMessage = false)
+            }
         }
     }
 
@@ -134,8 +146,18 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             MobileUiAction.ClearHistory -> launchRepositoryAction(repository::clearHistory)
             is MobileUiAction.SetTheme -> saveTheme(action.theme)
             is MobileUiAction.SetAutoUpdateYtDlp -> saveAutoUpdate(action.enabled)
-            MobileUiAction.CheckYtDlpUpdate,
-            MobileUiAction.UpdateYtDlp -> updateYtDlp(showUpToDateMessage = true)
+            MobileUiAction.CheckYtDlpUpdate -> checkYtDlpUpdate(showResultMessage = true)
+            MobileUiAction.UpdateYtDlp -> installYtDlpUpdate()
+            MobileUiAction.RequestYtDlpRollback -> updateSettings {
+                it.copy(showYtDlpRollbackConfirmation = true)
+            }
+            MobileUiAction.DismissYtDlpRollback -> updateSettings {
+                it.copy(showYtDlpRollbackConfirmation = false)
+            }
+            MobileUiAction.ConfirmYtDlpRollback -> {
+                updateSettings { it.copy(showYtDlpRollbackConfirmation = false) }
+                rollbackYtDlp()
+            }
             MobileUiAction.ChooseDownloadLocation -> showMessage(
                 "O Android salva os arquivos em Downloads/MediaDownloader.",
             )
@@ -375,44 +397,242 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
     private fun saveAutoUpdate(enabled: Boolean) {
         preferences.edit().putBoolean(KEY_AUTO_UPDATE, enabled).apply()
         updateState { it.copy(settings = it.settings.copy(autoUpdateYtDlp = enabled)) }
+        if (enabled && ytDlpUpdateManager.shouldCheckAutomatically()) {
+            checkYtDlpUpdate(showResultMessage = false)
+        }
     }
 
-    private fun updateYtDlp(showUpToDateMessage: Boolean) {
-        val current = _state.value.settings.updateState
-        if (current == YtDlpUpdateState.CHECKING || current == YtDlpUpdateState.UPDATING) return
+    private suspend fun refreshYtDlpStatus() {
+        try {
+            val status = ytDlpUpdateManager.refreshStatus()
+            updateSettings { it.withRuntimeStatus(status) }
+        } catch (error: Throwable) {
+            updateSettings {
+                it.copy(
+                    updateState = YtDlpUpdateState.FAILED,
+                    updateDetail = readableError(
+                        error,
+                        "Não foi possível validar a instalação atual do yt-dlp.",
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun checkYtDlpUpdate(showResultMessage: Boolean) {
+        if (_state.value.settings.isYtDlpOperationBusy) return
         viewModelScope.launch {
             updateSettings {
-                it.copy(updateState = YtDlpUpdateState.CHECKING, updateDetail = "Verificando a versão estável…")
+                it.copy(
+                    updateState = YtDlpUpdateState.CHECKING,
+                    updateDetail = "Verificando a versão estável…",
+                    availableYtDlpVersion = null,
+                )
             }
             try {
-                val result = withContext(Dispatchers.IO) {
-                    engine.initialize()
-                    YoutubeDL.getInstance().updateYoutubeDL(appContext, YoutubeDL.UpdateChannel.STABLE)
-                }
-                val version = YoutubeDL.getInstance().versionName(appContext)
-                    ?: YoutubeDL.getInstance().version(appContext)
-                val changed = result == YoutubeDL.UpdateStatus.DONE
-                updateSettings {
-                    it.copy(
-                        updateState = YtDlpUpdateState.UP_TO_DATE,
-                        updateDetail = if (changed) "yt-dlp atualizado com sucesso." else "A versão instalada já é a mais recente.",
-                        ytDlpVersion = version,
-                    )
-                }
-                if (changed || showUpToDateMessage) {
-                    showMessage(if (changed) "yt-dlp atualizado com sucesso." else "O yt-dlp já está atualizado.")
+                val result = ytDlpUpdateManager.checkForUpdate()
+                when (result.outcome) {
+                    YtDlpCheckOutcome.AVAILABLE -> {
+                        updateSettings {
+                            it.withRuntimeStatus(result.status).copy(
+                                updateState = YtDlpUpdateState.AVAILABLE,
+                                updateDetail = "Versão ${result.latestVersion} disponível. Você escolhe quando instalar.",
+                                availableYtDlpVersion = result.latestVersion,
+                            )
+                        }
+                        if (showResultMessage) {
+                            showMessage("Há uma atualização do yt-dlp pronta para instalar.")
+                        }
+                    }
+
+                    YtDlpCheckOutcome.UP_TO_DATE -> {
+                        updateSettings {
+                            it.withRuntimeStatus(result.status).copy(
+                                updateState = YtDlpUpdateState.UP_TO_DATE,
+                                updateDetail = "A versão instalada já é a mais recente.",
+                                availableYtDlpVersion = null,
+                            )
+                        }
+                        if (showResultMessage) showMessage("O yt-dlp já está atualizado.")
+                    }
+
+                    YtDlpCheckOutcome.REJECTED -> {
+                        updateSettings {
+                            it.withRuntimeStatus(result.status).copy(
+                                updateState = YtDlpUpdateState.REJECTED,
+                                updateDetail = "A versão ${result.latestVersion} foi descartada neste aparelho. A próxima versão estável poderá ser instalada.",
+                                availableYtDlpVersion = null,
+                            )
+                        }
+                        if (showResultMessage) {
+                            showMessage("Esta versão foi descartada para proteger seus downloads.")
+                        }
+                    }
                 }
             } catch (error: Throwable) {
                 updateSettings {
                     it.copy(
                         updateState = YtDlpUpdateState.FAILED,
-                        updateDetail = readableError(error, "Não foi possível atualizar o yt-dlp."),
+                        updateDetail = readableError(
+                            error,
+                            "Não foi possível verificar agora. A versão instalada não foi alterada.",
+                        ),
+                        availableYtDlpVersion = null,
                     )
                 }
-                if (showUpToDateMessage) showMessage("Não foi possível atualizar o yt-dlp agora.")
+                if (showResultMessage) {
+                    showMessage("Não foi possível verificar agora. Tente novamente mais tarde.")
+                }
             }
         }
     }
+
+    private fun installYtDlpUpdate() {
+        val settings = _state.value.settings
+        if (settings.isYtDlpOperationBusy || !settings.canInstallYtDlpUpdate) return
+        viewModelScope.launch {
+            updateSettings {
+                it.copy(
+                    updateState = YtDlpUpdateState.UPDATING,
+                    updateDetail = "Aguardando operações em andamento e instalando com backup…",
+                )
+            }
+            try {
+                val result = ytDlpUpdateManager.installAvailableUpdate()
+                when (result.outcome) {
+                    YtDlpInstallOutcome.UPDATED -> {
+                        updateSettings {
+                            it.withRuntimeStatus(result.status).copy(
+                                updateState = YtDlpUpdateState.UP_TO_DATE,
+                                updateDetail = "Atualização concluída e validada. A versão anterior foi preservada.",
+                                availableYtDlpVersion = null,
+                            )
+                        }
+                        showMessage("yt-dlp atualizado com segurança.")
+                    }
+
+                    YtDlpInstallOutcome.UP_TO_DATE -> {
+                        updateSettings {
+                            it.withRuntimeStatus(result.status).copy(
+                                updateState = YtDlpUpdateState.UP_TO_DATE,
+                                updateDetail = "A versão instalada já é a mais recente.",
+                                availableYtDlpVersion = null,
+                            )
+                        }
+                        showMessage("O yt-dlp já está atualizado.")
+                    }
+
+                    YtDlpInstallOutcome.REJECTED -> {
+                        updateSettings {
+                            it.withRuntimeStatus(result.status).copy(
+                                updateState = YtDlpUpdateState.REJECTED,
+                                updateDetail = "Essa versão já apresentou problema e não será reinstalada.",
+                                availableYtDlpVersion = null,
+                            )
+                        }
+                        showMessage("A versão problemática foi ignorada.")
+                    }
+
+                    YtDlpInstallOutcome.FAILED -> {
+                        updateSettings {
+                            it.withRuntimeStatus(result.status).copy(
+                                updateState = YtDlpUpdateState.FAILED,
+                                updateDetail = "Não foi possível instalar. A versão ${result.status.currentVersion ?: "atual"} continua ativa.",
+                                availableYtDlpVersion = result.failedVersion,
+                            )
+                        }
+                        showMessage("A atualização não foi instalada; nada mudou nos seus downloads.")
+                    }
+
+                    YtDlpInstallOutcome.RESTORED_AFTER_FAILURE -> {
+                        updateSettings {
+                            it.withRuntimeStatus(result.status).copy(
+                                updateState = YtDlpUpdateState.ROLLED_BACK,
+                                updateDetail = "A atualização apresentou um problema. Restauramos a versão ${result.status.currentVersion ?: "anterior"}.",
+                                availableYtDlpVersion = null,
+                            )
+                        }
+                        showMessage("A atualização falhou, mas a versão anterior foi restaurada.")
+                    }
+                }
+            } catch (error: Throwable) {
+                updateSettings {
+                    it.copy(
+                        updateState = YtDlpUpdateState.FAILED,
+                        updateDetail = readableError(
+                            error,
+                            "Não foi possível concluir nem restaurar a atualização.",
+                        ),
+                    )
+                }
+                showMessage("A atualização precisa de atenção. Reinicie o aplicativo para recuperar.")
+            }
+        }
+    }
+
+    private fun rollbackYtDlp() {
+        val settings = _state.value.settings
+        if (settings.isYtDlpOperationBusy || !settings.canRollbackYtDlp) return
+        viewModelScope.launch {
+            updateSettings {
+                it.copy(
+                    updateState = YtDlpUpdateState.ROLLING_BACK,
+                    updateDetail = "Aguardando operações em andamento e restaurando a versão anterior…",
+                )
+            }
+            try {
+                val result = ytDlpUpdateManager.rollbackToPrevious()
+                when (result.outcome) {
+                    YtDlpInstallOutcome.UPDATED -> {
+                        updateSettings {
+                            it.withRuntimeStatus(result.status).copy(
+                                updateState = YtDlpUpdateState.ROLLED_BACK,
+                                updateDetail = "Versão ${result.status.currentVersion} restaurada e validada.",
+                                availableYtDlpVersion = null,
+                            )
+                        }
+                        showMessage("Versão anterior restaurada. Seus downloads podem continuar.")
+                    }
+
+                    YtDlpInstallOutcome.UP_TO_DATE -> {
+                        updateSettings {
+                            it.withRuntimeStatus(result.status).copy(
+                                updateState = YtDlpUpdateState.ROLLED_BACK,
+                                updateDetail = "A versão anterior já está ativa.",
+                            )
+                        }
+                    }
+
+                    YtDlpInstallOutcome.FAILED,
+                    YtDlpInstallOutcome.RESTORED_AFTER_FAILURE -> {
+                        updateSettings {
+                            it.withRuntimeStatus(result.status).copy(
+                                updateState = YtDlpUpdateState.FAILED,
+                                updateDetail = "A versão anterior não passou na validação. Mantivemos a versão ${result.status.currentVersion ?: "atual"}.",
+                            )
+                        }
+                        showMessage("Não foi seguro restaurar essa versão; mantivemos a atual.")
+                    }
+
+                    YtDlpInstallOutcome.REJECTED -> Unit
+                }
+            } catch (error: Throwable) {
+                updateSettings {
+                    it.copy(
+                        updateState = YtDlpUpdateState.FAILED,
+                        updateDetail = readableError(error, "Não foi possível restaurar a versão anterior."),
+                    )
+                }
+                showMessage("Não foi possível restaurar a versão anterior.")
+            }
+        }
+    }
+
+    private fun SettingsUiState.withRuntimeStatus(status: YtDlpRuntimeStatus): SettingsUiState = copy(
+        ytDlpVersion = status.currentVersion,
+        previousYtDlpVersion = status.previousVersion,
+        canRollbackYtDlp = status.canRollback,
+    )
 
     private fun launchRepositoryAction(action: suspend () -> Unit) {
         viewModelScope.launch {

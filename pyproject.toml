@@ -9,6 +9,7 @@ description = "Utilitário desktop para download e conversão de mídias"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+  "packaging>=24,<27",
   "PySide6>=6.8,<7",
   "platformdirs>=4.3,<5",
   "yt-dlp[default]>=2025.1.15",

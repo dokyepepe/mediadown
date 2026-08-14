@@ -3,6 +3,7 @@ package com.mediadownloader.mobile.download
 import android.content.Context
 import android.os.Environment
 import android.webkit.URLUtil
+import com.mediadownloader.mobile.MediaDownloaderApplication
 import com.mediadownloader.mobile.data.AudioFormat
 import com.mediadownloader.mobile.data.DownloadItem
 import com.mediadownloader.mobile.data.DownloadOptions
@@ -11,10 +12,12 @@ import com.mediadownloader.mobile.data.MediaAnalysis
 import com.mediadownloader.mobile.data.MediaFormat
 import com.mediadownloader.mobile.data.MediaType
 import com.mediadownloader.mobile.data.VideoContainer
+import com.mediadownloader.mobile.update.YtDlpRuntimeGate
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -53,7 +56,11 @@ class AndroidDownloadEngine(context: Context) {
             addOption("--no-warnings")
             addOption("--flat-playlist")
         }
-        val response = YoutubeDL.getInstance().execute(request, processId, null)
+        val response = runInterruptible {
+            YtDlpRuntimeGate.withInterruptibleReadLock {
+                YoutubeDL.getInstance().execute(request, processId, null)
+            }
+        }
         parseAnalysis(url.trim(), response.out)
     }
 
@@ -71,29 +78,34 @@ class AndroidDownloadEngine(context: Context) {
 
         try {
             val response = try {
-                YoutubeDL.getInstance().execute(
-                    request,
-                    item.id,
-                    false,
-                    callback = { progress, etaSeconds, line ->
-                        val processing = line.contains("[ffmpeg]", ignoreCase = true) ||
-                            line.contains("[Merger]", ignoreCase = true) ||
-                            line.contains("[ExtractAudio]", ignoreCase = true) ||
-                            line.startsWith("size=")
-                        onProgress(
-                            EngineProgress(
-                                percent = when {
-                                    processing -> 99
-                                    progress.isNaN() || progress < 0 -> 0
-                                    else -> progress.toInt().coerceIn(0, 99)
-                                },
-                                etaSeconds = etaSeconds.takeIf { it >= 0 },
-                                outputLine = line.trim().takeIf(String::isNotBlank),
-                                processing = processing,
-                            ),
+                runInterruptible {
+                    YtDlpRuntimeGate.withInterruptibleReadLock {
+                        checkCancelled(item.id)
+                        YoutubeDL.getInstance().execute(
+                            request,
+                            item.id,
+                            false,
+                            callback = { progress, etaSeconds, line ->
+                                val processing = line.contains("[ffmpeg]", ignoreCase = true) ||
+                                    line.contains("[Merger]", ignoreCase = true) ||
+                                    line.contains("[ExtractAudio]", ignoreCase = true) ||
+                                    line.startsWith("size=")
+                                onProgress(
+                                    EngineProgress(
+                                        percent = when {
+                                            processing -> 99
+                                            progress.isNaN() || progress < 0 -> 0
+                                            else -> progress.toInt().coerceIn(0, 99)
+                                        },
+                                        etaSeconds = etaSeconds.takeIf { it >= 0 },
+                                        outputLine = line.trim().takeIf(String::isNotBlank),
+                                        processing = processing,
+                                    ),
+                                )
+                            },
                         )
-                    },
-                )
+                    }
+                }
             } catch (error: YoutubeDL.CanceledException) {
                 throw DownloadCancelledException()
             } catch (error: InterruptedException) {
@@ -134,10 +146,13 @@ class AndroidDownloadEngine(context: Context) {
 
     private suspend fun ensureInitialized() {
         if (initialized) return
+        (appContext as? MediaDownloaderApplication)?.awaitYtDlpStartup()
         initializationMutex.withLock {
             if (initialized) return
-            YoutubeDL.getInstance().init(appContext)
-            FFmpeg.getInstance().init(appContext)
+            YtDlpRuntimeGate.withWriteLock {
+                YoutubeDL.getInstance().init(appContext)
+                FFmpeg.getInstance().init(appContext)
+            }
             initialized = true
         }
     }

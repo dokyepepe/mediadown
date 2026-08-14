@@ -30,7 +30,12 @@ def asset_path(*parts: str) -> Path:
 
 
 def app_data_dir() -> Path:
-    path = Path(user_data_dir(APP_ID, ORGANIZATION_NAME, roaming=False))
+    override = os.environ.get("MEDIA_DOWNLOADER_DATA_DIR", "").strip()
+    path = (
+        Path(override).expanduser().resolve()
+        if override
+        else Path(user_data_dir(APP_ID, ORGANIZATION_NAME, roaming=False))
+    )
     path.mkdir(parents=True, exist_ok=True)
     return path
 
