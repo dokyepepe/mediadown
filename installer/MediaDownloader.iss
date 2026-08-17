@@ -40,8 +40,8 @@ Name: "startmenuicon"; Description: "Criar atalho no Menu Iniciar"; GroupDescrip
 Source: "..\dist\MediaDownloader\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autodesktop}\Media Downloader"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
-Name: "{autoprograms}\Media Downloader\Media Downloader"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: startmenuicon
+Name: "{autodesktop}\Media Downloader"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; IconIndex: 0; Tasks: desktopicon
+Name: "{autoprograms}\Media Downloader\Media Downloader"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; IconIndex: 0; Tasks: startmenuicon
 Name: "{autoprograms}\Media Downloader\Desinstalar Media Downloader"; Filename: "{uninstallexe}"; Tasks: startmenuicon
 
 [Run]

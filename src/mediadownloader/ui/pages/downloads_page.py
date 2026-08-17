@@ -55,7 +55,7 @@ class DownloadsPage(QWidget):
         root.addWidget(toolbar)
         self.empty = EmptyState(
             "Sua fila está livre",
-            "Quando você adicionar uma mídia, progresso, velocidade e ações aparecerão aqui.",
+            "Quando você adicionar uma mídia, ela aparecerá aqui.",
             "downloads",
         )
         root.addWidget(self.empty, 1)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
@@ -43,6 +43,8 @@ class MainWindow(QMainWindow):
         )
         self.resize(1180, 780)
         self.setMinimumSize(900, 620)
+        self._pre_fullscreen_geometry: QRect | None = None
+        self._pre_fullscreen_was_maximized = False
         icon = QIcon(str(asset_path("app.ico")))
         if not icon.isNull():
             self.setWindowIcon(icon)
@@ -167,6 +169,39 @@ class MainWindow(QMainWindow):
         settings_action.setShortcut(QKeySequence("Ctrl+,"))
         settings_action.triggered.connect(lambda: self._navigate(3))
         self.addAction(settings_action)
+
+        self.fullscreen_action = QAction("Alternar tela cheia", self)
+        self.fullscreen_action.setShortcut(QKeySequence("F11"))
+        self.fullscreen_action.triggered.connect(self.toggle_fullscreen)
+        self.addAction(self.fullscreen_action)
+
+        self.exit_fullscreen_action = QAction("Sair da tela cheia", self)
+        self.exit_fullscreen_action.setShortcut(QKeySequence("Esc"))
+        self.exit_fullscreen_action.triggered.connect(self.exit_fullscreen)
+        self.addAction(self.exit_fullscreen_action)
+
+    def toggle_fullscreen(self) -> None:
+        """Toggle a borderless fullscreen window while preserving its prior placement."""
+        if self.isFullScreen():
+            self.exit_fullscreen()
+            return
+        self._pre_fullscreen_geometry = QRect(self.geometry())
+        self._pre_fullscreen_was_maximized = self.isMaximized()
+        self.showFullScreen()
+
+    def exit_fullscreen(self) -> None:
+        """Leave fullscreen and restore the previous normal or maximized state."""
+        if not self.isFullScreen():
+            return
+        geometry = self._pre_fullscreen_geometry
+        was_maximized = self._pre_fullscreen_was_maximized
+        self.showNormal()
+        if was_maximized:
+            self.showMaximized()
+        elif geometry is not None:
+            self.setGeometry(geometry)
+        self._pre_fullscreen_geometry = None
+        self._pre_fullscreen_was_maximized = False
 
     def _navigate(self, index: int) -> None:
         self.stack.setCurrentIndex(index)

@@ -5,6 +5,20 @@ from __future__ import annotations
 import sys
 
 
+def _set_windows_app_user_model_id() -> None:
+    """Give Windows one stable identity for the window, taskbar, and shortcuts."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "MediaDownloader.Desktop"
+        )
+    except (AttributeError, OSError):
+        pass
+
+
 def main() -> int:
     if len(sys.argv) >= 3 and sys.argv[1] == "--internal-ytdlp-probe":
         from mediadownloader.services.update_service import run_internal_ytdlp_probe
@@ -35,20 +49,26 @@ def main() -> int:
     activation = activate_updated_ytdlp()
 
     from PySide6.QtCore import QLocale, QTimer, Qt
+    from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication, QMessageBox
 
     from mediadownloader.services import HistoryService, SettingsService
     from mediadownloader.ui.main_window import MainWindow
     from mediadownloader.ui.theme import apply_theme
     from mediadownloader.ui.welcome_dialog import WelcomeDialog
+    from mediadownloader.utils.paths import asset_path
     from mediadownloader.version import APP_NAME, APP_VERSION, ORGANIZATION_NAME
 
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+    _set_windows_app_user_model_id()
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(APP_VERSION)
     app.setOrganizationName(ORGANIZATION_NAME)
     app.setQuitOnLastWindowClosed(True)
+    app_icon = QIcon(str(asset_path("app.ico")))
+    if not app_icon.isNull():
+        app.setWindowIcon(app_icon)
     QLocale.setDefault(QLocale(QLocale.Language.Portuguese, QLocale.Country.Brazil))
     settings = SettingsService()
     apply_theme(app, settings.get("general.theme", "system"))
