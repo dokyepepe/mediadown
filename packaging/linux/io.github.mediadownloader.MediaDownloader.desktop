@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Media Downloader
+Comment=Baixe e converta mídias e gere QR Codes localmente
+Exec=MediaDownloader
+Icon=io.github.mediadownloader.MediaDownloader
+Categories=AudioVideo;Network;Utility;
+Terminal=false
+StartupNotify=true

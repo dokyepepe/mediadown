@@ -10,6 +10,9 @@ Esta distribuição incorpora componentes mantidos por projetos independentes:
 - **Python** — Python Software Foundation License: <https://docs.python.org/3/license.html>
 - **packaging** — Apache License 2.0 ou BSD 2-Clause. Fonte: <https://github.com/pypa/packaging>
 - **platformdirs** — MIT License: <https://github.com/tox-dev/platformdirs>
+- **qrcode** — BSD License. Geração local de QR Codes na edição desktop: <https://github.com/lincolnloop/python-qrcode>
+- **Pillow** — HPND License. Codificação PNG dos QR Codes no desktop: <https://python-pillow.github.io>
+- **ZXing Core** — Apache License 2.0. Geração local de QR Codes no Android: <https://github.com/zxing/zxing>
 - **PyInstaller** (ferramenta de build) — GPLv2 com exceção para distribuir aplicações: <https://pyinstaller.org/en/stable/license.html>
 - **Spotify attribution asset** — o logotipo completo preto é um asset oficial não modificado, usado somente para atribuir metadados obtidos do Spotify. Spotify é marca da Spotify AB e não endossa este aplicativo. Fonte e regras de uso: <https://developer.spotify.com/documentation/design>. Consulte também `assets/third_party/spotify/SOURCE.md`.
 - **Simple Icons / logos de plataformas** — formas vetoriais obtidas do projeto Simple Icons, disponibilizado sob CC0 1.0. As marcas continuam pertencendo aos respectivos titulares e seu uso apenas identifica as plataformas compatíveis; nenhuma delas endossa este aplicativo. Fonte e detalhes: <https://github.com/simple-icons/simple-icons>. Consulte também `assets/icons/brands/SOURCE.md`.

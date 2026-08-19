@@ -15,17 +15,19 @@ class FFmpegManager:
 
     @property
     def ffmpeg(self) -> Path | None:
-        bundled = self.directory / "ffmpeg.exe"
-        if bundled.exists():
-            return bundled
+        for name in ("ffmpeg.exe", "ffmpeg"):
+            bundled = self.directory / name
+            if bundled.exists():
+                return bundled
         found = shutil.which("ffmpeg")
         return Path(found) if found else None
 
     @property
     def ffprobe(self) -> Path | None:
-        bundled = self.directory / "ffprobe.exe"
-        if bundled.exists():
-            return bundled
+        for name in ("ffprobe.exe", "ffprobe"):
+            bundled = self.directory / name
+            if bundled.exists():
+                return bundled
         found = shutil.which("ffprobe")
         return Path(found) if found else None
 

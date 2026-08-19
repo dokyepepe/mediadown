@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -67,9 +68,23 @@ def default_download_dir() -> Path:
 
 def reveal_in_explorer(path: str | Path, select_file: bool = False) -> None:
     target = Path(path).resolve()
-    if select_file and target.is_file():
+    if sys.platform == "win32" and select_file and target.is_file():
         os.startfile("explorer.exe", arguments=f'/select,"{target}"')  # type: ignore[attr-defined]
-    else:
+    elif sys.platform == "win32":
         directory = target if target.is_dir() else target.parent
         os.startfile(str(directory))  # type: ignore[attr-defined]
+    else:
+        destination = target if target.exists() and not select_file else target.parent
+        command = ["open" if sys.platform == "darwin" else "xdg-open", str(destination)]
+        subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def open_local_file(path: str | Path) -> None:
+    """Open a local file with the platform default application."""
+    target = Path(path).resolve()
+    if sys.platform == "win32":
+        os.startfile(str(target))  # type: ignore[attr-defined]
+        return
+    command = ["open" if sys.platform == "darwin" else "xdg-open", str(target)]
+    subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFrame, QGridLayout, QHBoxLayout, QLabel, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
@@ -111,7 +113,8 @@ class AboutPage(QWidget):
         logo.setObjectName("TintedIcon")
         identity = QVBoxLayout()
         identity.setSpacing(5)
-        eyebrow = QLabel("UTILITÁRIO DESKTOP PARA WINDOWS")
+        platform_name = "LINUX" if sys.platform.startswith("linux") else "WINDOWS"
+        eyebrow = QLabel(f"UTILITÁRIO DESKTOP PARA {platform_name}")
         eyebrow.setObjectName("Eyebrow")
         name = QLabel("Media Downloader")
         name.setObjectName("HeroName")

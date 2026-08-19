@@ -17,6 +17,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.QrCode2
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -113,6 +114,12 @@ fun MediaDownloaderApp(
                     modifier = Modifier.padding(contentPadding),
                 )
 
+                AppTab.QR_CODE -> QrCodeScreen(
+                    state = state.qrCode,
+                    onAction = onAction,
+                    modifier = Modifier.padding(contentPadding),
+                )
+
                 AppTab.DOWNLOADS -> DownloadsScreen(
                     state = state.downloads,
                     onAction = onAction,
@@ -159,7 +166,7 @@ private fun LegalDocumentDialog(
                 "para analisar e baixar a mídia ou os arquivos de sites solicitados e atualizar o yt-dlp."
 
         LegalDocument.OPEN_SOURCE_LICENSES ->
-            "Este aplicativo inclui AndroidX, Kotlin, yt-dlp, Python, FFmpeg e " +
+            "Este aplicativo inclui AndroidX, Kotlin, ZXing, yt-dlp, Python, FFmpeg e " +
                 "youtubedl-android. Os componentes mantêm suas respectivas licenças de " +
                 "código aberto; os avisos completos acompanham o código-fonte do projeto."
     }
@@ -304,6 +311,7 @@ private val AppTab.icon: ImageVector
     get() = when (this) {
         AppTab.HOME -> Icons.Rounded.Home
         AppTab.SITE_FILES -> Icons.Rounded.FolderOpen
+        AppTab.QR_CODE -> Icons.Rounded.QrCode2
         AppTab.DOWNLOADS -> Icons.Rounded.Download
         AppTab.HISTORY -> Icons.Rounded.History
         AppTab.SETTINGS -> Icons.Rounded.Settings

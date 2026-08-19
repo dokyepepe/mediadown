@@ -52,3 +52,14 @@ def test_packaged_smoke_uses_an_isolated_data_directory():
     assert "MEDIA_DOWNLOADER_DATA_DIR" in build_script
     assert "smoke-data-" in build_script
 
+
+def test_appimage_build_has_desktop_metadata_and_smoke_test():
+    root = project_root()
+    build_script = (root / "scripts" / "build_appimage.sh").read_text(encoding="utf-8")
+
+    assert (root / "packaging" / "linux" / "AppRun").exists()
+    assert (root / "packaging" / "linux" / "io.github.mediadownloader.MediaDownloader.desktop").exists()
+    assert "AppDir" in build_script
+    assert "--smoke-test" in build_script
+    assert "appimagetool" in build_script
+

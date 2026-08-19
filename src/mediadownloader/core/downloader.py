@@ -346,8 +346,14 @@ class DownloadEngine:
         result: dict[str, Any] = {}
         if self.ffmpeg.available:
             result["ffmpeg_location"] = self.ffmpeg.location()
-        deno = resource_path("deno", "deno.exe")
-        if deno.exists():
+        deno = next(
+            (candidate for candidate in (
+                resource_path("deno", "deno.exe"),
+                resource_path("deno", "deno"),
+            ) if candidate.exists()),
+            None,
+        )
+        if deno is not None:
             result["js_runtimes"] = {"deno": {"path": str(deno)}}
         return result
 

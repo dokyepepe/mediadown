@@ -20,6 +20,7 @@ data class MobileUiState(
     val selectedTab: AppTab = AppTab.HOME,
     val home: HomeUiState = HomeUiState(),
     val siteFiles: SiteFilesUiState = SiteFilesUiState(),
+    val qrCode: QrCodeUiState = QrCodeUiState(),
     val downloads: DownloadsUiState = DownloadsUiState(),
     val history: HistoryUiState = HistoryUiState(),
     val settings: SettingsUiState = SettingsUiState(),
@@ -35,9 +36,19 @@ data class UiMessage(
 enum class AppTab(val label: String, val glyph: String) {
     HOME("Início", "⌂"),
     SITE_FILES("Arquivos", "▤"),
+    QR_CODE("QR Code", "▦"),
     DOWNLOADS("Downloads", "⇩"),
     HISTORY("Histórico", "↶"),
     SETTINGS("Ajustes", "⚙"),
+}
+
+data class QrCodeUiState(
+    val url: String = "",
+    val urlError: String? = null,
+    val generatedUrl: String? = null,
+) {
+    val canGenerate: Boolean
+        get() = url.isNotBlank()
 }
 
 data class SiteFilesUiState(
@@ -249,6 +260,8 @@ enum class LegalDocument {
 
 sealed interface MobileUiAction {
     data class Navigate(val tab: AppTab) : MobileUiAction
+    data class QrCodeUrlChanged(val value: String) : MobileUiAction
+    object GenerateQrCode : MobileUiAction
 
     /** Usada pela Activity ao receber ACTION_SEND ou ACTION_VIEW. */
     data class ReceiveSharedUrl(val value: String) : MobileUiAction

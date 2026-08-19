@@ -18,7 +18,7 @@ datas = [
     (str(root / "licenses"), "licenses"),
 ]
 for distribution_name in (
-    "PySide6", "shiboken6", "yt-dlp", "yt-dlp-ejs", "packaging", "platformdirs",
+    "PySide6", "shiboken6", "yt-dlp", "yt-dlp-ejs", "packaging", "platformdirs", "qrcode", "Pillow",
 ):
     try:
         package = distribution(distribution_name)
@@ -66,7 +66,7 @@ exe = EXE(
     upx=True,
     console=debug_build,
     icon=str(root / "assets" / "app.ico"),
-    version=str(version_file),
+    version=str(version_file) if sys.platform == "win32" else None,
 )
 coll = COLLECT(
     exe,

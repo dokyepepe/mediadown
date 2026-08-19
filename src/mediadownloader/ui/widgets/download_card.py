@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
@@ -12,7 +11,7 @@ from PySide6.QtWidgets import (
 
 from mediadownloader.models import DownloadItem, DownloadStatus
 from mediadownloader.utils.formatting import format_bytes, format_eta
-from mediadownloader.utils.paths import reveal_in_explorer
+from mediadownloader.utils.paths import open_local_file, reveal_in_explorer
 
 from ..icons import set_button_icon
 from .common import StatusBadge, ThumbnailLabel
@@ -160,7 +159,7 @@ class DownloadCard(QFrame):
         elif self._item.status == DownloadStatus.COMPLETED:
             path = Path(self._item.final_file)
             if path.exists():
-                os.startfile(str(path))  # type: ignore[attr-defined]
+                open_local_file(path)
             else:
                 QMessageBox.warning(self, "Arquivo não encontrado", "O arquivo não existe mais nesse local.")
         else:

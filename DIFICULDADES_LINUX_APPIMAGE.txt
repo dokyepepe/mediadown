@@ -1,0 +1,48 @@
+ITENS MAIS DIFÍCEIS PARA CONCLUIR A VERSÃO LINUX / APPIMAGE
+===========================================================
+
+1. Compilar e validar em uma distribuição Linux antiga o bastante
+   O AppImage precisa ser construído no Linux. A versão de glibc usada no build limita quais
+   distribuições conseguem executá-lo. O ideal é criar uma pipeline em Ubuntu LTS e testar em
+   Ubuntu, Fedora e Debian, inclusive com Wayland e X11.
+
+2. Empacotar FFmpeg/FFprobe e Deno para cada arquitetura
+   A versão Windows já usa binários próprios. No Linux é preciso escolher builds confiáveis,
+   conferir SHA-256, licenças e permissões de execução para x86_64 e, futuramente, arm64.
+   A base atual aceita executáveis Linux empacotados, mas ainda recorre ao PATH do sistema.
+
+3. Garantir todos os plugins nativos do Qt dentro do AppImage
+   PySide6 inclui muitos componentes, mas os plugins de Wayland/XCB, áudio, TLS e temas podem
+   variar entre distribuições. É necessário testar o AppImage limpo e ajustar exclusões/inclusões.
+
+4. Armazenar tokens do Spotify com segurança
+   No Windows há Credential Manager. No Linux o fallback atual é apenas em memória. A solução
+   final deve integrar Secret Service/libsecret (GNOME Keyring, KWallet compatível) sem gravar
+   tokens em texto simples.
+
+5. Atualização e distribuição do AppImage
+   Ainda faltam assinatura, publicação, checksums, canal de atualização e, se desejado, dados
+   zsync para atualização delta. Também é preciso decidir como o atualizador do aplicativo se
+   comportará quando estiver executando de uma imagem somente leitura.
+
+6. Integração consistente com o desktop
+   Abrir arquivos/pastas já usa xdg-open, mas seleção do arquivo, atalhos no menu, associações,
+   ícones e notificações precisam ser verificados nos principais ambientes gráficos.
+
+7. Testes reais do mecanismo de download
+   Além do smoke test, é necessário validar downloads autorizados, merge, conversão, legendas,
+   nomes de arquivo e cancelamento usando o FFmpeg e o Deno que irão dentro da distribuição.
+
+BASE JÁ PREPARADA
+-----------------
+- Script scripts/build_appimage.sh para testar, empacotar com PyInstaller, montar o AppDir,
+  executar smoke test e chamar appimagetool.
+- Arquivos AppRun e .desktop, ícone e categorias de menu.
+- Detecção de ffmpeg, ffprobe e deno sem extensão .exe.
+- Abertura de arquivos e pastas com xdg-open no Linux.
+
+COMANDO INICIAL (EXECUTAR NO LINUX)
+----------------------------------
+bash scripts/build_appimage.sh
+
+Pré-requisitos: Python 3.12+, venv, appimagetool e bibliotecas de sistema necessárias para Qt.

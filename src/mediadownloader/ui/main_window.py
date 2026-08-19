@@ -19,7 +19,9 @@ from mediadownloader.utils.filenames import sanitize_filename
 from mediadownloader.utils.paths import asset_path, reveal_in_explorer
 from mediadownloader.version import APP_NAME, APP_VERSION
 
-from .pages import AboutPage, DownloadsPage, HistoryPage, HomePage, SettingsPage, SiteFilesPage
+from .pages import (
+    AboutPage, DownloadsPage, HistoryPage, HomePage, QrCodePage, SettingsPage, SiteFilesPage,
+)
 from .theme import apply_theme
 from .widgets import PageHeader, SidebarButton, ThemedIconLabel
 
@@ -99,6 +101,7 @@ class MainWindow(QMainWindow):
         self.history_page = HistoryPage(self.history)
         self.settings_page = SettingsPage(self.settings, self.queue, self.ffmpeg, self.spotify)
         self.site_files_page = SiteFilesPage(self.settings)
+        self.qrcode_page = QrCodePage()
         self.about_page = AboutPage()
         pages = [
             ("Início", "home", self.home_page),
@@ -106,6 +109,7 @@ class MainWindow(QMainWindow):
             ("Histórico", "history", self.history_page),
             ("Configurações", "settings", self.settings_page),
             ("Arquivos do site", "file", self.site_files_page),
+            ("QR Code", "qrcode", self.qrcode_page),
             ("Sobre", "info", self.about_page),
         ]
         self.page_titles = [label for label, _icon, _page in pages]

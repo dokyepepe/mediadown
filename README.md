@@ -58,6 +58,7 @@ Não existe uma WebView compartilhada entre elas: interface, engine, persistênc
 | **Fila** | Progresso, velocidade, ETA, cancelamento, nova tentativa e estados separados de download e pós-processamento |
 | **Histórico** | Persistência local em SQLite, filtros e ações para abrir, compartilhar ou localizar arquivos |
 | **Personalização** | Tema claro, escuro ou do sistema; qualidade, formato, destino e preferências persistentes |
+| **QR Code** | Geração local a partir de URLs nas edições desktop e Android; copiar/salvar PNG no desktop |
 | **Manutenção** | Atualização controlada do yt-dlp e componentes empacotados para dispensar configuração manual no uso final |
 
 ### Desktop ou Android?
@@ -73,9 +74,11 @@ Não existe uma WebView compartilhada entre elas: interface, engine, persistênc
 | Cookies e proxy | ✅ | — |
 | Template de nome de arquivo | ✅ | — |
 | Metadados do Spotify | ✅ | — |
+| Gerador de QR Code | gerar, copiar e salvar PNG | gerar e visualizar |
 | Destino | pasta configurável | `Downloads/MediaDownloader` |
 
-As plataformas oficiais deste repositório são Windows e Android; não há edição para Web, Linux, macOS ou iOS.
+As edições estáveis deste repositório são Windows e Android. Uma base Linux/AppImage está em
+desenvolvimento; ainda não há edição para Web, macOS ou iOS.
 
 ### Plataformas de mídia
 
@@ -247,6 +250,20 @@ O build executa os testes unitários e o lint da variante antes de gerar o APK. 
 compilação local de diagnóstico, esses gates só podem ser ignorados explicitamente com
 `-SkipChecks`.
 
+### AppImage Linux (base inicial)
+
+Em uma máquina Linux com Python 3.12+, `venv` e `appimagetool` disponíveis:
+
+```bash
+bash scripts/build_appimage.sh
+```
+
+O script executa os testes, gera a aplicação com PyInstaller, monta o AppDir, faz um smoke
+test sem interface visível e cria `release/MediaDownloader-<versão>-<arquitetura>.AppImage`.
+Esta edição ainda está em desenvolvimento: FFmpeg e Deno são encontrados no `PATH` quando
+binários Linux não tiverem sido colocados em `resources/`. Consulte
+`DIFICULDADES_LINUX_APPIMAGE.txt` para as pendências de distribuição e compatibilidade.
+
 As alterações de cada aplicação permanecem isoladas:
 
 - `src/mediadownloader/` e `MediaDownloader.spec` geram a edição Windows;
@@ -265,6 +282,7 @@ As alterações de cada aplicação permanecem isoladas:
 | `setup_deno.ps1` | Baixa e valida o runtime Deno |
 | `setup_android.ps1` | Instala o Android SDK local e gera `local.properties` |
 | `build_android.ps1` | Testa, executa lint, compila, copia, calcula o SHA-256 e opcionalmente instala o APK |
+| `build_appimage.sh` | Testa, monta o AppDir e gera o AppImage em uma máquina Linux |
 
 ## Arquitetura
 

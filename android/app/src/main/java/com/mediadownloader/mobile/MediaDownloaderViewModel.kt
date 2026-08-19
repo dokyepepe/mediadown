@@ -134,6 +134,10 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
     override fun onAction(action: MobileUiAction) {
         when (action) {
             is MobileUiAction.Navigate -> updateState { it.copy(selectedTab = action.tab) }
+            is MobileUiAction.QrCodeUrlChanged -> updateState {
+                it.copy(qrCode = it.qrCode.copy(url = action.value, urlError = null, generatedUrl = null))
+            }
+            MobileUiAction.GenerateQrCode -> generateQrCode()
             is MobileUiAction.ReceiveSharedUrl -> receiveUrl(action.value)
             is MobileUiAction.UrlChanged -> updateHome {
                 it.copy(url = action.value, urlError = null, preview = null, analysisHint = null)
@@ -276,6 +280,27 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
         } else {
             clearAnalysis(cancelJob = true)
             updateHome { it.copy(url = url, urlError = null) }
+        }
+    }
+
+    private fun generateQrCode() {
+        val url = _state.value.qrCode.url.trim()
+        updateState {
+            it.copy(
+                qrCode = if (!isHttpUrl(url)) {
+                    it.qrCode.copy(
+                        urlError = "Informe uma URL HTTP ou HTTPS válida.",
+                        generatedUrl = null,
+                    )
+                } else if (url.toByteArray(Charsets.UTF_8).size > 1500) {
+                    it.qrCode.copy(
+                        urlError = "A URL é longa demais para gerar um QR Code confiável.",
+                        generatedUrl = null,
+                    )
+                } else {
+                    it.qrCode.copy(url = url, urlError = null, generatedUrl = url)
+                },
+            )
         }
     }
 

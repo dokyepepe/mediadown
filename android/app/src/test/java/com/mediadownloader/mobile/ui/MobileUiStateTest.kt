@@ -61,6 +61,12 @@ class MobileUiStateTest {
     }
 
     @Test
+    fun qrCodeRequiresNonBlankUrl() {
+        assertFalse(QrCodeUiState().canGenerate)
+        assertTrue(QrCodeUiState(url = "https://example.com").canGenerate)
+    }
+
+    @Test
     fun ytDlpActionsExposeOnlyTheSafeNextStep() {
         val available = SettingsUiState(
             updateState = YtDlpUpdateState.AVAILABLE,
