@@ -1,6 +1,7 @@
 package com.mediadownloader.mobile.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Autorenew
 import androidx.compose.material.icons.rounded.Block
@@ -21,9 +24,11 @@ import androidx.compose.material.icons.rounded.BrightnessAuto
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Info
@@ -50,17 +55,21 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mediadownloader.mobile.support.SupportConfig
 
 @Composable
 fun SettingsScreen(
@@ -629,7 +638,97 @@ private fun AppInfoCard(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.76f),
                         )
+                        Text(
+                            text = "© 2026 Pietro Ferreira • Licença MIT",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.76f),
+                        )
                     }
+                }
+            }
+
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    SectionTitle(
+                        title = "Apoie o projeto",
+                        supportingText =
+                            "O Media Downloader é gratuito e de código aberto. " +
+                                "Se ele foi útil, você pode apoiar voluntariamente por Pix.",
+                        icon = Icons.Rounded.Favorite,
+                    )
+                    val pixQrCode = remember { createQrCode(SupportConfig.PIX_PAYLOAD) }
+                    Surface(
+                        modifier = Modifier.size(196.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        color = Color.White,
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(12.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Image(
+                                bitmap = pixQrCode,
+                                contentDescription = "QR Code Pix para apoiar o projeto",
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Escaneie com o app do seu banco",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "CHAVE PIX",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    SelectionContainer {
+                        Text(
+                            text = SupportConfig.PIX_KEY,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                        )
+                    }
+                    Button(
+                        onClick = { onAction(MobileUiAction.CopySupportPixPayload) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 52.dp),
+                    ) {
+                        Icon(Icons.Rounded.ContentCopy, contentDescription = null)
+                        Text("  Copiar Pix Copia e Cola")
+                    }
+                    OutlinedButton(
+                        onClick = { onAction(MobileUiAction.CopySupportPixKey) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 52.dp),
+                    ) {
+                        Icon(Icons.Rounded.ContentCopy, contentDescription = null)
+                        Text("  Copiar chave Pix")
+                    }
+                    Text(
+                        text = "Antes de confirmar, confira no aplicativo do banco os dados do recebedor.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Text(
+                        text = "O uso do aplicativo continua gratuito, independentemente de contribuição.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 
@@ -648,7 +747,15 @@ private fun AppInfoCard(
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             LegalButton(
-                label = "Licenças de código aberto",
+                label = "Licença do Media Downloader (MIT)",
+                icon = Icons.Rounded.Info,
+                onClick = {
+                    onAction(MobileUiAction.OpenLegalDocument(LegalDocument.APPLICATION_LICENSE))
+                },
+            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+            LegalButton(
+                label = "Licenças dos componentes de terceiros",
                 icon = Icons.Rounded.Code,
                 onClick = {
                     onAction(MobileUiAction.OpenLegalDocument(LegalDocument.OPEN_SOURCE_LICENSES))

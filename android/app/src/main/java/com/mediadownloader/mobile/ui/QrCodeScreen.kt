@@ -1,6 +1,5 @@
 package com.mediadownloader.mobile.ui
 
-import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -28,13 +27,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.qrcode.QRCodeWriter
 
 @Composable
 fun QrCodeScreen(
@@ -129,16 +124,4 @@ fun QrCodeScreen(
             }
         }
     }
-}
-
-private fun createQrCode(value: String, size: Int = 720): ImageBitmap {
-    val matrix = QRCodeWriter().encode(value, BarcodeFormat.QR_CODE, size, size)
-    val pixels = IntArray(size * size)
-    for (y in 0 until size) {
-        val row = y * size
-        for (x in 0 until size) {
-            pixels[row + x] = if (matrix[x, y]) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
-        }
-    }
-    return Bitmap.createBitmap(pixels, size, size, Bitmap.Config.ARGB_8888).asImageBitmap()
 }

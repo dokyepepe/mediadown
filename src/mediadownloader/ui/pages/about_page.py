@@ -2,18 +2,120 @@
 
 from __future__ import annotations
 
+from io import BytesIO
 import sys
 
+import qrcode
+from qrcode.constants import ERROR_CORRECT_M
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
-    QFrame, QGridLayout, QHBoxLayout, QLabel, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
+    QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel, QScrollArea, QSizePolicy,
+    QVBoxLayout, QWidget,
 )
 
 from mediadownloader.core.platform_catalog import PlatformInfo, extractor_count, supported_platforms
+from mediadownloader.support import SUPPORT_PIX_KEY, SUPPORT_PIX_PAYLOAD
 from mediadownloader.version import APP_VERSION
 
 from ..icons import svg_pixmap
-from ..widgets import PageHeader, ThemedIconLabel
+from ..widgets import PageHeader, PrimaryButton, SecondaryButton, ThemedIconLabel
+
+
+def _support_qr_pixmap() -> QPixmap:
+    code = qrcode.QRCode(
+        version=None,
+        error_correction=ERROR_CORRECT_M,
+        box_size=4,
+        border=4,
+    )
+    code.add_data(SUPPORT_PIX_PAYLOAD)
+    code.make(fit=True)
+    image = code.make_image(fill_color="black", back_color="white")
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    pixmap = QPixmap()
+    pixmap.loadFromData(buffer.getvalue(), "PNG")
+    return pixmap
+
+
+class SupportCard(QFrame):
+    """Quiet, optional support callout with an offline-generated Pix QR code."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("Card")
+        self.setAccessibleName("Apoie voluntariamente o Media Downloader")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(20)
+
+        details = QVBoxLayout()
+        details.setSpacing(8)
+        title = QLabel("❤️ Apoie o projeto")
+        title.setObjectName("SectionTitle")
+        description = QLabel(
+            "O Media Downloader é gratuito e de código aberto. Se ele foi útil para você, "
+            "considere apoiar voluntariamente seu desenvolvimento por Pix."
+        )
+        description.setObjectName("Muted")
+        description.setWordWrap(True)
+        key_caption = QLabel("CHAVE PIX")
+        key_caption.setObjectName("Eyebrow")
+        self.key_label = QLabel(SUPPORT_PIX_KEY)
+        self.key_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.key_label.setWordWrap(True)
+        self.key_label.setAccessibleName("Chave Pix do projeto")
+        self.copy_payload_button = PrimaryButton("Copiar Pix Copia e Cola", icon_name="copy")
+        self.copy_payload_button.setAccessibleDescription(
+            "Copia o código completo do QR Pix para a área de transferência. O apoio é opcional."
+        )
+        self.copy_payload_button.clicked.connect(self.copy_pix_payload)
+        self.copy_button = SecondaryButton("Copiar chave Pix", icon_name="copy")
+        self.copy_button.setAccessibleDescription(
+            "Copia a chave Pix para a área de transferência. O apoio é opcional."
+        )
+        self.copy_button.clicked.connect(self.copy_pix_key)
+        safety = QLabel(
+            "Antes de confirmar, confira no aplicativo do banco os dados do recebedor."
+        )
+        safety.setObjectName("WarningText")
+        safety.setWordWrap(True)
+        details.addWidget(title)
+        details.addWidget(description)
+        details.addSpacing(2)
+        details.addWidget(key_caption)
+        details.addWidget(self.key_label)
+        details.addWidget(self.copy_payload_button)
+        details.addWidget(self.copy_button, 0, Qt.AlignmentFlag.AlignLeft)
+        details.addWidget(safety)
+
+        qr_column = QVBoxLayout()
+        qr_column.setSpacing(5)
+        qr_column.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.qr_label = QLabel()
+        self.qr_label.setObjectName("QrCodePreview")
+        self.qr_label.setFixedSize(236, 236)
+        self.qr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.qr_label.setAccessibleName("QR Code Pix para apoiar o projeto")
+        pixmap = _support_qr_pixmap()
+        self.qr_label.setPixmap(pixmap)
+        qr_caption = QLabel("Escaneie com o app do seu banco")
+        qr_caption.setObjectName("Muted")
+        qr_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        qr_column.addWidget(self.qr_label, 0, Qt.AlignmentFlag.AlignHCenter)
+        qr_column.addWidget(qr_caption)
+
+        layout.addLayout(details, 1)
+        layout.addLayout(qr_column)
+
+    def copy_pix_key(self) -> None:
+        QApplication.clipboard().setText(SUPPORT_PIX_KEY)
+        self.copy_button.setText("Chave Pix copiada")
+
+    def copy_pix_payload(self) -> None:
+        QApplication.clipboard().setText(SUPPORT_PIX_PAYLOAD)
+        self.copy_payload_button.setText("Pix Copia e Cola copiado")
 
 
 class MetricCard(QFrame):
@@ -124,12 +226,18 @@ class AboutPage(QWidget):
         )
         description.setObjectName("Muted")
         description.setWordWrap(True)
+        copyright_label = QLabel("© 2026 Pietro Ferreira · Licença MIT")
+        copyright_label.setObjectName("Eyebrow")
         identity.addWidget(eyebrow)
         identity.addWidget(name)
         identity.addWidget(description)
+        identity.addWidget(copyright_label)
         hero_layout.addWidget(logo)
         hero_layout.addLayout(identity, 1)
         root.addWidget(hero)
+
+        self.support_card = SupportCard()
+        root.addWidget(self.support_card)
 
         metrics = QGridLayout()
         metrics.setHorizontalSpacing(10)

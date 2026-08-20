@@ -255,6 +255,7 @@ enum class YtDlpUpdateState {
 enum class LegalDocument {
     RESPONSIBLE_USE,
     PRIVACY,
+    APPLICATION_LICENSE,
     OPEN_SOURCE_LICENSES,
 }
 
@@ -307,6 +308,8 @@ sealed interface MobileUiAction {
     object DismissYtDlpRollback : MobileUiAction
     data class ChooseDownloadLocation(val category: StorageCategory) : MobileUiAction
     data class ResetDownloadLocation(val category: StorageCategory) : MobileUiAction
+    object CopySupportPixPayload : MobileUiAction
+    object CopySupportPixKey : MobileUiAction
     data class OpenLegalDocument(val document: LegalDocument) : MobileUiAction
     object DismissLegalDocument : MobileUiAction
 

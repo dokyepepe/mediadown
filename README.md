@@ -300,7 +300,7 @@ mediadown/
 ├── installer/             # projeto Inno Setup
 ├── scripts/               # desenvolvimento, testes e builds
 ├── tests/                 # suíte desktop
-└── licenses/              # licença do projeto e avisos de terceiros
+└── licenses/              # cópia da licença para os builds e avisos de terceiros
 ```
 
 ### Fluxo interno
@@ -408,6 +408,23 @@ Antes de publicar:
 - use assinatura Authenticode no Windows e uma keystore de release no Android;
 - preserve avisos e licenças de todos os componentes empacotados.
 
+## ❤️ Apoie o projeto
+
+O Media Downloader é gratuito e de código aberto.
+
+Se o aplicativo foi útil para você e quiser ajudar a manter o projeto, pode contribuir
+voluntariamente com seu desenvolvimento. O apoio ajuda na manutenção, correção de bugs,
+compatibilidade com novas versões das plataformas e desenvolvimento de novos recursos.
+
+**Chave Pix:** `d6cbf3c3-6639-43ce-a7bf-fc2995e13065`
+
+O QR Code Pix e os botões para copiar a chave ou o código **Pix Copia e Cola** ficam
+disponíveis em **Sobre** no desktop e em **Ajustes > Sobre e legal** no Android. O código
+é gerado localmente, sem analytics, telemetria ou registro de cliques. Antes de confirmar
+uma contribuição, confira no aplicativo do banco os dados do recebedor.
+
+O uso do Media Downloader continuará gratuito independentemente de contribuição.
+
 ## Como contribuir
 
 1. Crie uma branch curta e focada.
@@ -420,7 +437,10 @@ Relatos de bugs ficam mais úteis quando incluem edição/versão, passos para r
 
 ## Licença
 
-O código do projeto usa uma [licença permissiva](licenses/APPLICATION_LICENSE.txt). Dependências e componentes empacotados mantêm seus próprios termos; consulte os [avisos de terceiros](licenses/THIRD_PARTY_NOTICES.md).
+O código do projeto usa a [licença MIT](LICENSE). A cópia em
+`licenses/APPLICATION_LICENSE.txt` é mantida idêntica para acompanhar os builds e o instalador.
+Dependências e componentes empacotados mantêm seus próprios termos; consulte os
+[avisos de terceiros](licenses/THIRD_PARTY_NOTICES.md).
 
 Ao redistribuir FFmpeg, yt-dlp, Deno, Qt ou qualquer outro componente, preserve os avisos aplicáveis e cumpra as obrigações da configuração efetivamente distribuída.
 

@@ -28,6 +28,7 @@ import com.mediadownloader.mobile.download.DownloadService
 import com.mediadownloader.mobile.site.AndroidSiteFileService
 import com.mediadownloader.mobile.site.SiteFile
 import com.mediadownloader.mobile.site.SiteFileKind
+import com.mediadownloader.mobile.support.SupportConfig
 import com.mediadownloader.mobile.ui.AppTab
 import com.mediadownloader.mobile.ui.ChoiceUi
 import com.mediadownloader.mobile.ui.DownloadFilter
@@ -205,6 +206,8 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             }
             is MobileUiAction.ChooseDownloadLocation -> chooseDownloadLocation(action.category)
             is MobileUiAction.ResetDownloadLocation -> resetDownloadLocation(action.category)
+            MobileUiAction.CopySupportPixPayload -> copySupportPixPayload()
+            MobileUiAction.CopySupportPixKey -> copySupportPixKey()
             is MobileUiAction.OpenLegalDocument -> updateState { it.copy(legalDocument = action.document) }
             MobileUiAction.DismissLegalDocument -> updateState { it.copy(legalDocument = null) }
             is MobileUiAction.DismissMessage -> updateState {
@@ -281,6 +284,20 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             clearAnalysis(cancelJob = true)
             updateHome { it.copy(url = url, urlError = null) }
         }
+    }
+
+    private fun copySupportPixKey() {
+        val clipboard = appContext.getSystemService(ClipboardManager::class.java)
+        clipboard?.setPrimaryClip(ClipData.newPlainText("Chave Pix", SupportConfig.PIX_KEY))
+        showMessage("Chave Pix copiada.")
+    }
+
+    private fun copySupportPixPayload() {
+        val clipboard = appContext.getSystemService(ClipboardManager::class.java)
+        clipboard?.setPrimaryClip(
+            ClipData.newPlainText("Pix Copia e Cola", SupportConfig.PIX_PAYLOAD),
+        )
+        showMessage("Pix Copia e Cola copiado.")
     }
 
     private fun generateQrCode() {
