@@ -2,7 +2,7 @@
   <img src="assets/app.svg" width="112" height="112" alt="Ícone do Media Downloader">
   <h1>Media Downloader</h1>
   <p><strong>Baixe, organize e converta vídeos, áudios, documentos e imagens sem sair do seu dispositivo.</strong></p>
-  <p>Uma experiência nativa para Windows e Android, com fila controlada, extração de arquivos de sites e opções detalhadas de formato e qualidade.</p>
+  <p>Uma experiência nativa para Windows, Linux e Android, com fila controlada, extração de arquivos de sites e opções detalhadas de formato e qualidade.</p>
 
   <p>
     <img src="https://img.shields.io/badge/vers%C3%A3o-1.2.0-2E8B57?style=flat-square" alt="Versão 1.2.0">
@@ -34,7 +34,7 @@ colar URL  →  analisar  →  escolher formato  →  adicionar à fila  →  ac
 
 O repositório contém **duas aplicações independentes**, criadas para aproveitar o melhor de cada plataforma:
 
-- **Windows:** aplicação desktop em Python, PySide6/Qt, yt-dlp, FFmpeg e Deno;
+- **Desktop (Windows e Linux):** aplicação em Python, PySide6/Qt, yt-dlp, FFmpeg e Deno;
 - **Android:** aplicação nativa em Kotlin e Jetpack Compose, com youtubedl-android, FFmpeg e integração ao MediaStore.
 
 Não existe uma WebView compartilhada entre elas: interface, engine, persistência, testes e processo de build são específicos de cada edição.
@@ -77,8 +77,8 @@ Não existe uma WebView compartilhada entre elas: interface, engine, persistênc
 | Gerador de QR Code | gerar, copiar e salvar PNG | gerar e visualizar |
 | Destino | pasta configurável | `Downloads/MediaDownloader` |
 
-As edições estáveis deste repositório são Windows e Android. Uma base Linux/AppImage está em
-desenvolvimento; ainda não há edição para Web, macOS ou iOS.
+As edições disponíveis deste repositório são Windows, Linux em formato AppImage e Android.
+Ainda não há edição para Web, macOS ou iOS.
 
 ### Plataformas de mídia
 
@@ -250,19 +250,17 @@ O build executa os testes unitários e o lint da variante antes de gerar o APK. 
 compilação local de diagnóstico, esses gates só podem ser ignorados explicitamente com
 `-SkipChecks`.
 
-### AppImage Linux (base inicial)
+### Linux (AppImage)
 
-Em uma máquina Linux com Python 3.12+, `venv` e `appimagetool` disponíveis:
+Baixe `MediaDownloader-1.2.0-x86_64.AppImage` na página de
+[Releases](https://github.com/dokyepepe/mediadown/releases/latest). Na pasta em que o arquivo
+foi salvo, conceda permissão de execução e abra o aplicativo:
 
 ```bash
-bash scripts/build_appimage.sh
+chmod +x MediaDownloader-1.2.0-x86_64.AppImage && ./MediaDownloader-1.2.0-x86_64.AppImage
 ```
 
-O script executa os testes, gera a aplicação com PyInstaller, monta o AppDir, faz um smoke
-test sem interface visível e cria `release/MediaDownloader-<versão>-<arquitetura>.AppImage`.
-Esta edição ainda está em desenvolvimento: FFmpeg e Deno são encontrados no `PATH` quando
-binários Linux não tiverem sido colocados em `resources/`. Consulte
-`DIFICULDADES_LINUX_APPIMAGE.txt` para as pendências de distribuição e compatibilidade.
+Nas próximas vezes, basta executar `./MediaDownloader-1.2.0-x86_64.AppImage`.
 
 As alterações de cada aplicação permanecem isoladas:
 
