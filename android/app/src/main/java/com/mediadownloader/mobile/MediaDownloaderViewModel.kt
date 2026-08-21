@@ -42,6 +42,7 @@ import com.mediadownloader.mobile.ui.MediaPreviewUi
 import com.mediadownloader.mobile.ui.MobileUiAction
 import com.mediadownloader.mobile.ui.MobileUiController
 import com.mediadownloader.mobile.ui.MobileUiState
+import com.mediadownloader.mobile.ui.QrCodeFileService
 import com.mediadownloader.mobile.ui.SettingsUiState
 import com.mediadownloader.mobile.ui.StorageLocationUi
 import com.mediadownloader.mobile.ui.SiteFileKindUi
@@ -56,6 +57,7 @@ import com.mediadownloader.mobile.update.YtDlpInstallOutcome
 import com.mediadownloader.mobile.update.YtDlpRuntimeStatus
 import com.mediadownloader.mobile.update.YtDlpUpdateManager
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -66,6 +68,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.io.File
 import java.util.Date
@@ -75,6 +78,7 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
     private val repository = DownloadRepository.getInstance(appContext)
     private val engine = AndroidDownloadEngine(appContext)
     private val siteFileService = AndroidSiteFileService(appContext)
+    private val qrCodeFiles = QrCodeFileService(appContext)
     private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     private val storageLocations = StorageLocationStore(appContext)
     private val analysisMutex = Mutex()
@@ -139,6 +143,9 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
                 it.copy(qrCode = it.qrCode.copy(url = action.value, urlError = null, generatedUrl = null))
             }
             MobileUiAction.GenerateQrCode -> generateQrCode()
+            MobileUiAction.OpenGeneratedQrCode -> openGeneratedQrCode()
+            MobileUiAction.SaveGeneratedQrCode -> saveGeneratedQrCode()
+            MobileUiAction.ShareGeneratedQrCode -> shareGeneratedQrCode()
             is MobileUiAction.ReceiveSharedUrl -> receiveUrl(action.value)
             is MobileUiAction.UrlChanged -> updateHome {
                 it.copy(url = action.value, urlError = null, preview = null, analysisHint = null)
@@ -320,6 +327,64 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             )
         }
     }
+
+    private fun openGeneratedQrCode() {
+        val value = generatedQrCodeValue() ?: return
+        viewModelScope.launch {
+            try {
+                val file = withContext(Dispatchers.IO) { qrCodeFiles.createShareable(value) }
+                openUri(file.uri, QR_CODE_MIME_TYPE)
+            } catch (error: Throwable) {
+                showMessage(readableError(error, "Não foi possível abrir o QR Code."))
+            }
+        }
+    }
+
+    private fun saveGeneratedQrCode() {
+        val value = generatedQrCodeValue() ?: return
+        val saveAction: () -> Unit = {
+            viewModelScope.launch {
+                try {
+                    val saved = withContext(Dispatchers.IO) { qrCodeFiles.save(value) }
+                    showMessage("QR Code salvo como ${saved.displayName}.")
+                } catch (error: Throwable) {
+                    showMessage(readableError(error, "Não foi possível salvar o QR Code."))
+                }
+            }
+            Unit
+        }
+        requestStoragePermission?.invoke(saveAction) ?: saveAction()
+    }
+
+    private fun shareGeneratedQrCode() {
+        val value = generatedQrCodeValue() ?: return
+        viewModelScope.launch {
+            try {
+                val file = withContext(Dispatchers.IO) { qrCodeFiles.createShareable(value) }
+                val uri = Uri.parse(file.uri)
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = QR_CODE_MIME_TYPE
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_TEXT, value)
+                    clipData = ClipData.newUri(appContext.contentResolver, file.displayName, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                launchIntent(
+                    Intent.createChooser(intent, "Compartilhar QR Code")
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            } catch (error: Throwable) {
+                showMessage(readableError(error, "Não foi possível compartilhar o QR Code."))
+            }
+        }
+    }
+
+    private fun generatedQrCodeValue(): String? = _state.value.qrCode.generatedUrl
+        ?.takeIf(String::isNotBlank)
+        ?: run {
+            showMessage("Gere um QR Code antes de usar esta ação.")
+            null
+        }
 
     private fun analyzeUrl() {
         val url = _state.value.home.url.trim()
@@ -1149,6 +1214,7 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
         private const val PREFERENCES_NAME = "mobile_settings"
         private const val KEY_THEME = "theme"
         private const val KEY_AUTO_UPDATE = "auto_update_ytdlp"
+        private const val QR_CODE_MIME_TYPE = "image/png"
 
         private fun List<ChoiceUi>.recommendedId(): String? =
             firstOrNull(ChoiceUi::recommended)?.id ?: firstOrNull()?.id

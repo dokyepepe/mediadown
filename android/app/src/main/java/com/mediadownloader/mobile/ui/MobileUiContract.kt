@@ -263,6 +263,9 @@ sealed interface MobileUiAction {
     data class Navigate(val tab: AppTab) : MobileUiAction
     data class QrCodeUrlChanged(val value: String) : MobileUiAction
     object GenerateQrCode : MobileUiAction
+    object OpenGeneratedQrCode : MobileUiAction
+    object SaveGeneratedQrCode : MobileUiAction
+    object ShareGeneratedQrCode : MobileUiAction
 
     /** Usada pela Activity ao receber ACTION_SEND ou ACTION_VIEW. */
     data class ReceiveSharedUrl(val value: String) : MobileUiAction
