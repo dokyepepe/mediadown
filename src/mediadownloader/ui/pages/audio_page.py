@@ -33,10 +33,11 @@ except ImportError:
     _HAS_MULTIMEDIA = False
 
 from mediadownloader.core.audio_effects import (
-    PITCH_SEMITONES, REFERENCE_TONE_FREQUENCY_HZ, SPEED_PRESETS,
+    REFERENCE_TONE_FREQUENCY_HZ, SPEED_PRESETS,
     TONE_SAMPLE_RATE, VOLUME_PRESETS, AudioEffects, AudioEffectsController,
+    add_effect_presets, add_pitch_presets, combo_effect_value,
     effects_explanations, ratio_to_semitones, render_tone_wav, semitones_note_name,
-    semitones_to_ratio, sine_wave_pcm, write_wav_file,
+    semitones_to_ratio, select_effect_preset, sine_wave_pcm, write_wav_file,
 )
 from mediadownloader.core.downloader import DownloadEngine
 from mediadownloader.core.ffmpeg_manager import FFmpegManager
@@ -50,13 +51,6 @@ from ..widgets import (
     PageHeader, PrimaryButton, SecondaryButton, VideoPreviewDialog,
     WheelSafeComboBox,
 )
-
-
-def _select_by_float(combo: WheelSafeComboBox, target: float) -> None:
-    for index in range(combo.count()):
-        if abs(float(combo.itemData(index)) - target) < 1e-4:
-            combo.setCurrentIndex(index)
-            return
 
 
 def _clamp(value: int, minimum: int, maximum: int) -> int:
@@ -396,22 +390,14 @@ class AudioPage(QWidget):
         layout.addWidget(note_label)
         return layout
 
-    @staticmethod
-    def _make_combo(accessible_name: str, presets: tuple[tuple[str, str], ...]) -> WheelSafeComboBox:
+    def _make_combo(self, accessible_name: str, presets: tuple[tuple[str, str], ...]) -> WheelSafeComboBox:
         combo = WheelSafeComboBox()
-        combo.setAccessibleName(accessible_name)
-        for value, label in presets:
-            combo.addItem(label, value)
+        add_effect_presets(combo, presets, accessible_name)
         return combo
 
     def _make_pitch_combo(self) -> WheelSafeComboBox:
         combo = WheelSafeComboBox()
-        combo.setAccessibleName("Tom em semitons")
-        for semitones in PITCH_SEMITONES:
-            ratio = semitones_to_ratio(semitones)
-            combo.addItem(f"{semitones:+d} semitons — " + (
-                "mais grave" if semitones < 0 else "mais agudo"
-            ), f"{ratio:.4f}")
+        add_pitch_presets(combo, "Tom em semitons")
         return combo
 
     # ── Controller sync ────────────────────────────────────────────────────────
@@ -423,7 +409,7 @@ class AudioPage(QWidget):
         self.pitch_slider.setValue(semitones)
         self.pitch_slider.blockSignals(False)
         self.pitch_combo.blockSignals(True)
-        _select_by_float(self.pitch_combo, effects.pitch)
+        select_effect_preset(self.pitch_combo, effects.pitch)
         self.pitch_combo.blockSignals(False)
 
         speed_pct = _clamp(round(effects.speed * 100), 50, 200)
@@ -431,7 +417,7 @@ class AudioPage(QWidget):
         self.speed_slider.setValue(speed_pct)
         self.speed_slider.blockSignals(False)
         self.speed_combo.blockSignals(True)
-        _select_by_float(self.speed_combo, effects.speed)
+        select_effect_preset(self.speed_combo, effects.speed)
         self.speed_combo.blockSignals(False)
 
         volume_pct = _clamp(round(effects.volume * 100), 5, 200)
@@ -439,7 +425,7 @@ class AudioPage(QWidget):
         self.volume_slider.setValue(volume_pct)
         self.volume_slider.blockSignals(False)
         self.volume_combo.blockSignals(True)
-        _select_by_float(self.volume_combo, effects.volume)
+        select_effect_preset(self.volume_combo, effects.volume)
         self.volume_combo.blockSignals(False)
 
         self.pitch_value.setText(f"{semitones:+d} semitons")
@@ -505,14 +491,16 @@ class AudioPage(QWidget):
 
     def _pitch_slider_changed(self, value: int) -> None:
         self.pitch_combo.blockSignals(True)
-        _select_by_float(self.pitch_combo, semitones_to_ratio(value))
+        select_effect_preset(self.pitch_combo, semitones_to_ratio(value))
         self.pitch_combo.blockSignals(False)
         self.audio_effects.set_pitch_semitones(value)
 
     def _pitch_combo_changed(self, index: int) -> None:
         if index < 0:
             return
-        ratio = float(self.pitch_combo.itemData(index))
+        if self.pitch_combo.currentData() is None:
+            return
+        ratio = combo_effect_value(self.pitch_combo)
         self.pitch_slider.blockSignals(True)
         self.pitch_slider.setValue(round(ratio_to_semitones(ratio)))
         self.pitch_slider.blockSignals(False)
@@ -521,14 +509,16 @@ class AudioPage(QWidget):
     def _speed_slider_changed(self, value: int) -> None:
         speed = value / 100
         self.speed_combo.blockSignals(True)
-        _select_by_float(self.speed_combo, speed)
+        select_effect_preset(self.speed_combo, speed)
         self.speed_combo.blockSignals(False)
         self.audio_effects.set_speed(speed)
 
     def _speed_combo_changed(self, index: int) -> None:
         if index < 0:
             return
-        speed = float(self.speed_combo.itemData(index))
+        if self.speed_combo.currentData() is None:
+            return
+        speed = combo_effect_value(self.speed_combo)
         self.speed_slider.blockSignals(True)
         self.speed_slider.setValue(round(speed * 100))
         self.speed_slider.blockSignals(False)
@@ -537,14 +527,16 @@ class AudioPage(QWidget):
     def _volume_slider_changed(self, value: int) -> None:
         volume = value / 100
         self.volume_combo.blockSignals(True)
-        _select_by_float(self.volume_combo, volume)
+        select_effect_preset(self.volume_combo, volume)
         self.volume_combo.blockSignals(False)
         self.audio_effects.set_volume(volume)
 
     def _volume_combo_changed(self, index: int) -> None:
         if index < 0:
             return
-        volume = float(self.volume_combo.itemData(index))
+        if self.volume_combo.currentData() is None:
+            return
+        volume = combo_effect_value(self.volume_combo)
         self.volume_slider.blockSignals(True)
         self.volume_slider.setValue(round(volume * 100))
         self.volume_slider.blockSignals(False)

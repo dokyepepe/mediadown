@@ -308,8 +308,7 @@ class MainWindow(QMainWindow):
             if answer != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return
-            self.queue.cancel_all()
-            self.site_files_page.cancel_downloads()
-        self.queue.pool.waitForDone(2500)
+        self.queue.cancel_all()
         self.site_files_page.cancel_downloads()
+        self.queue.pool.waitForDone(2500)
         event.accept()

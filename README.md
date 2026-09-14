@@ -107,11 +107,11 @@ Não existe uma WebView compartilhada entre elas: interface, engine, persistênc
 | Playlists | seleção ou playlist completa | playlist completa |
 | Processamento da fila | até 5 downloads concorrentes | persistente, em serviço de primeiro plano |
 | Histórico local | pesquisável e filtrável | abrir e compartilhar |
-| Cookies e proxy | ✅ | — |
+| Cookies e proxy | ✅ | cookies ✅ · proxy — |
 | Template de nome de arquivo | ✅ | — |
 | Metadados do Spotify | ✅ | — |
 | Gerador de QR Code | gerar, copiar e salvar PNG | gerar e visualizar |
-| Destino | pasta configurável | `Downloads/MediaDownloader` |
+| Destino | pasta configurável | pastas configuráveis por categoria |
 
 As edições disponíveis deste repositório são Windows, Linux em formato AppImage e Android.
 Ainda não há edição para Web, macOS ou iOS.
@@ -183,7 +183,7 @@ O script cria `.venv/`, instala `requirements-dev.txt`, gera os ícones e manté
 **Requisitos**
 
 - Windows e PowerShell;
-- JDK 17 instalado em `C:\Program Files\Java\jdk-17`;
+- JDK 17 (encontrado em `.android-jdk\` ou via `JAVA_HOME`);
 - conexão com a internet na primeira configuração.
 
 O setup instala Android SDK 36, Build Tools e NDK 26.3 em `.android-sdk/`, sem depender de uma instalação global do Android Studio. O NDK fornece a `libc++_shared.so` exigida pelo FFmpeg embutido do `youtubedl-android`:
@@ -193,7 +193,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup_android.ps1 -AcceptSdkL
 powershell -ExecutionPolicy Bypass -File .\scripts\build_android.ps1 -Variant Debug
 ```
 
-Os scripts usam o JDK 17 indicado por `JAVA_HOME`. Se ele estiver em outro local,
+Os scripts usam o JDK 17 indicado por `JAVA_HOME`; se o repositório tiver uma cópia local em
+`.android-jdk\` (ex.: `jdk-17.0.20.1+1`), ela tem prioridade. Para usar outro local,
 informe `-JavaHome C:\caminho\para\jdk-17` ao executar qualquer um dos dois scripts.
 
 O APK de desenvolvimento será copiado para:
@@ -205,7 +206,7 @@ release/MediaDownloader-android-debug.apk
 SHA-256 do artefato atual:
 
 ```text
-e96143870e72bfc2ff6cb2bb024cec862b4f2c7fb2b3bc7742478fdfb9ad4786
+30fe2c4e68acc3b935cc2c6892d8e0bb984c410c763d6c5c1251cdcb01696d94
 ```
 
 Para instalar no aparelho conectado por USB:

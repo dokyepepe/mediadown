@@ -19,6 +19,7 @@ import com.mediadownloader.mobile.update.YtDlpRuntimeGate
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
@@ -260,7 +261,13 @@ class AndroidDownloadEngine(context: Context) {
         for (file in stagedFiles) {
             checkCancelled(item.id)
             if (file.extension.lowercase() !in APPLY_EFFECTS_EXTENSIONS) continue
-            val pending = File(file.parentFile, "${file.name}.effectors")
+            // The FFmpeg output must keep a real container extension (it infers
+            // the muxer from the output name), so the pending file mirrors the
+            // source extension instead of a dot-suffix like ".effectors".
+            val pending = File(
+                file.parentFile,
+                "${file.nameWithoutExtension}.fx.${file.extension}",
+            )
             try {
                 effectProcessor.applyEffects(
                     sourceFile = file,
@@ -271,10 +278,15 @@ class AndroidDownloadEngine(context: Context) {
                 )
             } catch (error: DownloadCancelledException) {
                 throw error
+            } catch (error: CancellationException) {
+                // A cancelled job must stay cancelled, not become a "failure".
+                throw error
             } catch (error: Throwable) {
                 pending.delete()
+                val detail = error.message?.trim()?.takeIf(String::isNotBlank)
+                    ?: error.javaClass.simpleName
                 throw IOException(
-                    "Não foi possível aplicar os efeitos de áudio ao arquivo baixado.",
+                    "Não foi possível aplicar os efeitos de áudio: $detail",
                     error,
                 )
             }
@@ -318,6 +330,8 @@ class AndroidDownloadEngine(context: Context) {
         val isPlaylist = entries != null || json.optNullableString("_type") == "playlist"
         val itemCount = json.optPositiveInt("playlist_count")
             ?: entries?.length()?.takeIf { it > 0 }
+        val manualSubtitleLangs = json.optJSONObject("subtitles")?.length() ?: 0
+        val autoSubtitleLangs = json.optJSONObject("automatic_captions")?.length() ?: 0
         return MediaAnalysis(
             sourceUrl = sourceUrl,
             title = json.optNullableString("title") ?: sourceUrl,
@@ -330,6 +344,7 @@ class AndroidDownloadEngine(context: Context) {
             isPlaylist = isPlaylist,
             playlistItemCount = itemCount,
             formats = formats,
+            supportsSubtitles = manualSubtitleLangs > 0 || autoSubtitleLangs > 0 || isPlaylist,
         )
     }
 

@@ -2,6 +2,7 @@ package com.mediadownloader.mobile.preview
 
 import android.content.Context
 import com.mediadownloader.mobile.data.AudioEffects
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
@@ -71,6 +72,10 @@ class PreviewRenderer(
                     return@withContext outputFile
                 }
                 lastError = readableFfmpegError(log)
+            } catch (error: CancellationException) {
+                // "Parar prévia" mid-render must not surface as a player error.
+                process.destroy()
+                throw error
             } catch (error: Throwable) {
                 process.destroy()
                 lastError = error.message ?: error.javaClass.simpleName
@@ -109,12 +114,28 @@ class PreviewRenderer(
             add("-y")
             add("-i")
             add(sourceFile.absolutePath)
-            add("-map")
-            add("0")
             if (includeVideo) {
+                add("-map")
+                add("0:v:0?")
+                add("-map")
+                add("0:a:0?")
+                add("-c:v")
+                add("copy")
+            } else if (sourceFile.extension.equals("mp3", ignoreCase = true)) {
+                // The MP3 muxer cannot store the attached-picture video stream
+                // yt-dlp embeds, so keep only the audio stream.
+                add("-map")
+                add("0:a:0")
+            } else {
+                add("-map")
+                add("0:a:0")
+                add("-map")
+                add("0:v?")
                 add("-c:v")
                 add("copy")
             }
+            add("-map_metadata")
+            add("0")
             add("-af")
             add(filters)
             addAll(audioEncoding(sourceFile.extension, audioBitrateKbps))

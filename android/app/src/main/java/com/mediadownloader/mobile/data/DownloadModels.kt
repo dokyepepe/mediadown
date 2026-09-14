@@ -187,6 +187,7 @@ data class MediaAnalysis(
     val isPlaylist: Boolean,
     val playlistItemCount: Int?,
     val formats: List<MediaFormat>,
+    val supportsSubtitles: Boolean = true,
 )
 
 data class PublishedFile(

@@ -118,7 +118,9 @@ fun generatedVersionCode(): Int {
     val now = System.currentTimeMillis()
     val daysSince2020 = (now / 86_400_000L).toInt() - 18_262
     val minuteOfDay = ((now % 86_400_000L) / 60_000L).toInt()
-    return 10_000 + daysSince2020 * 100 + minuteOfDay
+    // `days*1440 + minuteOfDay` grows with every minute; `days*100 + minuteOfDay`
+    // would regress whenever a new day started late in the day.
+    return 10_000 + daysSince2020 * 1440 + minuteOfDay
 }
 
 dependencies {

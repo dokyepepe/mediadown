@@ -35,8 +35,9 @@ except ImportError:
     _HAS_MULTIMEDIA = False
 
 from mediadownloader.core.audio_effects import (
-    PITCH_SEMITONES, SPEED_PRESETS, VOLUME_PRESETS, AudioEffects,
-    AudioEffectsController, semitones_to_ratio,
+    SPEED_PRESETS, VOLUME_PRESETS, AudioEffects, AudioEffectsController,
+    add_effect_presets, add_pitch_presets, combo_effect_value,
+    select_effect_preset,
 )
 from mediadownloader.core.ffmpeg_manager import FFmpegManager
 from mediadownloader.core.workers import PreviewRenderWorker
@@ -44,13 +45,6 @@ from mediadownloader.models import PreviewSource
 
 from ..icons import set_button_icon
 from ..widgets import PrimaryButton, SecondaryButton, ThemedIconLabel, WheelSafeComboBox
-
-
-def _select_by_float(combo: WheelSafeComboBox, target: float) -> None:
-    for index in range(combo.count()):
-        if abs(float(combo.itemData(index)) - target) < 1e-4:
-            combo.setCurrentIndex(index)
-            return
 
 
 def _guarded(slot):
@@ -120,9 +114,9 @@ class VideoPreviewDialog(QDialog):
         self._debounce.setInterval(700)
         self._debounce.timeout.connect(self._start_render)
         self._build_ui()
-        _select_by_float(self.speed_combo, speed)
-        _select_by_float(self.pitch_combo, pitch)
-        _select_by_float(self.volume_combo, volume)
+        select_effect_preset(self.speed_combo, speed)
+        select_effect_preset(self.pitch_combo, pitch)
+        select_effect_preset(self.volume_combo, volume)
         if not _HAS_MULTIMEDIA:
             self._set_status("Módulo multimídia indisponível. Atualize o PySide6.")
 
@@ -193,12 +187,15 @@ class VideoPreviewDialog(QDialog):
             effects_grid.setContentsMargins(12, 10, 12, 10)
             effects_grid.setSpacing(8)
 
-            self.speed_combo = self._make_combo(
-                "Velocidade na pré-visualização", SPEED_PRESETS
+            self.speed_combo = WheelSafeComboBox()
+            add_effect_presets(
+                self.speed_combo, SPEED_PRESETS, "Velocidade na pré-visualização"
             )
-            self.pitch_combo = self._make_pitch_combo()
-            self.volume_combo = self._make_combo(
-                "Volume na pré-visualização", VOLUME_PRESETS
+            self.pitch_combo = WheelSafeComboBox()
+            add_pitch_presets(self.pitch_combo, "Tom na pré-visualização")
+            self.volume_combo = WheelSafeComboBox()
+            add_effect_presets(
+                self.volume_combo, VOLUME_PRESETS, "Volume na pré-visualização"
             )
 
             self.effect_status = QLabel("Efeitos seguem as Configurações.")
@@ -253,28 +250,6 @@ class VideoPreviewDialog(QDialog):
         footer.addWidget(close)
         root.addLayout(footer)
 
-    @staticmethod
-    def _make_combo(accessible_name: str, presets: tuple[tuple[str, str], ...]) -> WheelSafeComboBox:
-        combo = WheelSafeComboBox()
-        combo.setAccessibleName(accessible_name)
-        for value, label in presets:
-            combo.addItem(label, value)
-        return combo
-
-    def _make_pitch_combo(self) -> WheelSafeComboBox:
-        combo = WheelSafeComboBox()
-        combo.setAccessibleName("Tom na pré-visualização")
-        for semitones in PITCH_SEMITONES:
-            ratio = semitones_to_ratio(semitones)
-            if semitones == 0:
-                label = "0 semitons — normal"
-            else:
-                label = f"{semitones:+d} semitons — " + (
-                    "mais grave" if semitones < 0 else "mais agudo"
-                )
-            combo.addItem(label, f"{ratio:.4f}")
-        return combo
-
     def load_source(self, source: PreviewSource) -> None:
         """Load a resolved :class:`PreviewSource` (local or streamed)."""
         self._source = source
@@ -301,15 +276,15 @@ class VideoPreviewDialog(QDialog):
             (self.volume_combo, volume),
         ):
             combo.blockSignals(True)
-            _select_by_float(combo, value)
+            select_effect_preset(combo, value)
             combo.blockSignals(False)
         self._effect_changed()
 
     def _current_effects(self) -> AudioEffects:
         return AudioEffects(
-            speed=float(self.speed_combo.currentData()),
-            pitch=float(self.pitch_combo.currentData()),
-            volume=float(self.volume_combo.currentData()),
+            speed=combo_effect_value(self.speed_combo),
+            pitch=combo_effect_value(self.pitch_combo),
+            volume=combo_effect_value(self.volume_combo),
         )
 
     @_guarded
@@ -386,7 +361,7 @@ class VideoPreviewDialog(QDialog):
     def _apply_volume_live(self) -> None:
         if self.audio_output is None:
             return
-        value = float(self.volume_combo.currentData())
+        value = combo_effect_value(self.volume_combo)
         self.audio_output.setVolume(max(0.0, min(1.0, value)))
 
     def _cancel_render(self) -> None:

@@ -62,9 +62,26 @@ def test_speed_slider_syncs_combo_and_controller(qtbot) -> None:
 
 def test_volume_combo_syncs_slider(qtbot) -> None:
     page, controller = _make_page(qtbot)
-    page.volume_combo.setCurrentIndex(page.volume_combo.count() - 1)
+    page.volume_combo.setCurrentIndex(page.volume_combo.count() - 2)
     assert page.volume_slider.value() == 200
     assert controller.effects.volume == 2.0
+
+
+def test_fine_grained_speed_uses_custom_slot(qtbot) -> None:
+    page, controller = _make_page(qtbot)
+    page.speed_slider.setValue(130)
+    assert controller.effects.speed == 1.3
+    assert "personalizado" in page.speed_combo.currentText().lower()
+    page.audio_effects.set_effects(AudioEffects(speed=1.3, pitch=1.0, volume=1.0))
+    assert float(page.speed_combo.currentData()) == 1.3
+
+
+def test_custom_slot_empty_selection_keeps_value(qtbot) -> None:
+    page, controller = _make_page(qtbot)
+    empty_custom = page.volume_combo.count() - 1
+    page._volume_combo_changed(empty_custom)
+    assert controller.effects.volume == 1.0
+    assert page.volume_slider.value() == 100
 
 
 def test_pitch_readouts_show_direction_and_note(qtbot) -> None:

@@ -2,6 +2,8 @@ from mediadownloader.core.downloader import (
     DownloadEngine,
     _ProgressReporter,
     _first_stream,
+    _is_container_remux_failure,
+    _predict_merged_extension,
 )
 
 DASH_INFO = {
@@ -105,4 +107,42 @@ def test_normalize_does_not_retain_large_raw_extractor_response() -> None:
 
     assert len(media.entries) == 500
     assert media.raw == {}
+
+
+def test_predict_merged_extension_adds_no_extension_for_empty() -> None:
+    assert _predict_merged_extension([{}]) == "mkv"
+    assert _predict_merged_extension([]) == "mkv"
+
+
+def test_predict_merged_extension_keeps_family_container() -> None:
+    mp4 = [{"ext": "mp4", "vcodec": "avc1"}, {"ext": "m4a", "acodec": "mp4a"}]
+    webm = [{"ext": "webm", "vcodec": "vp9"}, {"ext": "opus", "acodec": "opus"}]
+    assert _predict_merged_extension(mp4) == "mp4"
+    assert _predict_merged_extension(webm) == "webm"
+
+
+def test_predict_merged_extension_falls_back_to_mkv_for_mixed_codecs() -> None:
+    mixed = [{"ext": "mp4", "vcodec": "avc1"}, {"ext": "opus", "acodec": "opus"}]
+    assert _predict_merged_extension(mixed) == "mkv"
+
+
+def test_container_remux_failure_detection() -> None:
+    from yt_dlp.utils import DownloadError
+
+    assert _is_container_remux_failure(
+        DownloadError(
+            "ERROR: Postprocessing: Failed to merge formats into webm. "
+            "ffmpeg only supports VP8 and VP9 in webm"
+        )
+    )
+    assert _is_container_remux_failure(
+        DownloadError("ERROR: Postprocessing: [webm] only VP8 and VP9 are supported")
+    )
+    assert _is_container_remux_failure(
+        DownloadError("ERROR: Postprocessing: The requested container is incompatible with the video")
+    )
+    assert not _is_container_remux_failure(
+        DownloadError("ERROR: Unable to download webpage: 403 Forbidden")
+    )
+    assert not _is_container_remux_failure(DownloadError("ERROR: Video unavailable"))
 

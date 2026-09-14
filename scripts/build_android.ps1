@@ -12,10 +12,13 @@ $androidRoot = Join-Path $repoRoot "android"
 $gradleWrapper = Join-Path $androidRoot "gradlew.bat"
 $sdkRoot = Join-Path $repoRoot ".android-sdk"
 $adb = Join-Path $sdkRoot "platform-tools\adb.exe"
-$defaultJavaHome = "C:\Program Files\Java\jdk-17"
+$repoJdk = Get-ChildItem -LiteralPath (Join-Path $repoRoot ".android-jdk") -Directory -ErrorAction SilentlyContinue |
+    Where-Object { Join-Path $_.FullName "bin\java.exe" | Test-Path -LiteralPath } |
+    Select-Object -First 1
+$defaultJavaHome = if ($repoJdk) { $repoJdk.FullName } else { "C:\Program Files\Java\jdk-17" }
 $resolvedJavaHome = if ($JavaHome) { $JavaHome } else { $defaultJavaHome }
 if (-not (Test-Path -LiteralPath (Join-Path $resolvedJavaHome "bin\java.exe"))) {
-    throw "JDK 17 ausente em $resolvedJavaHome. Informe o caminho com -JavaHome ou JAVA_HOME."
+    throw "JDK 17 ausente em $resolvedJavaHome. Forneça o caminho com -JavaHome ou JAVA_HOME."
 }
 $env:JAVA_HOME = (Resolve-Path -LiteralPath $resolvedJavaHome).Path
 $env:ANDROID_HOME = $sdkRoot

@@ -74,6 +74,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -171,6 +172,8 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             is MobileUiAction.ReceiveSharedUrl -> receiveUrl(action.value)
             is MobileUiAction.UrlChanged -> {
                 stopAudioPreview()
+                analysisJob?.cancel()
+                currentAnalysis = null
                 updateHome {
                     it.copy(
                         url = action.value,
@@ -179,10 +182,8 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
                         analysisHint = null,
                         audioPreviewError = null,
                         previewUsesVideo = true,
+                        isAnalyzing = false,
                     )
-                }.also {
-                    analysisJob?.cancel()
-                    currentAnalysis = null
                 }
             }
             MobileUiAction.PasteUrl -> pasteUrl()
@@ -543,6 +544,10 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
                             analysisHint = null,
                         )
                     }
+                } finally {
+                    // A cancelled analysis would otherwise leave the flag stuck on,
+                    // permanently disabling the Analyze/Download buttons.
+                    updateHome { it.copy(isAnalyzing = false, analysisHint = null) }
                 }
             }
         }
@@ -584,6 +589,11 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
                         includeVideo = includeVideo,
                         startSeconds = 0f,
                     )
+                }
+                if (!isActive) {
+                    // "Parar prévia" foi acionado durante a geração do clip;
+                    // não inicie a reprodução de um cancelamento atrasado.
+                    return@launch
                 }
                 previewPlayer.play(
                     file = file,
@@ -1322,7 +1332,7 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             playlistItemCount = playlistItemCount,
             supportsVideo = videoFormats.isNotEmpty() || isPlaylist,
             supportsAudio = audioOnlyFormats.isNotEmpty() || formats.any(MediaFormat::hasAudio) || isPlaylist,
-            supportsSubtitles = true,
+            supportsSubtitles = supportsSubtitles,
             videoQualities = buildList {
                 add(ChoiceUi("best", "Melhor disponível", "Escolhe a melhor combinação de vídeo e áudio.", true))
                 heights.filter { it <= 2160 }.forEach { height ->

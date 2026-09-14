@@ -58,6 +58,49 @@ def _first_stream(
     return None
 
 
+_CONTAINER_REMUX_MARKERS = (
+    "failed to merge formats",
+    "failed to remux",
+    "could not be remuxed",
+    "only vp8 and vp9 are supported",
+    "muxer does not exist",
+    "incompatible",
+    "does not support",
+    "not compatible",
+)
+
+
+_MERGE_MP4_EXTS = frozenset({"3gp", "m4a", "m4v", "mov", "mp4"})
+_MERGE_WEBM_EXTS = frozenset({"opus", "webm"})
+
+
+def _predict_merged_extension(formats: list[dict[str, Any]]) -> str:
+    """Best-effort container yt-dlp will pick for merged split-stream requests.
+
+    Mirrors yt-dlp's default merge behavior: same-family codecs keep their
+    container (mp4/webm), anything mixed falls back to Matroska (mkv).
+    """
+    exts = {str(fmt.get("ext") or "").lower() for fmt in formats if fmt.get("ext")}
+    if not exts:
+        return "mkv"
+    if exts <= _MERGE_MP4_EXTS:
+        return "mp4"
+    if exts <= _MERGE_WEBM_EXTS:
+        return "webm"
+    return "mkv"
+
+
+def _is_container_remux_failure(error: Exception) -> bool:
+    """Recognize yt-dlp/FFmpeg errors caused by forcing an incompatible container.
+
+    Used to retry a download without ``merge_output_format`` when the selected
+    streams cannot be muxed into the container the user requested (e.g. h264
+    video or AAC audio into WebM).
+    """
+    text = " ".join(str(argument) for argument in error.args).lower()
+    return any(marker in text for marker in _CONTAINER_REMUX_MARKERS)
+
+
 class DownloadCancelled(Exception):
     pass
 
@@ -494,8 +537,14 @@ class DownloadEngine:
         audio_postprocessor_args = FormatManager.audio_postprocessor_args(options)
         if audio_postprocessor_args:
             ydl_options["postprocessor_args"] = audio_postprocessor_args
-        if options.video_format in {"mp4", "mkv", "webm"} and options.media_type == MediaType.VIDEO:
-            ydl_options["merge_output_format"] = options.video_format
+        forced_container = (
+            options.video_format
+            if options.video_format in {"mp4", "mkv", "webm"}
+            and options.media_type == MediaType.VIDEO
+            else None
+        )
+        if forced_container:
+            ydl_options["merge_output_format"] = forced_container
         if self.ffmpeg.available:
             ydl_options["ffmpeg_location"] = self.ffmpeg.location()
         if options.proxy:
@@ -507,7 +556,8 @@ class DownloadEngine:
         if options.subtitle_mode != "none":
             ydl_options["writesubtitles"] = True
             ydl_options["writeautomaticsub"] = True
-            ydl_options["subtitleslangs"] = [options.subtitle_language] if options.subtitle_language != "auto" else ["all"]
+            if options.subtitle_language != "auto":
+                ydl_options["subtitleslangs"] = [options.subtitle_language]
             ydl_options["embedsubtitles"] = options.subtitle_mode == "embed"
 
         if options.duplicate_policy in {"rename", "skip"}:
@@ -522,14 +572,7 @@ class DownloadEngine:
             reporter.emit(
                 {"status": DownloadStatus.PREPARING.value, "progress": 0.0}, force=True
             )
-            with yt_dlp.YoutubeDL(ydl_options) as ydl:
-                result = ydl.extract_info(item.url, download=True)
-                if result:
-                    prepared = ydl.prepare_filename(result)
-                    final_filename[:] = [str(prepared)]
-                    requested = result.get("requested_downloads") or []
-                    if requested and requested[-1].get("filepath"):
-                        final_filename[:] = [str(requested[-1]["filepath"])]
+            self._ytdlp_download(item, ydl_options, final_filename)
             if cancel_event.is_set():
                 raise DownloadCancelled()
             return self._locate_final_file(final_filename[-1] if final_filename else "", options)
@@ -538,6 +581,31 @@ class DownloadEngine:
         except DownloadError as error:
             if cancel_event.is_set():
                 raise DownloadCancelled() from error
+            if forced_container is not None and _is_container_remux_failure(error):
+                LOGGER.warning(
+                    "Remux para %s incompatível com as mídias de %s; "
+                    "repetindo sem forçar o contêiner.",
+                    forced_container,
+                    item.id,
+                )
+                fallback_options = dict(ydl_options)
+                fallback_options.pop("merge_output_format", None)
+                try:
+                    self._ytdlp_download(item, fallback_options, final_filename)
+                except DownloadCancelled:
+                    raise
+                except Exception as retry_error:
+                    if cancel_event.is_set():
+                        raise DownloadCancelled() from retry_error
+                    LOGGER.exception(
+                        "Tentativa sem forçar contêiner falhou para %s", item.id
+                    )
+                    raise classify_error(retry_error) from retry_error
+                if cancel_event.is_set():
+                    raise DownloadCancelled()
+                return self._locate_final_file(
+                    final_filename[-1] if final_filename else "", options
+                )
             LOGGER.exception("yt-dlp falhou no download %s", item.id)
             raise classify_error(error) from error
         except FriendlyError:
@@ -547,6 +615,22 @@ class DownloadEngine:
                 raise DownloadCancelled() from error
             LOGGER.exception("Falha no download %s", item.id)
             raise classify_error(error) from error
+
+    @staticmethod
+    def _ytdlp_download(
+        item: DownloadItem,
+        ydl_options: dict[str, Any],
+        final_filename: list[str],
+    ) -> None:
+        """Run the yt-dlp extraction and record the produced file path."""
+        with yt_dlp.YoutubeDL(ydl_options) as ydl:
+            result = ydl.extract_info(item.url, download=True)
+            if result:
+                prepared = ydl.prepare_filename(result)
+                final_filename[:] = [str(prepared)]
+                requested = result.get("requested_downloads") or []
+                if requested and requested[-1].get("filepath"):
+                    final_filename[:] = [str(requested[-1]["filepath"])]
 
     @staticmethod
     def _needs_ffmpeg(options: DownloadOptions) -> bool:
@@ -589,13 +673,16 @@ class DownloadEngine:
             if not info:
                 return ""
             prepared = Path(probe.prepare_filename(info))
-        final_extension = (
-            options.audio_format
-            if options.media_type == MediaType.AUDIO
-            else options.video_format
-            if options.video_format != "auto"
-            else prepared.suffix.lstrip(".")
-        )
+        if options.media_type == MediaType.AUDIO:
+            final_extension = options.audio_format
+        elif options.video_format != "auto":
+            final_extension = options.video_format
+        else:
+            formats = info.get("requested_formats") or []
+            if len(formats) > 1:
+                final_extension = _predict_merged_extension(formats)
+            else:
+                final_extension = prepared.suffix.lstrip(".")
         final_path = prepared.with_suffix(f".{final_extension}")
         if not final_path.exists():
             return ""

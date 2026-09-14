@@ -16,8 +16,9 @@ from PySide6.QtWidgets import (
 )
 
 from mediadownloader.core.audio_effects import (
-    PITCH_SEMITONES, SPEED_PRESETS, VOLUME_PRESETS, AudioEffects, AudioEffectsController,
-    semitones_to_ratio,
+    SPEED_PRESETS, VOLUME_PRESETS, AudioEffects, AudioEffectsController,
+    add_effect_presets, add_pitch_presets, combo_effect_value,
+    select_effect_preset,
 )
 from mediadownloader.core.extractor import MediaExtractor
 from mediadownloader.core.workers import AnalyzeWorker, PreviewWorker
@@ -330,35 +331,26 @@ class HomePage(QWidget):
         audio_grid.addWidget(self.embed_thumbnail, 2, 0)
         audio_grid.addWidget(self.add_metadata, 2, 1)
         self.audio_speed = WheelSafeComboBox()
-        self.audio_speed.setAccessibleName("Velocidade do áudio")
+        add_effect_presets(
+            self.audio_speed, SPEED_PRESETS, "Velocidade do áudio",
+        )
         self.audio_speed.setToolTip(
             "Altera a velocidade sem mudar o tom (estrutura de tempo). "
             "Ex.: 1,5x torna o áudio 50% mais rápido."
         )
-        for value, label in SPEED_PRESETS:
-            self.audio_speed.addItem(label, value)
         self.audio_pitch = WheelSafeComboBox()
-        self.audio_pitch.setAccessibleName("Tom do áudio")
+        add_pitch_presets(self.audio_pitch, "Tom do áudio")
         self.audio_pitch.setToolTip(
             "Desloca o tom em semitons mantendo a duração. "
             "Ex.: +2 semitons deixa o áudio mais agudo."
         )
-        for semitones in PITCH_SEMITONES:
-            ratio = semitones_to_ratio(semitones)
-            if semitones == 0:
-                label = "0 semitons — normal"
-            else:
-                label = f"{semitones:+d} semitons — " + (
-                    "mais grave" if semitones < 0 else "mais agudo"
-                )
-            self.audio_pitch.addItem(label, f"{ratio:.4f}")
         self.audio_volume = WheelSafeComboBox()
-        self.audio_volume.setAccessibleName("Volume do áudio")
+        add_effect_presets(
+            self.audio_volume, VOLUME_PRESETS, "Volume do áudio",
+        )
         self.audio_volume.setToolTip(
             "Amplifica ou reduz o volume. Ex.: 150% aumenta o volume final em 50%."
         )
-        for value, label in VOLUME_PRESETS:
-            self.audio_volume.addItem(label, value)
         adjustment_tip = QLabel(
             "Tom, velocidade e volume são aplicados pelo FFmpeg na prévia e no arquivo final "
             "(requer componente)."
@@ -472,10 +464,13 @@ class HomePage(QWidget):
         self.audio_quality.setCurrentText(f"{self.settings.get('downloads.audio_quality', '192')} kbps")
 
     def _audio_effects_changed(self, *_: object) -> None:
+        if self.audio_speed.currentData() is None or self.audio_pitch.currentData() is None \
+                or self.audio_volume.currentData() is None:
+            return
         self.audio_effects.set_effects(AudioEffects(
-            speed=float(self.audio_speed.currentData()),
-            pitch=float(self.audio_pitch.currentData()),
-            volume=float(self.audio_volume.currentData()),
+            speed=combo_effect_value(self.audio_speed),
+            pitch=combo_effect_value(self.audio_pitch),
+            volume=combo_effect_value(self.audio_volume),
         ))
 
     def _refresh_audio_combos(self, *_: object) -> None:
@@ -486,10 +481,7 @@ class HomePage(QWidget):
             (self.audio_volume, effects.volume),
         ):
             combo.blockSignals(True)
-            for index in range(combo.count()):
-                if abs(float(combo.itemData(index)) - target) < 1e-4:
-                    combo.setCurrentIndex(index)
-                    break
+            select_effect_preset(combo, target)
             combo.blockSignals(False)
 
     def paste_url(self) -> None:
@@ -728,9 +720,9 @@ class HomePage(QWidget):
             title,
             ffmpeg=self.engine.download_engine.ffmpeg,
             audio_effects=self.audio_effects,
-            speed=float(self.audio_speed.currentData()),
-            pitch=float(self.audio_pitch.currentData()),
-            volume=float(self.audio_volume.currentData()),
+            speed=self.audio_effects.effects.speed,
+            pitch=self.audio_effects.effects.pitch,
+            volume=self.audio_effects.effects.volume,
             parent=self,
         )
         dialog.accepted.connect(lambda: self._update_preview_enabled())
@@ -744,9 +736,9 @@ class HomePage(QWidget):
     def _connect_preview_sync(self, dialog: VideoPreviewDialog) -> None:
         def update() -> None:
             dialog.apply_values(
-                float(self.audio_speed.currentData()),
-                float(self.audio_pitch.currentData()),
-                float(self.audio_volume.currentData()),
+                self.audio_effects.effects.speed,
+                self.audio_effects.effects.pitch,
+                self.audio_effects.effects.volume,
             )
 
         self._preview_sync_connections[dialog] = [
@@ -886,9 +878,9 @@ class HomePage(QWidget):
             video_quality=str(video_quality),
             audio_format=self.audio_format.currentText().lower(),
             audio_quality=self.audio_quality.currentText().split()[0],
-            audio_speed=float(self.audio_speed.currentData()),
-            audio_pitch=float(self.audio_pitch.currentData()),
-            audio_volume=float(self.audio_volume.currentData()),
+            audio_speed=self.audio_effects.effects.speed,
+            audio_pitch=self.audio_effects.effects.pitch,
+            audio_volume=self.audio_effects.effects.volume,
             embed_thumbnail=self.embed_thumbnail.isChecked(),
             add_metadata=self.add_metadata.isChecked(),
             subtitle_mode=str(self.subtitle_mode.currentData()),

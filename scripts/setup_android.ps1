@@ -12,10 +12,13 @@ $archivePath = Join-Path $downloadRoot "commandlinetools-win-15859902_latest.zip
 $archiveUrl = "https://dl.google.com/android/repository/commandlinetools-win-15859902_latest.zip"
 $archiveSha256 = "90ae805d20434428bffcb699c290860f19bb5f66a67e6b330067e3de801fb04a"
 $sdkManager = Join-Path $sdkRoot "cmdline-tools\latest\bin\sdkmanager.bat"
-$defaultJavaHome = "C:\Program Files\Java\jdk-17"
+$repoJdk = Get-ChildItem -LiteralPath (Join-Path $repoRoot ".android-jdk") -Directory -ErrorAction SilentlyContinue |
+    Where-Object { Join-Path $_.FullName "bin\java.exe" | Test-Path -LiteralPath } |
+    Select-Object -First 1
+$defaultJavaHome = if ($repoJdk) { $repoJdk.FullName } else { "C:\Program Files\Java\jdk-17" }
 $resolvedJavaHome = if ($JavaHome) { $JavaHome } else { $defaultJavaHome }
 if (-not (Test-Path -LiteralPath (Join-Path $resolvedJavaHome "bin\java.exe"))) {
-    throw "JDK 17 ausente em $resolvedJavaHome. Informe o caminho com -JavaHome ou JAVA_HOME."
+    throw "JDK 17 ausente em $resolvedJavaHome. Forneça o caminho com -JavaHome ou JAVA_HOME."
 }
 $env:JAVA_HOME = (Resolve-Path -LiteralPath $resolvedJavaHome).Path
 

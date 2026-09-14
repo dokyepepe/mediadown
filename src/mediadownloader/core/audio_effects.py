@@ -43,6 +43,71 @@ VOLUME_PRESETS: tuple[tuple[str, str], ...] = (
 
 PITCH_SEMITONES: tuple[int, ...] = (-3, -2, -1, 0, 1, 2, 3)
 
+CUSTOM_PRESET_LABEL = "Personalizado…"
+
+
+# ── Preset combo helpers ──────────────────────────────────────────────────────
+# Presets cover only discrete values; fine-grained values from sliders (or the
+# controller) may fall between them. Instead of silently leaving the combo on
+# the wrong preset, every effects combo ends with a "Personalizado" slot that
+# carries the exact value. Always read those combos back through
+# :func:`combo_effect_value`.
+
+def add_effect_presets(combo, presets: tuple[tuple[str, str], ...], accessible_name: str | None = None) -> None:
+    """Fill ``combo`` with numbered presets plus a trailing custom slot.
+
+    The custom slot initially carries ``None`` data; a concrete value is set
+    through :func:`select_effect_preset`, so callers must read with
+    :func:`combo_effect_value`.
+    """
+    if accessible_name:
+        combo.setAccessibleName(accessible_name)
+    for value, label in presets:
+        combo.addItem(label, float(value))
+    combo.addItem(CUSTOM_PRESET_LABEL, None)
+
+
+def add_pitch_presets(combo, accessible_name: str | None = None) -> None:
+    """Fill a "Tom" combo with the semitone presets plus a custom slot.
+
+    Same contract as :func:`add_effect_presets`.
+    """
+    if accessible_name:
+        combo.setAccessibleName(accessible_name)
+    for semitones in PITCH_SEMITONES:
+        ratio = semitones_to_ratio(semitones)
+        if semitones == 0:
+            label = "0 semitons — normal"
+        else:
+            label = f"{semitones:+d} semitons — " + (
+                "mais grave" if semitones < 0 else "mais agudo"
+            )
+        combo.addItem(label, f"{ratio:.4f}")
+    combo.addItem(CUSTOM_PRESET_LABEL, None)
+
+
+def select_effect_preset(combo, target: float) -> None:
+    """Select the preset equal to ``target``, else the custom slot carrying the
+    exact value, so the combo never silently disagrees with the controller."""
+    for index in range(combo.count()):
+        data = combo.itemData(index)
+        if data is not None and abs(float(data) - target) < 1e-4:
+            combo.setCurrentIndex(index)
+            return
+    custom = combo.count() - 1
+    combo.setItemData(custom, float(target))
+    combo.setItemText(custom, f"{target:.12g} (personalizado)")
+    combo.setCurrentIndex(custom)
+
+
+def combo_effect_value(combo, default: float = 1.0) -> float:
+    """Current combo value, falling back to ``default`` for the empty custom slot."""
+    data = combo.currentData()
+    try:
+        return float(data)
+    except (TypeError, ValueError):
+        return default
+
 
 # ── Tones and sound generation ─────────────────────────────────────────────────
 

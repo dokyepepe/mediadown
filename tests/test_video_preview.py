@@ -68,6 +68,28 @@ def test_apply_values_pushes_to_controller(qtbot) -> None:
     assert controller.effects.volume == 1.0
 
 
+def test_apply_values_fine_grained_uses_custom_slot(qtbot) -> None:
+    controller = AudioEffectsController()
+    dialog = _make_dialog(qtbot, audio_effects=controller)
+    dialog._source_url = "https://example.com/audio.mp3"
+    dialog.apply_values(1.3, 1.06, 1.3)
+    assert controller.effects.speed == 1.3
+    assert abs(controller.effects.pitch - 1.06) < 1e-4
+    assert controller.effects.volume == 1.3
+    assert "personalizado" in dialog.speed_combo.currentText().lower()
+    assert abs(float(dialog.speed_combo.currentData()) - 1.3) < 1e-4
+
+
+def test_apply_values_preset_reuses_preset_slot(qtbot) -> None:
+    controller = AudioEffectsController()
+    dialog = _make_dialog(qtbot, audio_effects=controller)
+    dialog._source_url = "https://example.com/audio.mp3"
+    dialog.apply_values(2.0, 1.0, 0.5)
+    assert controller.effects.speed == 2.0
+    assert controller.effects.volume == 0.5
+    assert "personalizado" not in dialog.volume_combo.currentText().lower()
+
+
 def test_identity_resets_controller_chain(qtbot) -> None:
     controller = AudioEffectsController()
     dialog = _make_dialog(qtbot, audio_effects=controller)
