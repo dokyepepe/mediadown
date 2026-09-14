@@ -13,6 +13,7 @@
   </p>
 
   <p>
+    <a href="#download">Download</a> •
     <a href="#visão-geral">Visão geral</a> •
     <a href="#comece-por-aqui">Começar</a> •
     <a href="#desenvolvimento">Desenvolvimento</a> •
@@ -23,6 +24,41 @@
 
 > [!IMPORTANT]
 > Use o aplicativo somente para mídias que você tem autorização para acessar e baixar. O Media Downloader não remove nem contorna DRM.
+
+## Download — aplicativos prontos
+
+Você não precisa compilar nada. Os arquivos prontos para instalar (`.exe` para Windows,
+`.apk` para Android e `.AppImage` para Linux) ficam na página de **Releases**:
+
+[Ver os lançamentos mais recentes →](https://github.com/dokyepepe/mediadown/releases/latest)
+
+| Plataforma | Arquivo | Sistema |
+| --- | --- | --- |
+| 🪟 Windows | `MediaDownloader-Setup-x64.exe` | Windows 10 e 11 x64 (instalador) |
+| 🤖 Android | `MediaDownloader-android-*.apk` | Android 8.0 ou superior |
+| 🐧 Linux | `MediaDownloader-1.2.0-x86_64.AppImage` | Linux x86_64 (sem instalação) |
+
+Os pacotes já trazem tudo o que o aplicativo precisa (yt-dlp, FFmpeg e demais componentes).
+**Você não precisa instalar Python, FFmpeg, Node ou Android SDK apenas para usar o app.**
+
+### Como instalar e abrir
+
+- **Windows:** baixe o `.exe`, execute e siga o assistente. Os atalhos no Menu Iniciar e na
+  Área de Trabalho são opcionais. Configurações e histórico ficam somente no seu computador.
+  Se o SmartScreen abrir um aviso de "editor desconhecido", escolha **Mais informações →
+  Executar assim mesmo** — é o comportamento esperado para aplicativos assinados com
+  certificado próprio, ainda não reconhecido pelo Windows.
+- **Android:** baixe o `.apk` e toque no arquivo. Se o sistema pedir, permita **instalar apps
+  desconhecidos** apenas para este arquivo (a permissão é da tela de instalação, não global).
+- **Linux:** baixe o `.AppImage`, dê permissão de execução e abra:
+
+  ```bash
+  chmod +x MediaDownloader-1.2.0-x86_64.AppImage && ./MediaDownloader-1.2.0-x86_64.AppImage
+  ```
+
+> [!NOTE]
+> Correções e novidades chegam primeiro em **Releases**. Ao atualizar, o instalador/desinstalador
+> pergunta se você quer manter ou apagar suas configurações e histórico.
 
 ## Visão geral
 
@@ -88,6 +124,8 @@ A cobertura acompanha os extractors disponíveis no **yt-dlp**. Entre as platafo
 > Sites mudam com frequência. Uma plataforma listada pode exigir atualização do yt-dlp, autenticação legítima ou cookies do próprio usuário. Compatibilidade com um site não significa permissão para baixar qualquer conteúdo dele.
 
 ## Comece por aqui
+
+Já instalou o aplicativo (seção **Download**)? Então basta colar um link e seguir o passo a passo:
 
 ### Usando o aplicativo
 
@@ -162,6 +200,12 @@ O APK de desenvolvimento será copiado para:
 
 ```text
 release/MediaDownloader-android-debug.apk
+```
+
+SHA-256 do artefato atual:
+
+```text
+6cd85cdd04483a7b2cea1bfc74a78cb933c0ed30aa7839577a5774015661d676
 ```
 
 Para instalar no aparelho conectado por USB:
@@ -389,7 +433,7 @@ No Windows, os detalhes técnicos ficam em `app.log`, no diretório retornado po
 - o tamanho final é estimado quando a plataforma não informa o total;
 - MP4 pode exigir remux e algumas combinações dependem do que a origem disponibiliza;
 - importação de cookies varia conforme as permissões e mecanismos do navegador;
-- executáveis e instaladores locais não recebem assinatura digital automaticamente;
+- executáveis e instaladores locais recebem assinatura Authenticode (certificado próprio) ao rodar `sign_build.ps1`; sem isso, o SmartScreen/antivírus pode sinalizar falso positivo;
 - somente o yt-dlp possui atualização controlada no app; a aplicação completa não tem auto-update;
 - a edição Android usa um destino fixo no MediaStore e processa a fila por serviço em primeiro plano;
 - o Spotify fornece apenas metadados, limitado aos primeiros 20 itens de playlists autorizadas.
@@ -400,9 +444,11 @@ A versão desktop tem uma única fonte em `src/mediadownloader/version.py`; o bu
 
 Antes de publicar:
 
+- gere o instalador `.exe`, o `.apk` e o `.AppImage` e publique os três na página de
+  [Releases](https://github.com/dokyepepe/mediadown/releases/latest) do GitHub, com a
+  descrição das novidades e o SHA-256 de cada artefato;
 - mantenha as versões das duas edições alinhadas quando a release incluir ambas;
 - execute testes unitários, smoke test e um download manual autorizado;
-- gere e confira o SHA-256 dos artefatos;
 - use assinatura Authenticode no Windows e uma keystore de release no Android;
 - preserve avisos e licenças de todos os componentes empacotados.
 

@@ -168,6 +168,7 @@ def apply_theme(app: QApplication, preference: str = "system") -> None:
         QLabel#PageTitle {{ font-size: 22pt; font-weight: 700; letter-spacing: -0.3px; }}
         QLabel#PageSubtitle {{ color: {c['muted']}; font-size: 10.5pt; }}
         QLabel#Muted {{ color: {c['muted']}; }}
+        QLabel#MonoBlock {{ color: {c['muted']}; font-family: Consolas, monospace; font-size: 8.5pt; }}
         QLabel#SectionTitle {{ font-size: 12pt; font-weight: 650; }}
         QLabel#SectionEyebrow, QLabel#Eyebrow {{
             color: {c['primary']}; font-size: 8.5pt; font-weight: 750; letter-spacing: 1px;
@@ -183,6 +184,7 @@ def apply_theme(app: QApplication, preference: str = "system") -> None:
         QLabel#HeroSubtitle {{ color: {c['muted']}; font-size: 10.5pt; }}
         QLabel#BrandCaption {{ color: {c['primary']}; font-size: 7pt; font-weight: 750; letter-spacing: .8px; }}
         QLabel#Metric {{ color: {c['primary']}; font-size: 18pt; font-weight: 700; }}
+        QLabel#AudioSummary {{ color: {c['primary']}; font-size: 13pt; font-weight: 650; }}
         QLabel#TintedIcon, QLabel#StepIcon {{
             background: {c['selection']}; border: 1px solid {c['border']}; border-radius: 12px;
         }}

@@ -8,10 +8,16 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.core.content.FileProvider
+import androidx.media3.exoplayer.ExoPlayer
+import com.mediadownloader.mobile.data.AudioEffects
 import com.mediadownloader.mobile.data.AudioFormat
+import com.mediadownloader.mobile.data.CookieCheckUi
+import com.mediadownloader.mobile.data.CookieDiagnostics
+import com.mediadownloader.mobile.data.CookieStore
 import com.mediadownloader.mobile.data.DownloadItem
 import com.mediadownloader.mobile.data.DownloadOptions
 import com.mediadownloader.mobile.data.DownloadRepository
@@ -20,11 +26,14 @@ import com.mediadownloader.mobile.data.HistoryItem
 import com.mediadownloader.mobile.data.MediaAnalysis
 import com.mediadownloader.mobile.data.MediaFormat
 import com.mediadownloader.mobile.data.MediaType
+import com.mediadownloader.mobile.data.PreviewSourceResolver
 import com.mediadownloader.mobile.data.StorageCategory
 import com.mediadownloader.mobile.data.StorageLocationStore
 import com.mediadownloader.mobile.data.VideoContainer
 import com.mediadownloader.mobile.download.AndroidDownloadEngine
 import com.mediadownloader.mobile.download.DownloadService
+import com.mediadownloader.mobile.preview.PreviewPlayer
+import com.mediadownloader.mobile.preview.PreviewRenderer
 import com.mediadownloader.mobile.site.AndroidSiteFileService
 import com.mediadownloader.mobile.site.SiteFile
 import com.mediadownloader.mobile.site.SiteFileKind
@@ -71,6 +80,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.io.File
+import java.io.IOException
 import java.util.Date
 
 class MediaDownloaderViewModel(application: Application) : AndroidViewModel(application), MobileUiController {
@@ -81,6 +91,7 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
     private val qrCodeFiles = QrCodeFileService(appContext)
     private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     private val storageLocations = StorageLocationStore(appContext)
+    private val cookieStore = CookieStore(appContext)
     private val analysisMutex = Mutex()
     private val ytDlpUpdateManager = (application as? MediaDownloaderApplication)
         ?.ytDlpUpdateManager
@@ -97,6 +108,7 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
                 previousYtDlpVersion = initialYtDlpStatus.previousVersion,
                 canRollbackYtDlp = initialYtDlpStatus.canRollback,
                 storageLocations = storageLocationUi(),
+                cookieFileName = cookieStore.label.takeIf(String::isNotBlank),
             ),
         ),
     )
@@ -111,6 +123,13 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
     private var pendingStorageAction: (() -> Unit)? = null
     private var requestDownloadLocation: (() -> Unit)? = null
     private var pendingDownloadLocation: StorageCategory? = null
+    private var requestCookieFile: (() -> Unit)? = null
+    private val previewRenderer = PreviewRenderer(appContext)
+    private val previewPlayer = PreviewPlayer(appContext)
+    private var audioPreviewJob: Job? = null
+
+    override val previewExoPlayer: ExoPlayer?
+        get() = previewPlayer.player
 
     init {
         viewModelScope.launch {
@@ -134,6 +153,9 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
                 checkYtDlpUpdate(showResultMessage = false)
             }
         }
+        viewModelScope.launch {
+            refreshCookieDiagnostics()
+        }
     }
 
     override fun onAction(action: MobileUiAction) {
@@ -147,11 +169,21 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             MobileUiAction.SaveGeneratedQrCode -> saveGeneratedQrCode()
             MobileUiAction.ShareGeneratedQrCode -> shareGeneratedQrCode()
             is MobileUiAction.ReceiveSharedUrl -> receiveUrl(action.value)
-            is MobileUiAction.UrlChanged -> updateHome {
-                it.copy(url = action.value, urlError = null, preview = null, analysisHint = null)
-            }.also {
-                analysisJob?.cancel()
-                currentAnalysis = null
+            is MobileUiAction.UrlChanged -> {
+                stopAudioPreview()
+                updateHome {
+                    it.copy(
+                        url = action.value,
+                        urlError = null,
+                        preview = null,
+                        analysisHint = null,
+                        audioPreviewError = null,
+                        previewUsesVideo = true,
+                    )
+                }.also {
+                    analysisJob?.cancel()
+                    currentAnalysis = null
+                }
             }
             MobileUiAction.PasteUrl -> pasteUrl()
             MobileUiAction.AnalyzeUrl -> analyzeUrl()
@@ -161,6 +193,18 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             is MobileUiAction.SelectFormat -> updateHome { it.copy(selectedFormatId = action.id) }
             is MobileUiAction.SetDownloadPlaylist -> updateHome { it.copy(downloadPlaylist = action.enabled) }
             is MobileUiAction.SetIncludeSubtitles -> updateHome { it.copy(includeSubtitles = action.enabled) }
+            is MobileUiAction.SetAudioSpeed -> updateHome { it.copy(audioSpeed = action.value.coerceIn(0.5f, 2f)) }
+            is MobileUiAction.SetAudioPitch -> updateHome {
+                it.copy(audioPitchSemitones = action.semitones.coerceIn(-12f, 12f))
+            }
+            is MobileUiAction.SetAudioVolume -> updateHome {
+                it.copy(audioVolumePercent = action.percent.coerceIn(5, 200))
+            }
+            MobileUiAction.PreviewAudio -> previewAudio()
+            MobileUiAction.StopAudioPreview -> stopAudioPreview()
+            is MobileUiAction.SelectPreviewUsesVideo -> updateHome {
+                it.copy(previewUsesVideo = action.enabled)
+            }
             MobileUiAction.StartDownload -> startDownload()
             is MobileUiAction.SiteUrlChanged -> changeSiteUrl(action.value)
             MobileUiAction.PasteSiteUrl -> pasteSiteUrl()
@@ -213,6 +257,8 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             }
             is MobileUiAction.ChooseDownloadLocation -> chooseDownloadLocation(action.category)
             is MobileUiAction.ResetDownloadLocation -> resetDownloadLocation(action.category)
+            MobileUiAction.ChooseCookieFile -> chooseCookieFile()
+            MobileUiAction.ClearCookies -> clearCookies()
             MobileUiAction.CopySupportPixPayload -> copySupportPixPayload()
             MobileUiAction.CopySupportPixKey -> copySupportPixKey()
             is MobileUiAction.OpenLegalDocument -> updateState { it.copy(legalDocument = action.document) }
@@ -230,6 +276,11 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             else -> null
         }
         value?.let { onAction(MobileUiAction.ReceiveSharedUrl(it)) }
+    }
+
+    override fun onCleared() {
+        previewPlayer.release()
+        super.onCleared()
     }
 
     fun setStoragePermissionRequester(requester: (() -> Unit) -> Unit) {
@@ -264,6 +315,79 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
     fun onDownloadLocationSelectionFailed() {
         pendingDownloadLocation = null
         showMessage("O Android não concedeu acesso permanente à pasta selecionada.")
+    }
+
+    fun setCookieFileRequester(requester: () -> Unit) {
+        requestCookieFile = requester
+    }
+
+    fun onCookieFileSelected(uri: Uri?) {
+        if (uri == null) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                cookieStore.setContent(cookieFileText(uri), cookieFileName(uri))
+                refreshCookieDiagnostics()
+                showMessage("Cookies carregados de ${_state.value.settings.cookieFileName.orEmpty()}.")
+            } catch (error: Throwable) {
+                showMessage(
+                    readableError(error, "Não foi possível ler o arquivo de cookies selecionado."),
+                )
+            }
+        }
+    }
+
+    fun onCookieFileSelectionFailed() {
+        showMessage("Não foi possível ler o arquivo de cookies selecionado.")
+    }
+
+    private fun chooseCookieFile() {
+        requestCookieFile?.invoke() ?: showMessage("Não foi possível abrir o seletor de arquivos.")
+    }
+
+    private fun clearCookies() {
+        cookieStore.clear()
+        viewModelScope.launch { refreshCookieDiagnostics() }
+        showMessage("Cookies removidos do Media Downloader.")
+    }
+
+    private suspend fun refreshCookieDiagnostics() {
+        val file = cookieStore.cookieFile
+        val label = cookieStore.label.takeIf(String::isNotBlank) ?: "cookies.txt"
+        val check = if (file == null) {
+            CookieCheckUi(
+                ok = false,
+                message = "Nenhum arquivo de cookies configurado.",
+                detail = "A maioria dos vídeos funciona sem cookies. Use-os apenas se precisar acessar mídia restrita à sua conta.",
+            )
+        } else {
+            CookieDiagnostics.check(file.readText(), label)
+        }
+        updateSettings {
+            it.copy(
+                cookieFileName = cookieStore.label.takeIf(String::isNotBlank),
+                cookie = check,
+            )
+        }
+    }
+
+    private suspend fun cookieFileText(uri: Uri): String =
+        appContext.contentResolver.openInputStream(uri)?.use { input ->
+            input.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        } ?: throw IOException("O arquivo de cookies selecionado não pôde ser aberto.")
+
+    private suspend fun cookieFileName(uri: Uri): String {
+        val resolver = appContext.contentResolver
+        val displayName = runCatching {
+            resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (index >= 0) cursor.getString(index) else null
+                } else {
+                    null
+                }
+            }
+        }.getOrNull()
+        return displayName ?: uri.lastPathSegment ?: "cookies.txt"
     }
 
     private fun receiveUrl(raw: String) {
@@ -428,6 +552,98 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
         currentAnalysis = null
         updateHome {
             HomeUiState(url = it.url, canPaste = it.canPaste)
+        }
+    }
+
+    private fun previewAudio() {
+        val home = _state.value.home
+        if (!home.canPreviewAudio) return
+        val analysis = currentAnalysis ?: return
+        val effects = AudioEffects(
+            speed = home.audioSpeed,
+            semitones = home.audioPitchSemitones,
+            volumePercent = home.audioVolumePercent,
+        ).sanitized()
+        val source = PreviewSourceResolver.resolve(analysis.formats)
+        val sourceUrl = source?.url ?: analysis.sourceUrl
+        val includeVideo = home.previewUsesVideo && source?.hasVideo == true && !analysis.isPlaylist
+        audioPreviewJob?.cancel()
+        audioPreviewJob = viewModelScope.launch {
+            updateHome {
+                it.copy(isAudioPreviewRendering = true, audioPreviewError = null)
+            }
+            try {
+                val file = withContext(Dispatchers.IO) {
+                    engine.initialize()
+                    previewRenderer.render(
+                        sourceUrl = sourceUrl,
+                        effects = effects,
+                        outputFile = File(appContext.cacheDir, "preview_clip.mp4"),
+                        windowSeconds = previewWindowSeconds(includeVideo),
+                        includeVideo = includeVideo,
+                        startSeconds = 0f,
+                    )
+                }
+                previewPlayer.play(
+                    file = file,
+                    onStarted = {
+                        updateHome {
+                            it.copy(
+                                isAudioPreviewRendering = false,
+                                isAudioPreviewPlaying = true,
+                                audioPreviewError = null,
+                            )
+                        }
+                    },
+                    onFinished = {
+                        updateHome { it.copy(isAudioPreviewPlaying = false) }
+                    },
+                    onError = { message ->
+                        updateHome {
+                            it.copy(
+                                isAudioPreviewPlaying = false,
+                                isAudioPreviewRendering = false,
+                                audioPreviewError = message,
+                            )
+                        }
+                    },
+                )
+            } catch (_: CancellationException) {
+                throw CancellationException()
+            } catch (error: Throwable) {
+                updateHome {
+                    it.copy(
+                        isAudioPreviewRendering = false,
+                        isAudioPreviewPlaying = false,
+                        audioPreviewError = readableError(
+                            error,
+                            "Não foi possível gerar a prévia. Confira se este link aponta para uma mídia aberta.",
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    private fun stopAudioPreview() {
+        audioPreviewJob?.cancel()
+        audioPreviewJob = null
+        previewRenderer.cancel()
+        previewPlayer.stop()
+        updateHome {
+            it.copy(
+                isAudioPreviewRendering = false,
+                isAudioPreviewPlaying = false,
+            )
+        }
+    }
+
+    private fun previewWindowSeconds(includeVideo: Boolean): Float {
+        val maxWindow = if (includeVideo) PREVIEW_VIDEO_WINDOW_SECONDS else PREVIEW_WINDOW_SECONDS
+        val duration = currentAnalysis?.durationSeconds
+        return when {
+            duration == null || duration <= 0L -> maxWindow
+            else -> minOf(maxWindow, duration.toFloat())
         }
     }
 
@@ -1215,6 +1431,8 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
         private const val KEY_THEME = "theme"
         private const val KEY_AUTO_UPDATE = "auto_update_ytdlp"
         private const val QR_CODE_MIME_TYPE = "image/png"
+        private const val PREVIEW_WINDOW_SECONDS = 30f
+        private const val PREVIEW_VIDEO_WINDOW_SECONDS = 12f
 
         private fun List<ChoiceUi>.recommendedId(): String? =
             firstOrNull(ChoiceUi::recommended)?.id ?: firstOrNull()?.id

@@ -20,7 +20,7 @@ def classify_error(error: BaseException | str) -> FriendlyError:
     text = details.lower()
     mappings = (
         (("drm", "widevine", "protected content"), "Este conteúdo parece utilizar proteção DRM e não pode ser baixado por este aplicativo.", "drm"),
-        (("private video", "login required", "sign in", "authentication"), "Este conteúdo requer acesso. Verifique sua conta ou configuração de cookies.", "authentication"),
+        (("private video", "login required", "sign in", "sign in to confirm", "authentication", "logged in", "account"), "Este conteúdo requer acesso. Verifique se você está logado no serviço configurando cookies nas Configurações.", "authentication"),
         (("geo", "not available in your country"), "Este conteúdo possui restrição geográfica.", "geo"),
         (("unsupported url", "no suitable extractor"), "Não foi possível encontrar mídia compatível neste endereço.", "unsupported"),
         (("video unavailable", "removed", "not available"), "O conteúdo foi removido ou não está disponível.", "unavailable"),

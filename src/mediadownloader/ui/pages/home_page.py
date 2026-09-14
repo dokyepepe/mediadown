@@ -15,17 +15,21 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
+from mediadownloader.core.audio_effects import (
+    PITCH_SEMITONES, SPEED_PRESETS, VOLUME_PRESETS, AudioEffects, AudioEffectsController,
+    semitones_to_ratio,
+)
 from mediadownloader.core.extractor import MediaExtractor
-from mediadownloader.core.workers import AnalyzeWorker
-from mediadownloader.models import DownloadOptions, MediaInfo, MediaType
+from mediadownloader.core.workers import AnalyzeWorker, PreviewWorker
+from mediadownloader.models import DownloadOptions, MediaInfo, MediaType, PreviewSource
 from mediadownloader.services import SettingsService
 from mediadownloader.utils.errors import FriendlyError
 from mediadownloader.utils.validators import is_valid_url, validate_url
 
 from ..icons import set_button_icon, svg_asset_pixmap, svg_icon
 from ..widgets import (
-    MediaPreviewCard, PageHeader, PrimaryButton, SecondaryButton, WheelSafeComboBox,
-    WorkflowStep,
+    MediaPreviewCard, PageHeader, PrimaryButton, SecondaryButton, VideoPreviewDialog,
+    WheelSafeComboBox, WorkflowStep,
 )
 
 
@@ -34,14 +38,24 @@ class HomePage(QWidget):
     analysis_changed = Signal(bool)
     configure_spotify_requested = Signal()
 
-    def __init__(self, engine: MediaExtractor, settings: SettingsService) -> None:
+    def __init__(
+        self,
+        engine: MediaExtractor,
+        settings: SettingsService,
+        audio_effects: AudioEffectsController | None = None,
+    ) -> None:
         super().__init__()
         self.setObjectName("Page")
         self.setAcceptDrops(True)
         self.engine = engine
         self.settings = settings
+        self.audio_effects = audio_effects or AudioEffectsController()
         self.pool = QThreadPool.globalInstance()
         self.media: MediaInfo | None = None
+        self._analyze_worker: AnalyzeWorker | None = None
+        self._preview_worker: PreviewWorker | None = None
+        self._preview_dialog: VideoPreviewDialog | None = None
+        self._preview_sync_connections: dict[VideoPreviewDialog, list] = {}
         self._build_ui()
         self._load_defaults()
 
@@ -246,6 +260,7 @@ class HomePage(QWidget):
         self.playlist_list.itemDoubleClicked.connect(
             lambda _item: self._queue_current_playlist_item()
         )
+        self.playlist_list.currentItemChanged.connect(self._update_preview_enabled)
         playlist_layout.addLayout(playlist_header)
         playlist_layout.addWidget(self.playlist_list)
         result_layout.addWidget(self.playlist_frame)
@@ -314,6 +329,54 @@ class HomePage(QWidget):
         audio_grid.addWidget(self.audio_quality, 1, 1)
         audio_grid.addWidget(self.embed_thumbnail, 2, 0)
         audio_grid.addWidget(self.add_metadata, 2, 1)
+        self.audio_speed = WheelSafeComboBox()
+        self.audio_speed.setAccessibleName("Velocidade do áudio")
+        self.audio_speed.setToolTip(
+            "Altera a velocidade sem mudar o tom (estrutura de tempo). "
+            "Ex.: 1,5x torna o áudio 50% mais rápido."
+        )
+        for value, label in SPEED_PRESETS:
+            self.audio_speed.addItem(label, value)
+        self.audio_pitch = WheelSafeComboBox()
+        self.audio_pitch.setAccessibleName("Tom do áudio")
+        self.audio_pitch.setToolTip(
+            "Desloca o tom em semitons mantendo a duração. "
+            "Ex.: +2 semitons deixa o áudio mais agudo."
+        )
+        for semitones in PITCH_SEMITONES:
+            ratio = semitones_to_ratio(semitones)
+            if semitones == 0:
+                label = "0 semitons — normal"
+            else:
+                label = f"{semitones:+d} semitons — " + (
+                    "mais grave" if semitones < 0 else "mais agudo"
+                )
+            self.audio_pitch.addItem(label, f"{ratio:.4f}")
+        self.audio_volume = WheelSafeComboBox()
+        self.audio_volume.setAccessibleName("Volume do áudio")
+        self.audio_volume.setToolTip(
+            "Amplifica ou reduz o volume. Ex.: 150% aumenta o volume final em 50%."
+        )
+        for value, label in VOLUME_PRESETS:
+            self.audio_volume.addItem(label, value)
+        adjustment_tip = QLabel(
+            "Tom, velocidade e volume são aplicados pelo FFmpeg na prévia e no arquivo final "
+            "(requer componente)."
+        )
+        adjustment_tip.setObjectName("Muted")
+        adjustment_tip.setWordWrap(True)
+        audio_grid.addWidget(QLabel("Velocidade"), 3, 0)
+        audio_grid.addWidget(self.audio_speed, 4, 0)
+        audio_grid.addWidget(QLabel("Tom"), 3, 1)
+        audio_grid.addWidget(self.audio_pitch, 4, 1)
+        audio_grid.addWidget(QLabel("Volume"), 3, 2)
+        audio_grid.addWidget(self.audio_volume, 4, 2)
+        audio_grid.addWidget(adjustment_tip, 5, 0, 1, 3)
+        self.audio_speed.currentIndexChanged.connect(self._audio_effects_changed)
+        self.audio_pitch.currentIndexChanged.connect(self._audio_effects_changed)
+        self.audio_volume.currentIndexChanged.connect(self._audio_effects_changed)
+        self.audio_effects.effects_changed.connect(self._refresh_audio_combos)
+        self._refresh_audio_combos()
         self.audio_options.hide()
         options_layout.addWidget(self.audio_options)
 
@@ -360,6 +423,11 @@ class HomePage(QWidget):
         download_row = QHBoxLayout(self.download_controls)
         download_row.setContentsMargins(0, 0, 0, 0)
         download_row.addStretch()
+        self.preview_button = SecondaryButton("PRÉ-VISUALIZAR", icon_name="video")
+        self.preview_button.setToolTip(
+            "Reproduz a mídia antes de baixar. Disponível para mídias individuais."
+        )
+        self.preview_button.clicked.connect(self._preview_media)
         self.download_all_button = SecondaryButton("BAIXAR TUDO", icon_name="check")
         self.download_all_button.setToolTip("Adicionar todos os itens da playlist à fila")
         self.download_all_button.clicked.connect(self._queue_all_playlist_items)
@@ -367,6 +435,7 @@ class HomePage(QWidget):
         self.download_button.setMinimumWidth(180)
         self.download_button.setToolTip("Adicionar somente os itens incluídos à fila")
         self.download_button.clicked.connect(lambda: self.queue_download())
+        download_row.addWidget(self.preview_button)
         download_row.addWidget(self.download_all_button)
         download_row.addWidget(self.download_button)
         result_layout.addWidget(self.download_controls)
@@ -386,6 +455,7 @@ class HomePage(QWidget):
             self.playlist_list,
             self.video_button, self.audio_button, self.video_quality,
             self.video_format, self.audio_format, self.audio_quality,
+            self.audio_speed, self.audio_pitch, self.audio_volume,
             self.embed_thumbnail, self.add_metadata, self.subtitle_mode,
             self.subtitle_language, self.destination, browse,
             self.playlist_folder, self.download_all_button, self.download_button,
@@ -400,6 +470,27 @@ class HomePage(QWidget):
         self.playlist_folder.setChecked(self.settings.get("downloads.create_playlist_folder", True))
         self.audio_format.setCurrentText(self.settings.get("downloads.audio_format", "mp3").upper())
         self.audio_quality.setCurrentText(f"{self.settings.get('downloads.audio_quality', '192')} kbps")
+
+    def _audio_effects_changed(self, *_: object) -> None:
+        self.audio_effects.set_effects(AudioEffects(
+            speed=float(self.audio_speed.currentData()),
+            pitch=float(self.audio_pitch.currentData()),
+            volume=float(self.audio_volume.currentData()),
+        ))
+
+    def _refresh_audio_combos(self, *_: object) -> None:
+        effects = self.audio_effects.effects
+        for combo, target in (
+            (self.audio_speed, effects.speed),
+            (self.audio_pitch, effects.pitch),
+            (self.audio_volume, effects.volume),
+        ):
+            combo.blockSignals(True)
+            for index in range(combo.count()):
+                if abs(float(combo.itemData(index)) - target) < 1e-4:
+                    combo.setCurrentIndex(index)
+                    break
+            combo.blockSignals(False)
 
     def paste_url(self) -> None:
         from PySide6.QtWidgets import QApplication
@@ -436,9 +527,11 @@ class HomePage(QWidget):
         )
         worker.signals.completed.connect(self._analysis_complete)
         worker.signals.failed.connect(self._analysis_failed)
+        self._analyze_worker = worker
         self.pool.start(worker)
 
     def _analysis_complete(self, media: MediaInfo) -> None:
+        self._analyze_worker = None
         self.media = media
         self.preview.set_media(media)
         if media.download_supported:
@@ -456,7 +549,14 @@ class HomePage(QWidget):
         self.analysis_changed.emit(False)
 
     def _analysis_failed(self, error: FriendlyError) -> None:
-        self._show_notice(error.message, error=True)
+        self._analyze_worker = None
+        message = error.message
+        if error.code == "authentication" and self.settings.get("cookies.source", "none") == "none":
+            message += (
+                " Este conteúdo pode exigir login. Importe cookies do seu navegador "
+                "ou um cookies.txt em Configurações e tente novamente."
+            )
+        self._show_notice(message, error=True)
         self.onboarding.setVisible(self.media is None)
         self.result.setEnabled(True)
         self.analyze_button.setEnabled(True)
@@ -547,6 +647,8 @@ class HomePage(QWidget):
         self.destination_card.setVisible(media.download_supported)
         self.download_controls.setVisible(media.download_supported)
         self.download_all_button.setVisible(media.is_playlist and media.download_supported)
+        self.preview_button.setVisible(media.download_supported)
+        self._update_preview_enabled()
         if not spotify:
             return
         message = media.source_notice
@@ -575,6 +677,96 @@ class HomePage(QWidget):
         self.copy_spotify_button.setAccessibleName(
             "Copiar item para busca" if media.entries else "Copiar dados para busca"
         )
+
+    def _update_preview_enabled(self, *_: object) -> None:
+        if not self.media or not self.media.download_supported:
+            self.preview_button.setEnabled(False)
+            return
+        if self.media.is_playlist:
+            self.preview_button.setEnabled(self.playlist_list.currentItem() is not None)
+        else:
+            self.preview_button.setEnabled(True)
+
+    def _preview_media(self) -> None:
+        if not self.media or not self.media.download_supported:
+            return
+        title = self.media.title
+        if self.media.is_playlist:
+            item = self.playlist_list.currentItem()
+            if item is None:
+                self._show_notice("Selecione um item da playlist para pré-visualizar.", error=True)
+                return
+            entry = item.data(Qt.ItemDataRole.UserRole)
+            url = entry.url if entry else self.media.url
+            title = entry.title if entry else title
+        else:
+            url = self.media.url
+        self.preview_button.setEnabled(False)
+        self.preview_button.setText("PREPARANDO…")
+        worker = PreviewWorker(
+            self.engine.download_engine,
+            url,
+            self.settings.get("network.proxy_url", "")
+            if self.settings.get("network.proxy_type") != "none" else "",
+            self.settings.get("cookies.file", "")
+            if self.settings.get("cookies.source") == "file" else "",
+            self.settings.get("cookies.browser", "")
+            if self.settings.get("cookies.source") == "browser" else "",
+        )
+        worker.signals.completed.connect(
+            lambda source: self._on_preview_ready(source, title)
+        )
+        worker.signals.failed.connect(self._on_preview_failed)
+        self._preview_worker = worker
+        self.pool.start(worker)
+
+    def _on_preview_ready(self, source: PreviewSource, title: str) -> None:
+        self._preview_worker = None
+        self._update_preview_enabled()
+        self.preview_button.setText("PRÉ-VISUALIZAR")
+        dialog = VideoPreviewDialog(
+            title,
+            ffmpeg=self.engine.download_engine.ffmpeg,
+            audio_effects=self.audio_effects,
+            speed=float(self.audio_speed.currentData()),
+            pitch=float(self.audio_pitch.currentData()),
+            volume=float(self.audio_volume.currentData()),
+            parent=self,
+        )
+        dialog.accepted.connect(lambda: self._update_preview_enabled())
+        dialog.rejected.connect(lambda: self._update_preview_enabled())
+        dialog.destroyed.connect(lambda: self._disconnect_preview_sync(dialog))
+        self._connect_preview_sync(dialog)
+        dialog.load_source(source)
+        self._preview_dialog = dialog
+        dialog.show()
+
+    def _connect_preview_sync(self, dialog: VideoPreviewDialog) -> None:
+        def update() -> None:
+            dialog.apply_values(
+                float(self.audio_speed.currentData()),
+                float(self.audio_pitch.currentData()),
+                float(self.audio_volume.currentData()),
+            )
+
+        self._preview_sync_connections[dialog] = [
+            (self.audio_speed, self.audio_speed.currentIndexChanged.connect(update)),
+            (self.audio_pitch, self.audio_pitch.currentIndexChanged.connect(update)),
+            (self.audio_volume, self.audio_volume.currentIndexChanged.connect(update)),
+        ]
+
+    def _disconnect_preview_sync(self, dialog: VideoPreviewDialog) -> None:
+        for widget, connection in self._preview_sync_connections.pop(dialog, []):
+            try:
+                widget.currentIndexChanged.disconnect(connection)
+            except (RuntimeError, TypeError):
+                pass
+
+    def _on_preview_failed(self, error: FriendlyError) -> None:
+        self._preview_worker = None
+        self._update_preview_enabled()
+        self.preview_button.setText("PRÉ-VISUALIZAR")
+        self._show_notice(error.message, error=True)
 
     def _open_spotify(self) -> None:
         if self.media and self.media.webpage_url:
@@ -694,6 +886,9 @@ class HomePage(QWidget):
             video_quality=str(video_quality),
             audio_format=self.audio_format.currentText().lower(),
             audio_quality=self.audio_quality.currentText().split()[0],
+            audio_speed=float(self.audio_speed.currentData()),
+            audio_pitch=float(self.audio_pitch.currentData()),
+            audio_volume=float(self.audio_volume.currentData()),
             embed_thumbnail=self.embed_thumbnail.isChecked(),
             add_metadata=self.add_metadata.isChecked(),
             subtitle_mode=str(self.subtitle_mode.currentData()),

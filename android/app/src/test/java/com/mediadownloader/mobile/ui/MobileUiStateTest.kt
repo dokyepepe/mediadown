@@ -90,4 +90,24 @@ class MobileUiStateTest {
         assertEquals(3, state.storageLocations.size)
         assertTrue(state.storageLocations.all { it.locationLabel == "Downloads/MediaDownloader" })
     }
+
+    @Test
+    fun audioPreviewRequiresAnalyzedAudioAndIdlePlayer() {
+        val audioPreview = preview.copy(supportsAudio = true)
+        assertTrue(HomeUiState(preview = audioPreview).canPreviewAudio)
+        assertFalse(HomeUiState(preview = audioPreview, isAudioPreviewRendering = true).canPreviewAudio)
+        assertFalse(HomeUiState(preview = audioPreview, isAudioPreviewPlaying = true).canPreviewAudio)
+        assertFalse(HomeUiState().canPreviewAudio)
+        assertFalse(HomeUiState(preview = audioPreview.copy(supportsAudio = false)).canPreviewAudio)
+    }
+
+    @Test
+    fun videoPreviewToggleOnlyOfferedWhenVideoExists() {
+        assertFalse(HomeUiState(preview = preview.copy(supportsVideo = false)).canTogglePreviewVideo)
+        assertTrue(HomeUiState(preview = preview).canTogglePreviewVideo)
+        assertTrue(HomeUiState(preview = preview).previewUsesVideo)
+        assertFalse(
+            HomeUiState(preview = preview, previewUsesVideo = false).previewUsesVideo,
+        )
+    }
 }

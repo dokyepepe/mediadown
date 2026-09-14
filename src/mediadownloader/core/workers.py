@@ -7,7 +7,7 @@ from typing import Protocol
 
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
-from mediadownloader.models import DownloadItem, DownloadOptions, MediaInfo
+from mediadownloader.models import DownloadItem, DownloadOptions, MediaInfo, PreviewSource
 from mediadownloader.utils.errors import FriendlyError, classify_error
 
 from .downloader import DownloadCancelled, DownloadEngine
@@ -62,6 +62,79 @@ class DownloadSignals(QObject):
     completed = Signal(str, str)
     failed = Signal(str, object)
     cancelled = Signal(str)
+
+
+class PreviewSignals(QObject):
+    completed = Signal(object)
+    failed = Signal(object)
+
+
+class PreviewWorker(QRunnable):
+    """Resolve a directly playable stream URL off the main thread."""
+
+    def __init__(
+        self,
+        engine: DownloadEngine,
+        url: str,
+        proxy: str = "",
+        cookies_file: str = "",
+        cookies_browser: str = "",
+    ) -> None:
+        super().__init__()
+        self.engine = engine
+        self.url = url
+        self.proxy = proxy
+        self.cookies_file = cookies_file
+        self.cookies_browser = cookies_browser
+        self.signals = PreviewSignals()
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            source = self.engine.preview_source(
+                self.url, self.proxy, self.cookies_file, self.cookies_browser,
+            )
+            self.signals.completed.emit(source)
+        except Exception as error:
+            self.signals.failed.emit(error if isinstance(error, FriendlyError) else classify_error(error))
+
+
+class PreviewRenderSignals(QObject):
+    completed = Signal(str)
+    failed = Signal(str)
+
+
+class PreviewRenderWorker(QRunnable):
+    """Render a short preview clip with the audio filter chain off-thread."""
+
+    def __init__(
+        self,
+        ffmpeg: "FFmpegManager",
+        source_url: str,
+        output_path: "Path",
+        audio_filter: str,
+        duration: float = 12.0,
+        start_time: float = 0.0,
+    ) -> None:
+        super().__init__()
+        self.ffmpeg = ffmpeg
+        self.source_url = source_url
+        self.output_path = output_path
+        self.audio_filter = audio_filter
+        self.duration = duration
+        self.start_time = start_time
+        self.signals = PreviewRenderSignals()
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            self.ffmpeg.render_preview(
+                self.source_url, self.output_path, self.audio_filter, self.duration,
+                self.start_time,
+            )
+            self.signals.completed.emit(str(self.output_path))
+        except Exception as error:
+            self.signals.failed.emit(str(error))
 
 
 class DownloadWorker(QRunnable):

@@ -19,6 +19,9 @@ class DownloadOptions:
     add_metadata: bool = True
     subtitle_mode: str = "none"
     subtitle_language: str = "auto"
+    audio_speed: float = 1.0
+    audio_pitch: float = 1.0
+    audio_volume: float = 1.0
     output_dir: str = ""
     filename_template: str = "%(title)s.%(ext)s"
     create_playlist_folder: bool = True

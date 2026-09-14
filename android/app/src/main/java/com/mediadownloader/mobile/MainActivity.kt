@@ -44,11 +44,20 @@ class MainActivity : ComponentActivity() {
         viewModel.onDownloadLocationSelected(persistedLocation)
     }
 
+    private val cookieFile = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        viewModel.onCookieFileSelected(uri)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestNotificationPermissionIfNeeded()
         viewModel.setStoragePermissionRequester(::requestStoragePermissionIfNeeded)
         viewModel.setDownloadLocationRequester { downloadLocation.launch(null) }
+        viewModel.setCookieFileRequester {
+            cookieFile.launch(arrayOf("text/plain", "application/octet-stream", "text/*"))
+        }
         viewModel.receiveIntent(intent)
         setContent {
             MediaDownloaderApp(controller = viewModel)

@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$PythonExe
 )
 
@@ -9,6 +9,8 @@ if (-not (Test-Path $Exe)) {
     $BuildArguments = @{}
     if ($PythonExe) { $BuildArguments['PythonExe'] = $PythonExe }
     & (Join-Path $PSScriptRoot 'build.ps1') @BuildArguments
+} else {
+    & (Join-Path $PSScriptRoot 'sign_build.ps1')
 }
 $Candidates = @(
     (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
@@ -23,4 +25,6 @@ if (-not $Iscc) {
 & $Iscc (Join-Path $ProjectRoot 'installer\MediaDownloader.iss')
 $Setup = Join-Path $ProjectRoot 'release\MediaDownloader-Setup-x64.exe'
 if (-not (Test-Path $Setup)) { throw 'O instalador esperado não foi gerado.' }
+& (Join-Path $PSScriptRoot 'sign_build.ps1') -SetupFile $Setup
 Write-Host "Instalador concluído: $Setup"
+Get-AuthenticodeSignature $Setup | Select-Object Status, @{n='Signer';e={$_.SignerCertificate.Subject}}

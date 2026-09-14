@@ -30,8 +30,10 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material3.Button
@@ -41,6 +43,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -54,14 +57,19 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import java.util.Locale
 
 @Composable
 fun HomeScreen(
     state: HomeUiState,
     onAction: (MobileUiAction) -> Unit,
     thumbnail: ThumbnailRenderer,
+    previewPlayer: ExoPlayer? = null,
     modifier: Modifier = Modifier,
 ) {
     ScreenContainer(modifier) {
@@ -98,6 +106,14 @@ fun HomeScreen(
                         preview = preview,
                         thumbnail = thumbnail,
                         onClear = { onAction(MobileUiAction.ClearAnalysis) },
+                    )
+                }
+
+                item {
+                    AudioEffectsCard(
+                        state = state,
+                        onAction = onAction,
+                        previewPlayer = previewPlayer,
                     )
                 }
 
@@ -327,6 +343,189 @@ private fun PreviewCard(
 }
 
 @Composable
+private fun AudioEffectsCard(
+    state: HomeUiState,
+    onAction: (MobileUiAction) -> Unit,
+    previewPlayer: ExoPlayer?,
+) {
+    SectionCard {
+        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            SectionTitle(
+                title = "Ouça com efeitos",
+                supportingText = if (state.canTogglePreviewVideo) {
+                    "Ajuste tom, velocidade e volume, e toque as prévias antes de baixar."
+                } else {
+                    "Ajuste tom, velocidade e volume, e toque até 30 s antes de baixar."
+                },
+                icon = Icons.Rounded.Tune,
+            )
+
+            EffectSlider(
+                title = "Velocidade",
+                valueText = formatSpeed(state.audioSpeed),
+                value = state.audioSpeed,
+                valueRange = 0.5f..2.0f,
+                steps = 29,
+                enabled = !state.audioPreviewActive,
+                onValueChange = { onAction(MobileUiAction.SetAudioSpeed(it)) },
+            )
+
+            EffectSlider(
+                title = "Tom",
+                valueText = formatSemitones(state.audioPitchSemitones),
+                value = state.audioPitchSemitones,
+                valueRange = -12f..12f,
+                steps = 23,
+                enabled = !state.audioPreviewActive,
+                onValueChange = { onAction(MobileUiAction.SetAudioPitch(it)) },
+            )
+
+            EffectSlider(
+                title = "Volume",
+                valueText = formatVolume(state.audioVolumePercent),
+                value = state.audioVolumePercent.toFloat(),
+                valueRange = 5f..200f,
+                steps = 38,
+                enabled = !state.audioPreviewActive,
+                onValueChange = { onAction(MobileUiAction.SetAudioVolume(it.toInt())) },
+            )
+
+            if (state.canTogglePreviewVideo) {
+                PreviewVideoModeSelector(
+                    usesVideo = state.previewUsesVideo,
+                    enabled = !state.audioPreviewActive,
+                    onSelect = { usesVideo ->
+                        onAction(MobileUiAction.SelectPreviewUsesVideo(usesVideo))
+                    },
+                )
+            }
+
+            when {
+                state.isAudioPreviewRendering -> {
+                    FilledTonalButton(
+                        onClick = {},
+                        enabled = false,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 50.dp),
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(Modifier.size(8.dp))
+                        Text("Gerando prévia…")
+                    }
+                }
+
+                state.isAudioPreviewPlaying -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (state.previewUsesVideo && state.canTogglePreviewVideo && previewPlayer != null) {
+                            AndroidView(
+                                factory = { context ->
+                                    PlayerView(context).apply {
+                                        useController = true
+                                        player = previewPlayer
+                                    }
+                                },
+                                update = { view ->
+                                    view.player = previewPlayer
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(16f / 9f),
+                            )
+                        }
+                        TextButton(
+                            onClick = { onAction(MobileUiAction.StopAudioPreview) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 50.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Stop,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Spacer(Modifier.size(8.dp))
+                            Text("Parar prévia")
+                        }
+                    }
+                }
+
+                else -> {
+                    FilledTonalButton(
+                        onClick = { onAction(MobileUiAction.PreviewAudio) },
+                        enabled = state.canPreviewAudio,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 50.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.size(8.dp))
+                        Text(
+                            if (state.canTogglePreviewVideo && state.previewUsesVideo) {
+                                "Pré-visualizar"
+                            } else {
+                                "Pré-visualizar áudio"
+                            },
+                        )
+                    }
+                }
+            }
+
+            state.audioPreviewError?.let { error ->
+                InfoBanner(
+                    text = error,
+                    icon = Icons.Rounded.Info,
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EffectSlider(
+    title: String,
+    valueText: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    enabled: Boolean,
+    onValueChange: (Float) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(title, style = MaterialTheme.typography.labelLarge)
+            Text(
+                text = valueText,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            steps = steps,
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
 private fun DownloadOptionsCard(
     state: HomeUiState,
     preview: MediaPreviewUi,
@@ -475,6 +674,108 @@ private fun MediaKindOption(
 }
 
 @Composable
+private fun PreviewVideoModeSelector(
+    usesVideo: Boolean,
+    enabled: Boolean,
+    onSelect: (Boolean) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        Text("Conteúdo da prévia", style = MaterialTheme.typography.labelLarge)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            PreviewVideoModeOption(
+                label = "Com vídeo",
+                supportingText = "Trecho curto com imagem",
+                icon = Icons.Rounded.Videocam,
+                selected = usesVideo,
+                enabled = enabled,
+                onClick = { onSelect(true) },
+                modifier = Modifier.weight(1f),
+            )
+            PreviewVideoModeOption(
+                label = "Somente áudio",
+                supportingText = "Uma captura do som",
+                icon = Icons.Rounded.Headphones,
+                selected = !usesVideo,
+                enabled = enabled,
+                onClick = { onSelect(false) },
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PreviewVideoModeOption(
+    label: String,
+    supportingText: String,
+    icon: ImageVector,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val container = if (selected) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceContainer
+    }
+    val content = if (selected) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    Surface(
+        modifier = modifier
+            .alpha(if (enabled) 1f else 0.45f)
+            .selectable(
+                selected = selected,
+                enabled = enabled,
+                role = Role.RadioButton,
+                onClick = onClick,
+            ),
+        color = container,
+        contentColor = content,
+        shape = MaterialTheme.shapes.medium,
+        border = BorderStroke(
+            1.dp,
+            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        ),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 72.dp)
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = supportingText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = content.copy(alpha = 0.76f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun ChoiceSelector(
     title: String,
     choices: List<ChoiceUi>,
@@ -581,6 +882,23 @@ private fun SwitchOption(
         }
     }
 }
+
+private fun formatSpeed(value: Float): String {
+    val text = String.format(Locale.US, "%.2f", value)
+        .trimEnd('0')
+        .trimEnd('.')
+        .replace('.', ',')
+    return "${text}x"
+}
+
+private fun formatSemitones(value: Float): String =
+    if (value == 0f) {
+        "0 st (normal)"
+    } else {
+        String.format(Locale.US, "%+.0f st", value)
+    }
+
+private fun formatVolume(percent: Int): String = "$percent%"
 
 private val MediaKind.icon: ImageVector
     get() = when (this) {

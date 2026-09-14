@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from mediadownloader.core.audio_effects import build_audio_filters
 from mediadownloader.models import DownloadOptions, MediaType
 
 
@@ -51,4 +52,35 @@ class FormatManager:
         if options.subtitle_mode == "embed" and options.media_type == MediaType.VIDEO:
             processors.append({"key": "FFmpegEmbedSubtitle"})
         return processors
+
+    @classmethod
+    def build_audio_filters(cls, speed: float, pitch: float, volume: float) -> str | None:
+        """Build the FFmpeg ``-af`` filter graph for speed/pitch/volume.
+
+        Speed is stretched with ``atempo``; pitch shifts use ``asetrate`` +
+        ``aresample`` + ``atempo=1/pitch``, which changes the key while keeping
+        the duration. ``atempo`` is limited to [0.5, 2.0] per filter instance,
+        so the pitch-recovery and speed stages are kept as separate, in-range
+        filters. Volume is applied last. Returns ``None`` when nothing is
+        altered.
+        """
+        return build_audio_filters(speed, pitch, volume)
+
+    @classmethod
+    def audio_postprocessor_args(cls, options: DownloadOptions) -> dict | None:
+        """FFmpeg audio-filter args used by the `FFmpegExtractAudio` step.
+
+        These args only matter for audio downloads and only when the user alters
+        something.
+        """
+        if options.media_type != MediaType.AUDIO:
+            return None
+        chain = cls.build_audio_filters(
+            getattr(options, "audio_speed", 1.0),
+            getattr(options, "audio_pitch", 1.0),
+            getattr(options, "audio_volume", 1.0),
+        )
+        if chain is None:
+            return None
+        return {"ExtractAudio+ffmpeg": ["-af", chain]}
 

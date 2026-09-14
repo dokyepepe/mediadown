@@ -25,10 +25,13 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Cookie
 import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Info
@@ -101,6 +104,10 @@ fun SettingsScreen(
 
             item {
                 StorageCard(state = state, onAction = onAction)
+            }
+
+            item {
+                CookiesCard(state = state, onAction = onAction)
             }
 
             item {
@@ -294,6 +301,125 @@ private fun StorageCard(
             Text(
                 text = "Sem uma pasta personalizada, os arquivos continuam em Downloads/MediaDownloader. " +
                     "Limpar o histórico nunca apaga os arquivos salvos.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CookiesCard(
+    state: SettingsUiState,
+    onAction: (MobileUiAction) -> Unit,
+) {
+    SectionCard {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            SectionTitle(
+                title = "Cookies",
+                supportingText = "Acesse vídeos restritos à sua conta exportando seus cookies.",
+                icon = Icons.Rounded.Cookie,
+            )
+
+            if (state.cookie != null) {
+                val check = state.cookie
+                val container = if (check.ok) {
+                    MaterialTheme.colorScheme.tertiaryContainer
+                } else {
+                    MaterialTheme.colorScheme.errorContainer
+                }
+                val content = if (check.ok) {
+                    MaterialTheme.colorScheme.onTertiaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onErrorContainer
+                }
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    color = container,
+                    contentColor = content,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = if (check.ok) {
+                                Icons.Rounded.CheckCircle
+                            } else {
+                                Icons.Rounded.ErrorOutline
+                            },
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                        )
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                text = check.message,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            if (check.detail.isNotBlank()) {
+                                Text(
+                                    text = check.detail,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = content.copy(alpha = 0.8f),
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                InfoBanner(
+                    text = "Nenhum arquivo de cookies configurado.",
+                    icon = Icons.Rounded.ErrorOutline,
+                )
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(
+                    onClick = { onAction(MobileUiAction.ChooseCookieFile) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 50.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.FileUpload,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        if (state.cookieFileName == null) {
+                            "Escolher arquivo cookies.txt"
+                        } else {
+                            "Trocar arquivo cookies.txt"
+                        },
+                        modifier = Modifier.padding(start = 9.dp),
+                    )
+                }
+                if (state.cookieFileName != null) {
+                    TextButton(
+                        onClick = { onAction(MobileUiAction.ClearCookies) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Delete,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Text("Remover cookies", modifier = Modifier.padding(start = 9.dp))
+                    }
+                }
+            }
+
+            Text(
+                text = "O app nunca lê cookies do navegador nem envia dados para fora;" +
+                    " o arquivo fica apenas neste aparelho e passa só para o yt-dlp.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -28,6 +28,8 @@ VersionInfoCompany={#MyAppPublisher}
 LicenseFile=..\licenses\APPLICATION_LICENSE.txt
 CloseApplications=yes
 RestartApplications=no
+; Não mostrar página de seleção de diretório se já existir instalação
+UsePreviousAppDir=yes
 
 [Languages]
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
@@ -48,6 +50,51 @@ Name: "{autoprograms}\Media Downloader\Desinstalar Media Downloader"; Filename: 
 Filename: "{app}\{#MyAppExeName}"; Description: "Executar Media Downloader"; Flags: nowait postinstall skipifsilent
 
 [Code]
+var
+  ExistingVersion: String;
+  IsUpdate: Boolean;
+
+function GetExistingVersion(): String;
+var
+  Version: String;
+begin
+  Result := '';
+  if RegQueryStringValue(HKEY_LOCAL_MACHINE,
+    'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting("AppId")}_is1',
+    'DisplayVersion', Version) then
+  begin
+    Result := Version;
+  end
+  else if RegQueryStringValue(HKEY_CURRENT_USER,
+    'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting("AppId")}_is1',
+    'DisplayVersion', Version) then
+  begin
+    Result := Version;
+  end;
+end;
+
+function InitializeSetup(): Boolean;
+var
+  Msg: String;
+  Answer: Integer;
+begin
+  Result := True;
+  ExistingVersion := GetExistingVersion();
+  IsUpdate := (ExistingVersion <> '');
+  
+  if IsUpdate then
+  begin
+    Msg := 'Uma versão anterior do Media Downloader foi detectada (' + ExistingVersion + ').' + #13#10 + #13#10 +
+           'Deseja atualizar para a versão {#MyAppVersion}?' + #13#10 + #13#10 +
+           'Os seus dados e configurações serão preservados.';
+    Answer := MsgBox(Msg, mbInformation, MB_YESNO);
+    if Answer = IDNO then
+    begin
+      Result := False;
+    end;
+  end;
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   UserData: string;

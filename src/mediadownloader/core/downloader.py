@@ -9,9 +9,11 @@ from pathlib import Path
 from typing import Any, Callable
 
 import yt_dlp
+import yt_dlp.cookies as yt_cookies
 from yt_dlp.utils import DownloadError
 
 from mediadownloader.models import (
+    CookieCheck,
     DownloadItem,
     DownloadOptions,
     DownloadStatus,
@@ -19,6 +21,7 @@ from mediadownloader.models import (
     MediaInfo,
     MediaType,
     PlaylistEntry,
+    PreviewSource,
 )
 from mediadownloader.utils.errors import FriendlyError, classify_error
 from mediadownloader.utils.filenames import unique_path, validate_template
@@ -30,6 +33,8 @@ from .format_manager import FormatManager
 
 LOGGER = logging.getLogger(__name__)
 ProgressCallback = Callable[[dict[str, Any]], None]
+
+_SESSION_COOKIE_NAMES = frozenset({"SID", "SAPISID", "__Secure-3PAPISID", "LOGIN_INFO"})
 
 
 class DownloadCancelled(Exception):
@@ -180,6 +185,169 @@ class DownloadEngine:
             raw={},
         )
 
+    def preview_source(
+        self,
+        url: str,
+        proxy: str = "",
+        cookies_file: str = "",
+        cookies_browser: str = "",
+    ) -> PreviewSource:
+        """Resolve a directly playable stream for the in-app preview.
+
+        Prefers a single muxed format (video+audio), then audio-only or
+        video-only. Sites that only expose separate DASH tracks will preview
+        without one of the streams; the UI warns instead of failing hard.
+        """
+        selectors = (
+            "best[acodec!=none][vcodec!=none]",
+            "best[acodec!=none]",
+            "best[vcodec!=none]",
+            "best",
+        )
+        last_error: Exception | None = None
+        for selector in selectors:
+            try:
+                info = self._extract_single(url, selector, proxy, cookies_file, cookies_browser)
+            except Exception as error:  # noqa: BLE001 - probe each fallback selector
+                last_error = error
+                continue
+            direct = info.get("url")
+            if not direct:
+                continue
+            return PreviewSource(
+                url=str(direct),
+                extension=str(info.get("ext") or ""),
+                duration=info.get("duration"),
+                has_video=info.get("vcodec") not in (None, "none"),
+                has_audio=info.get("acodec") not in (None, "none"),
+            )
+        if last_error is not None:
+            LOGGER.warning("Pré-visualização indisponível: %s", last_error)
+        raise FriendlyError(
+            "Não foi possível preparar a pré-visualização desta mídia. "
+            "Você ainda pode baixá-la normalmente.",
+            code="preview_unavailable",
+        )
+
+    def _extract_single(
+        self,
+        url: str,
+        selector: str,
+        proxy: str,
+        cookies_file: str,
+        cookies_browser: str,
+    ) -> dict[str, Any]:
+        options: dict[str, Any] = {
+            "quiet": True,
+            "no_warnings": True,
+            "skip_download": True,
+            "noplaylist": True,
+            "format": selector,
+            "logger": _YtdlpLogger(),
+            "socket_timeout": 20,
+        }
+        options.update(self._component_options())
+        if proxy:
+            options["proxy"] = proxy
+        if cookies_file:
+            options["cookiefile"] = cookies_file
+        elif cookies_browser:
+            options["cookiesfrombrowser"] = (cookies_browser,)
+        with yt_dlp.YoutubeDL(options) as ydl:
+            info = ydl.extract_info(url, download=False)
+        if not info:
+            raise FriendlyError("Não foi possível obter informações desta mídia.")
+        return info
+
+    def check_cookies(self, source: str = "none", file: str = "", browser: str = "") -> CookieCheck:
+        """Validate the configured cookie source and report diagnostics."""
+        if source == "file":
+            return self._check_cookie_file(file)
+        if source == "browser":
+            return self._check_cookie_browser(browser)
+        return CookieCheck(
+            True,
+            "Nenhuma fonte de cookies ativa. Conteúdo que exige login "
+            "(vídeo privado, restrições por idade) pode ficar bloqueado.",
+        )
+
+    def _cookie_report(self, jar, label: str) -> CookieCheck:
+        count = len(jar)
+        names = {cookie.name for cookie in jar}
+        logged = bool(names & _SESSION_COOKIE_NAMES)
+        if logged:
+            return CookieCheck(
+                True,
+                f"Cookies carregados ({label}): {count} cookies com sessão do YouTube reconhecida.",
+                "",
+                count,
+                True,
+            )
+        if count:
+            return CookieCheck(
+                True,
+                f"Cookies carregados ({label}): {count} cookies.",
+                "",
+                count,
+                False,
+            )
+        return CookieCheck(
+            False,
+            f"A fonte de cookies ({label}) não forneceu cookies. "
+            "Pode estar sem sessão ativa ou desatualizada.",
+        )
+
+    def _check_cookie_file(self, path: str) -> CookieCheck:
+        if not path:
+            return CookieCheck(False, "Escolha um arquivo cookies.txt para usar esta fonte.")
+        cookie_path = Path(path).expanduser()
+        if not cookie_path.is_file():
+            return CookieCheck(False, "Arquivo cookies.txt não encontrado.", str(cookie_path))
+        try:
+            jar = yt_cookies.load_cookies(cookie_path, None, None)
+        except Exception as error:  # noqa: BLE001 - yt-dlp raises mixed types here
+            LOGGER.warning("Falha ao carregar cookies de arquivo: %s", error)
+            return CookieCheck(
+                False,
+                "O arquivo cookies.txt não pôde ser lido. "
+                "Verifique se está no formato Netscape.",
+                str(error),
+            )
+        return self._cookie_report(jar, cookie_path.name)
+
+    def _check_cookie_browser(self, browser: str) -> CookieCheck:
+        if browser not in yt_cookies.SUPPORTED_BROWSERS:
+            return CookieCheck(False, "Navegador não suportado pelo yt-dlp.", browser)
+        try:
+            jar = yt_cookies.extract_cookies_from_browser(browser)
+        except (yt_cookies.CookieLoadError, OSError) as error:
+            return self._browser_cookie_failure(browser, str(error))
+        except Exception as error:  # noqa: BLE001 - profile/keyring issues are site-specific
+            LOGGER.warning("Falha ao extrair cookies do %s: %s", browser, error)
+            return CookieCheck(
+                False,
+                f"Não foi possível ler os cookies do {browser}.",
+                str(error),
+            )
+        return self._cookie_report(jar, browser)
+
+    def _browser_cookie_failure(self, browser: str, detail: str) -> CookieCheck:
+        text = detail.lower()
+        if "could not find" in text or ("database" in text and "find" in text):
+            return CookieCheck(
+                False,
+                f"Nenhum perfil do {browser} foi encontrado neste computador.",
+                detail,
+            )
+        if "locked" in text or "should close" in text or "does not support" in text:
+            return CookieCheck(
+                False,
+                f"Não foi possível acessar os cookies do {browser}. "
+                "Feche o navegador e tente novamente.",
+                detail,
+            )
+        return CookieCheck(False, f"Não foi possível acessar os cookies do {browser}.", detail)
+
     def download(
         self,
         item: DownloadItem,
@@ -278,6 +446,9 @@ class DownloadEngine:
             "socket_timeout": 30,
         }
         ydl_options.update(self._component_options())
+        audio_postprocessor_args = FormatManager.audio_postprocessor_args(options)
+        if audio_postprocessor_args:
+            ydl_options["postprocessor_args"] = audio_postprocessor_args
         if options.video_format in {"mp4", "mkv", "webm"} and options.media_type == MediaType.VIDEO:
             ydl_options["merge_output_format"] = options.video_format
         if self.ffmpeg.available:

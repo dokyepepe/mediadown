@@ -5,6 +5,9 @@ from __future__ import annotations
 import sys
 
 
+_FAULTHANDLER_LOG_FILE = None
+
+
 def _set_windows_app_user_model_id() -> None:
     """Give Windows one stable identity for the window, taskbar, and shortcuts."""
     if sys.platform != "win32":
@@ -19,6 +22,65 @@ def _set_windows_app_user_model_id() -> None:
         pass
 
 
+def _install_exception_hooks() -> None:
+    """Turn uncaught errors into log entries instead of a silent process exit.
+
+    Frozen Qt apps have no console: an exception that escapes a slot or a worker
+    thread used to close the window with no traceback. Faulthandler also dumps
+    the state after a native crash (e.g. a DLL failure), which then shows up in
+    the logs page.
+    """
+    import faulthandler
+    import logging
+    import sys
+    import threading
+
+    from mediadownloader.utils.paths import logs_dir
+
+    global _FAULTHANDLER_LOG_FILE
+    if _FAULTHANDLER_LOG_FILE is None:
+        try:
+            _FAULTHANDLER_LOG_FILE = open(logs_dir() / "faulthandler.log", "ab", buffering=0)
+        except OSError:
+            _FAULTHANDLER_LOG_FILE = False
+    if _FAULTHANDLER_LOG_FILE is not False:
+        try:
+            faulthandler.enable(_FAULTHANDLER_LOG_FILE)
+        except (OSError, ValueError, RuntimeError):  # already enabled or unusable
+            pass
+
+    logger = logging.getLogger("uncaught")
+
+    previous_sys_hook = sys.excepthook
+
+    def main_excepthook(exc_type, exc_value, exc_traceback) -> None:
+        logger.error(
+            "Exceção não tratada no thread principal: %s: %s",
+            exc_type.__name__,
+            exc_value,
+            exc_info=(exc_type, exc_value, exc_traceback),
+        )
+        if previous_sys_hook is not None:
+            try:
+                previous_sys_hook(exc_type, exc_value, exc_traceback)
+            except Exception:  # logging backend must never re-raise
+                pass
+
+    sys.excepthook = main_excepthook
+
+    def thread_excepthook(args) -> None:
+        thread_name = getattr(args, "thread", None)
+        logger.error(
+            "Exceção não tratada na thread %s: %s: %s",
+            thread_name.name if thread_name else "desconhecida",
+            getattr(args, "exc_type", None).__name__ if getattr(args, "exc_type", None) else "?",
+            getattr(args, "exc_value", None),
+            exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+        )
+
+    threading.excepthook = thread_excepthook
+
+
 def main() -> int:
     if len(sys.argv) >= 3 and sys.argv[1] == "--internal-ytdlp-probe":
         from mediadownloader.services.update_service import run_internal_ytdlp_probe
@@ -31,6 +93,7 @@ def main() -> int:
     from mediadownloader.utils.paths import app_data_dir
 
     configure_logging()
+    _install_exception_hooks()
     instance_lock = QLockFile(str(app_data_dir() / "MediaDownloader.lock"))
     if not instance_lock.tryLock(0):
         from PySide6.QtWidgets import QApplication, QMessageBox

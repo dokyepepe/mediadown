@@ -5,6 +5,7 @@ import android.os.Environment
 import android.webkit.URLUtil
 import com.mediadownloader.mobile.MediaDownloaderApplication
 import com.mediadownloader.mobile.data.AudioFormat
+import com.mediadownloader.mobile.data.CookieStore
 import com.mediadownloader.mobile.data.DownloadItem
 import com.mediadownloader.mobile.data.DownloadOptions
 import com.mediadownloader.mobile.data.DownloadResult
@@ -41,6 +42,7 @@ data class EngineProgress(
 class AndroidDownloadEngine(context: Context) {
     private val appContext = context.applicationContext
     private val publisher = MediaStorePublisher(appContext)
+    private val cookieStore = CookieStore(appContext)
     private val initializationMutex = Mutex()
     private val cancelledProcesses = ConcurrentHashMap.newKeySet<String>()
 
@@ -56,6 +58,7 @@ class AndroidDownloadEngine(context: Context) {
             addOption("--skip-download")
             addOption("--no-warnings")
             addOption("--flat-playlist")
+            addCookieFileIfConfigured()
         }
         val response = runInterruptible {
             YtDlpRuntimeGate.withInterruptibleReadLock {
@@ -175,6 +178,7 @@ class AndroidDownloadEngine(context: Context) {
             addOption("--trim-filenames", 180)
             addOption("--output", outputTemplate)
             addOption(if (item.options.downloadPlaylist) "--yes-playlist" else "--no-playlist")
+            addCookieFileIfConfigured()
             addMediaOptions(item.options)
             if (item.options.includeSubtitles) {
                 addOption("--write-subs")
@@ -183,6 +187,10 @@ class AndroidDownloadEngine(context: Context) {
                 addOption("--convert-subs", "srt")
             }
         }
+    }
+
+    private fun YoutubeDLRequest.addCookieFileIfConfigured() {
+        cookieStore.cookieFile?.absolutePath?.let { path -> addOption("--cookiefile", path) }
     }
 
     private fun YoutubeDLRequest.addMediaOptions(options: DownloadOptions) {
@@ -245,6 +253,9 @@ class AndroidDownloadEngine(context: Context) {
                             audioCodec = item.optNullableString("acodec"),
                             approximateSizeBytes = item.optPositiveLong("filesize")
                                 ?: item.optPositiveLong("filesize_approx"),
+                            streamUrl = item.optNullableString("url"),
+                            totalBitrate = item.optPositiveLong("tbr")
+                                ?: item.optPositiveLong("abr"),
                         ),
                     )
                 }

@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from mediadownloader.core import DownloadEngine, FFmpegManager, MediaExtractor, QueueManager
+from mediadownloader.core.audio_effects import AudioEffectsController
 from mediadownloader.models import DownloadItem, DownloadOptions, DownloadStatus, MediaInfo, MediaType
 from mediadownloader.services import HistoryService, SettingsService, SpotifyService
 from mediadownloader.services.clipboard_service import ClipboardService
@@ -20,7 +21,8 @@ from mediadownloader.utils.paths import asset_path, reveal_in_explorer
 from mediadownloader.version import APP_NAME, APP_VERSION
 
 from .pages import (
-    AboutPage, DownloadsPage, HistoryPage, HomePage, QrCodePage, SettingsPage, SiteFilesPage,
+    AboutPage, AudioPage, DownloadsPage, HistoryPage, HomePage, QrCodePage, SettingsPage,
+    SiteFilesPage,
 )
 from .theme import apply_theme
 from .widgets import PageHeader, SidebarButton, ThemedIconLabel
@@ -32,6 +34,7 @@ class MainWindow(QMainWindow):
         self.settings = settings
         self.history = history
         self.ffmpeg = FFmpegManager()
+        self.audio_effects = AudioEffectsController(settings, parent=self)
         self.engine = DownloadEngine(self.ffmpeg)
         self.spotify = SpotifyService(settings)
         self.extractor = MediaExtractor(self.engine, self.spotify)
@@ -96,9 +99,10 @@ class MainWindow(QMainWindow):
 
         self.stack = QStackedWidget()
         self.stack.setObjectName("MainStack")
-        self.home_page = HomePage(self.extractor, self.settings)
+        self.home_page = HomePage(self.extractor, self.settings, audio_effects=self.audio_effects)
         self.downloads_page = DownloadsPage(self.queue)
         self.history_page = HistoryPage(self.history)
+        self.audio_page = AudioPage(self.audio_effects, self.ffmpeg, engine=self.engine, settings=self.settings)
         self.settings_page = SettingsPage(self.settings, self.queue, self.ffmpeg, self.spotify)
         self.site_files_page = SiteFilesPage(self.settings)
         self.qrcode_page = QrCodePage()
@@ -107,11 +111,16 @@ class MainWindow(QMainWindow):
             ("Início", "home", self.home_page),
             ("Downloads", "downloads", self.downloads_page),
             ("Histórico", "history", self.history_page),
+            ("Áudio", "audio", self.audio_page),
             ("Configurações", "settings", self.settings_page),
             ("Arquivos do site", "file", self.site_files_page),
             ("QR Code", "qrcode", self.qrcode_page),
             ("Sobre", "info", self.about_page),
         ]
+        self.settings_index = next(
+            index for index, (_label, _icon, page) in enumerate(pages)
+            if page is self.settings_page
+        )
         self.page_titles = [label for label, _icon, _page in pages]
         group = QButtonGroup(self)
         self.nav_buttons: list[SidebarButton] = []
@@ -157,7 +166,9 @@ class MainWindow(QMainWindow):
         root.addWidget(self.stack, 1)
         self.setCentralWidget(central)
         self.home_page.download_requested.connect(self._queue_media)
-        self.home_page.configure_spotify_requested.connect(lambda: self._navigate(3))
+        self.home_page.configure_spotify_requested.connect(
+            lambda: self._navigate(self.settings_index)
+        )
         self.history_page.redownload_requested.connect(self._redownload)
         self.settings_page.theme_changed.connect(lambda theme: apply_theme(QApplication.instance(), theme))
         self.settings_page.storage_changed.connect(self.home_page.reload_storage_defaults)
@@ -171,7 +182,7 @@ class MainWindow(QMainWindow):
     def _build_shortcuts(self) -> None:
         settings_action = QAction(self)
         settings_action.setShortcut(QKeySequence("Ctrl+,"))
-        settings_action.triggered.connect(lambda: self._navigate(3))
+        settings_action.triggered.connect(lambda: self._navigate(self.settings_index))
         self.addAction(settings_action)
 
         self.fullscreen_action = QAction("Alternar tela cheia", self)
@@ -281,7 +292,8 @@ class MainWindow(QMainWindow):
                 self.tray.show()
                 self.tray.showMessage("Download concluído", item.title, QSystemTrayIcon.MessageIcon.Information, 5000)
             if self.settings.get("general.open_folder_on_complete", False):
-                reveal_in_explorer(item.final_file, select_file=True)
+                if item.final_file:
+                    reveal_in_explorer(item.final_file, select_file=True)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         has_active = self.queue.has_active or self.site_files_page.has_active_downloads
@@ -298,4 +310,6 @@ class MainWindow(QMainWindow):
                 return
             self.queue.cancel_all()
             self.site_files_page.cancel_downloads()
+        self.queue.pool.waitForDone(2500)
+        self.site_files_page.cancel_downloads()
         event.accept()

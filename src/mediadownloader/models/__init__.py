@@ -1,8 +1,9 @@
 from .download_item import DownloadItem, DownloadStatus, MediaType
-from .media_info import MediaFormat, MediaInfo, PlaylistEntry
+from .media_info import CookieCheck, MediaFormat, MediaInfo, PlaylistEntry, PreviewSource
 from .options import DownloadOptions
 
 __all__ = [
+    "CookieCheck",
     "DownloadItem",
     "DownloadOptions",
     "DownloadStatus",
@@ -10,5 +11,6 @@ __all__ = [
     "MediaInfo",
     "MediaType",
     "PlaylistEntry",
+    "PreviewSource",
 ]
 

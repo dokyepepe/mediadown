@@ -31,6 +31,28 @@ class PlaylistEntry:
     resource_type: str = "media"
 
 
+@dataclass(slots=True, frozen=True)
+class CookieCheck:
+    """Diagnostics for a configured cookie source, shown in Settings."""
+
+    ok: bool
+    message: str
+    detail: str = ""
+    cookie_count: int = 0
+    logged_in: bool = False
+
+
+@dataclass(slots=True, frozen=True)
+class PreviewSource:
+    """A directly playable stream used by the in-app media preview."""
+
+    url: str
+    extension: str = ""
+    duration: float | None = None
+    has_video: bool = True
+    has_audio: bool = True
+
+
 @dataclass(slots=True)
 class MediaInfo:
     url: str

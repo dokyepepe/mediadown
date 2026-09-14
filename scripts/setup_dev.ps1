@@ -1,4 +1,4 @@
-param([switch]$SkipFFmpeg)
+﻿param([switch]$SkipFFmpeg)
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $VenvPath = Join-Path $ProjectRoot '.venv'

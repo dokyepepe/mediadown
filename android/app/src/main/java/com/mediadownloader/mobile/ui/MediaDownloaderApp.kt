@@ -82,6 +82,7 @@ fun MediaDownloaderApp(
     MediaDownloaderApp(
         state = state,
         onAction = controller::onAction,
+        previewPlayer = controller.previewExoPlayer,
         modifier = modifier,
         thumbnail = thumbnail,
     )
@@ -95,6 +96,7 @@ fun MediaDownloaderApp(
     thumbnail: ThumbnailRenderer = { url, referer, description, thumbnailModifier ->
         DefaultThumbnail(url, referer, description, thumbnailModifier)
     },
+    previewPlayer: androidx.media3.exoplayer.ExoPlayer? = null,
 ) {
     MediaDownloaderTheme(preference = state.settings.theme) {
         val snackbarHostState = remember { SnackbarHostState() }
@@ -131,6 +133,7 @@ fun MediaDownloaderApp(
                     state = state.home,
                     onAction = onAction,
                     thumbnail = thumbnail,
+                    previewPlayer = previewPlayer,
                     modifier = Modifier.padding(contentPadding),
                 )
 

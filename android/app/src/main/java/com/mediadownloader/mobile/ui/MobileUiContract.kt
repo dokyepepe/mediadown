@@ -1,5 +1,6 @@
 package com.mediadownloader.mobile.ui
 
+import com.mediadownloader.mobile.data.CookieCheckUi
 import com.mediadownloader.mobile.data.StorageCategory
 
 import kotlinx.coroutines.flow.StateFlow
@@ -12,6 +13,10 @@ import kotlinx.coroutines.flow.StateFlow
  */
 interface MobileUiController {
     val state: StateFlow<MobileUiState>
+
+    /** ExoPlayer used to play rendered preview clips (bound by a PlayerView). */
+    val previewExoPlayer: androidx.media3.exoplayer.ExoPlayer?
+        get() = null
 
     fun onAction(action: MobileUiAction)
 }
@@ -113,6 +118,13 @@ data class HomeUiState(
     val canPaste: Boolean = true,
     val isStartingDownload: Boolean = false,
     val analysisHint: String? = null,
+    val audioSpeed: Float = 1f,
+    val audioPitchSemitones: Float = 0f,
+    val audioVolumePercent: Int = 100,
+    val previewUsesVideo: Boolean = true,
+    val isAudioPreviewRendering: Boolean = false,
+    val isAudioPreviewPlaying: Boolean = false,
+    val audioPreviewError: String? = null,
 ) {
     val canAnalyze: Boolean
         get() = url.isNotBlank() && !isAnalyzing && !isStartingDownload
@@ -120,6 +132,16 @@ data class HomeUiState(
     val canDownload: Boolean
         get() = preview != null && selectedQualityId != null && selectedFormatId != null &&
             !isAnalyzing && !isStartingDownload
+
+    val audioPreviewActive: Boolean
+        get() = isAudioPreviewRendering || isAudioPreviewPlaying
+
+    val canPreviewAudio: Boolean
+        get() = preview?.supportsAudio == true && !audioPreviewActive
+
+    /** Whether the "Com vídeo" / "Somente áudio" toggle is offered. */
+    val canTogglePreviewVideo: Boolean
+        get() = preview?.supportsVideo == true
 }
 
 data class MediaPreviewUi(
@@ -217,6 +239,8 @@ data class SettingsUiState(
     val storageLocations: List<StorageLocationUi> = StorageCategory.entries.map {
         StorageLocationUi(category = it)
     },
+    val cookieFileName: String? = null,
+    val cookie: CookieCheckUi? = null,
 ) {
     val isYtDlpOperationBusy: Boolean
         get() = updateState == YtDlpUpdateState.CHECKING ||
@@ -279,6 +303,12 @@ sealed interface MobileUiAction {
     data class SetDownloadPlaylist(val enabled: Boolean) : MobileUiAction
     data class SetIncludeSubtitles(val enabled: Boolean) : MobileUiAction
     object StartDownload : MobileUiAction
+    data class SetAudioSpeed(val value: Float) : MobileUiAction
+    data class SetAudioPitch(val semitones: Float) : MobileUiAction
+    data class SetAudioVolume(val percent: Int) : MobileUiAction
+    object PreviewAudio : MobileUiAction
+    object StopAudioPreview : MobileUiAction
+    data class SelectPreviewUsesVideo(val enabled: Boolean) : MobileUiAction
 
     data class SiteUrlChanged(val value: String) : MobileUiAction
     object PasteSiteUrl : MobileUiAction
@@ -311,6 +341,8 @@ sealed interface MobileUiAction {
     object DismissYtDlpRollback : MobileUiAction
     data class ChooseDownloadLocation(val category: StorageCategory) : MobileUiAction
     data class ResetDownloadLocation(val category: StorageCategory) : MobileUiAction
+    object ChooseCookieFile : MobileUiAction
+    object ClearCookies : MobileUiAction
     object CopySupportPixPayload : MobileUiAction
     object CopySupportPixKey : MobileUiAction
     data class OpenLegalDocument(val document: LegalDocument) : MobileUiAction

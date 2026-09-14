@@ -11,7 +11,8 @@ from PySide6.QtWidgets import (
     QLineEdit, QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
-from mediadownloader.core import FFmpegManager, QueueManager
+from mediadownloader.core import DownloadEngine, FFmpegManager, QueueManager
+from mediadownloader.models import CookieCheck
 from mediadownloader.services import SettingsService, SpotifyService
 from mediadownloader.services.update_service import UpdateService
 from mediadownloader.utils.filenames import validate_template
@@ -41,6 +42,15 @@ class TaskWorker(QRunnable):
             self.signals.done.emit(self.function())
         except Exception as error:
             self.signals.failed.emit(str(error))
+
+
+def _check_cookies_worker(ffmpeg, source: str, file: str, browser: str):
+    engine = DownloadEngine(ffmpeg)
+
+    def run() -> CookieCheck:
+        return engine.check_cookies(source, file, browser)
+
+    return run
 
 
 class SettingsSection(QFrame):
@@ -235,6 +245,7 @@ class SettingsPage(QWidget):
 
         cookies = SettingsSection("Cookies", "Use apenas para serviços nos quais você possui acesso legítimo. Nada é importado sem sua ação explícita.", "shield")
         self.cookie_source = WheelSafeComboBox(); self.cookie_source.addItem("Nenhum", "none"); self.cookie_source.addItem("Importar cookies.txt", "file"); self.cookie_source.addItem("Importar do navegador", "browser")
+        self.cookie_source.currentIndexChanged.connect(self._refresh_cookies_status)
         self.cookies_file = QLineEdit()
         cookie_file_row = QWidget(); cookie_layout = QHBoxLayout(cookie_file_row); cookie_layout.setContentsMargins(0, 0, 0, 0); cookie_layout.addWidget(self.cookies_file, 1)
         choose_cookie = QPushButton("Escolher"); set_button_icon(choose_cookie, "file"); choose_cookie.clicked.connect(self._browse_cookies); cookie_layout.addWidget(choose_cookie)
@@ -242,6 +253,24 @@ class SettingsPage(QWidget):
         cookies.form.addRow("Fonte", self.cookie_source)
         cookies.form.addRow("cookies.txt", cookie_file_row)
         cookies.form.addRow("Navegador", self.browser)
+        self.cookies_status_panel = QFrame()
+        self.cookies_status_panel.setObjectName("ComponentStatus")
+        self.cookies_status_panel.setProperty("state", "neutral")
+        cookies_status_layout = QHBoxLayout(self.cookies_status_panel)
+        cookies_status_layout.setContentsMargins(10, 8, 10, 8)
+        self.cookies_status = QLabel()
+        self.cookies_status.setObjectName("Muted")
+        self.cookies_status.setWordWrap(True)
+        self.cookies_status.setAccessibleName("Estado dos cookies configurados")
+        self.cookies_status.setToolTip(
+            "Valida se a fonte escolhida pode ser lida. Para o navegador, feche-o "
+            "durante o teste. A sessão do YouTube é reconhecida pelos cookies SID/SAPISID."
+        )
+        cookies_status_layout.addWidget(self.cookies_status, 1)
+        self.test_cookies_button = SecondaryButton("TESTAR COOKIES", icon_name="shield")
+        self.test_cookies_button.clicked.connect(self._test_cookies)
+        cookies_status_layout.addWidget(self.test_cookies_button)
+        cookies.form.addRow("Validação", self.cookies_status_panel)
         root.addWidget(cookies)
 
         spotify = SettingsSection(
@@ -362,6 +391,8 @@ class SettingsPage(QWidget):
         self._component_busy = False
         self._available_ytdlp_version: str | None = None
         self._active_component_worker: TaskWorker | None = None
+        self._cookies_worker: TaskWorker | None = None
+        self._spotify_worker: TaskWorker | None = None
         self._load()
         self._refresh_component_status()
         self._configure_accessibility()
@@ -387,6 +418,7 @@ class SettingsPage(QWidget):
             self.cookie_source: "Fonte de cookies autorizada",
             self.cookies_file: "Caminho do arquivo cookies.txt",
             self.browser: "Navegador para importar cookies",
+            self.test_cookies_button: "Validar a fonte de cookies",
             self.spotify_client_id: "Client ID do Spotify",
             self.spotify_redirect: "Endereço local de retorno do Spotify",
         }
@@ -429,6 +461,7 @@ class SettingsPage(QWidget):
         self.browser.setCurrentText(self.settings.get("cookies.browser", "chrome"))
         self.spotify_client_id.setText(self.settings.get("spotify.client_id", ""))
         self._refresh_spotify_status()
+        self._refresh_cookies_status()
 
     def save(self) -> None:
         valid, message = validate_template(self.filename_template.text())
@@ -459,6 +492,7 @@ class SettingsPage(QWidget):
         self.queue.set_concurrency(self.concurrent.value())
         self.theme_changed.emit(str(self.theme.currentData()))
         self.storage_changed.emit()
+        self._refresh_cookies_status()
         QMessageBox.information(self, "Configurações", "Configurações salvas.")
 
     def _connect_spotify(self) -> None:
@@ -477,9 +511,11 @@ class SettingsPage(QWidget):
         worker = TaskWorker(self.spotify.authorize)
         worker.signals.done.connect(self._spotify_connected)
         worker.signals.failed.connect(self._spotify_connection_failed)
+        self._spotify_worker = worker
         self.pool.start(worker)
 
     def _spotify_connected(self, profile: object) -> None:
+        self._spotify_worker = None
         self.spotify_connect.setEnabled(True)
         self._refresh_spotify_status()
         QMessageBox.information(
@@ -489,6 +525,7 @@ class SettingsPage(QWidget):
         )
 
     def _spotify_connection_failed(self, error: str) -> None:
+        self._spotify_worker = None
         self.spotify_connect.setEnabled(True)
         self._refresh_spotify_status()
         QMessageBox.warning(self, "Spotify", error)
@@ -521,6 +558,78 @@ class SettingsPage(QWidget):
         if filename:
             self.cookies_file.setText(filename)
             self._select_data(self.cookie_source, "file")
+
+    def _refresh_cookies_status(self, *_: object) -> None:
+        source = self.cookie_source.currentData()
+        if source == "browser":
+            self._set_cookies_panel_state("neutral")
+            message = (
+                "Os cookies do navegador serão importados ao analisar um link. "
+                "Feche o navegador antes de testar."
+            )
+        elif source == "file":
+            if not self.cookies_file.text().strip():
+                self._set_cookies_panel_state("error")
+                message = "Escolha um arquivo cookies.txt para usar esta fonte."
+            else:
+                self._set_cookies_panel_state("neutral")
+                message = "Arquivo configurado. Clique em Testar para validar."
+        else:
+            self._set_cookies_panel_state("neutral")
+            message = (
+                "Nenhuma fonte ativa. Conteúdo que exige login, como vídeos privados "
+                "ou com restrição de idade, pode ficar bloqueado."
+            )
+        self.cookies_status.setText(message)
+        self.cookies_status.setAccessibleDescription(message)
+        self._set_cookies_button_enabled()
+
+    def _set_cookies_button_enabled(self) -> None:
+        if self._cookies_worker is not None:
+            self.test_cookies_button.setEnabled(False)
+            return
+        source = self.cookie_source.currentData()
+        file_ready = bool(self.cookies_file.text().strip())
+        self.test_cookies_button.setEnabled(source == "browser" or (source == "file" and file_ready))
+
+    def _set_cookies_panel_state(self, state: str) -> None:
+        self.cookies_status_panel.setProperty("state", state)
+        self.cookies_status_panel.style().unpolish(self.cookies_status_panel)
+        self.cookies_status_panel.style().polish(self.cookies_status_panel)
+        self.cookies_status_panel.update()
+
+    def _test_cookies(self) -> None:
+        self.test_cookies_button.setEnabled(False)
+        self.cookies_status.setText("Validando a fonte de cookies…")
+        self._set_cookies_panel_state("pending")
+        worker = TaskWorker(_check_cookies_worker(
+            self.ffmpeg,
+            self.cookie_source.currentData(),
+            self.cookies_file.text().strip(),
+            self.browser.currentText(),
+        ))
+        worker.signals.done.connect(self._cookies_check_done)
+        worker.signals.failed.connect(self._cookies_check_failed)
+        self._cookies_worker = worker
+        self.pool.start(worker)
+
+    def _cookies_check_done(self, result: object) -> None:
+        self._cookies_worker = None
+        check = result if isinstance(result, CookieCheck) else CookieCheck(False, str(result))
+        self.cookies_status.setText(check.message)
+        self.cookies_status.setAccessibleDescription(check.message)
+        self.cookies_status.setToolTip(check.detail or self.cookies_status.toolTip())
+        if check.logged_in or check.ok:
+            self._set_cookies_panel_state("ready" if check.logged_in else "neutral")
+        else:
+            self._set_cookies_panel_state("error")
+        self._set_cookies_button_enabled()
+
+    def _cookies_check_failed(self, error: str) -> None:
+        self._cookies_worker = None
+        self.cookies_status.setText(f"Não foi possível validar os cookies. {error}")
+        self._set_cookies_panel_state("error")
+        self._set_cookies_button_enabled()
 
     def _refresh_component_status(self) -> None:
         status = self.updates.status()

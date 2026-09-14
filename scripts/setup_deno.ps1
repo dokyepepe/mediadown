@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $ResourceRoot = Join-Path $ProjectRoot 'resources\deno'
 $DenoExe = Join-Path $ResourceRoot 'deno.exe'

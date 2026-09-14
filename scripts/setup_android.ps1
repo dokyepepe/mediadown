@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$AcceptSdkLicenses,
     [switch]$Force,
     [string]$JavaHome = $env:JAVA_HOME
@@ -68,8 +68,8 @@ if ($AcceptSdkLicenses) {
     Write-Warning "Use -AcceptSdkLicenses para instalar pacotes em uma máquina nova."
 }
 
-Write-Host "Instalando Platform Tools, Android 16 (API 36) e Build Tools 35/36..."
-& $sdkManager --sdk_root=$sdkRoot "platform-tools" "platforms;android-36" "build-tools;35.0.0" "build-tools;36.0.0"
+Write-Host "Instalando Platform Tools, Android 16 (API 36), Build Tools 35/36 e NDK..."
+& $sdkManager --sdk_root=$sdkRoot "platform-tools" "platforms;android-36" "build-tools;35.0.0" "build-tools;36.0.0" "ndk;26.3.11579264"
 if ($LASTEXITCODE -ne 0) {
     throw "sdkmanager terminou com código $LASTEXITCODE"
 }

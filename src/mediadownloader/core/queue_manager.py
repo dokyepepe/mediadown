@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections import deque
 from datetime import UTC, datetime
 
@@ -13,6 +14,8 @@ from mediadownloader.utils.errors import FriendlyError
 
 from .downloader import DownloadEngine
 from .workers import DownloadWorker
+
+LOGGER = logging.getLogger(__name__)
 
 
 class QueueManager(QObject):
@@ -57,7 +60,7 @@ class QueueManager(QObject):
         item.status = DownloadStatus.QUEUED
         self.items[item.id] = item
         self.pending.append((item, options))
-        self.history.upsert(item)
+        self._safe_upsert(item)
         self.item_added.emit(item)
         self._start_available()
 
@@ -77,7 +80,7 @@ class QueueManager(QObject):
             if item.id == item_id:
                 self.pending.remove((item, options))
                 item.status = DownloadStatus.CANCELLED
-                self.history.upsert(item)
+                self._safe_upsert(item)
                 self.item_updated.emit(item)
                 self.item_finished.emit(item)
                 break
@@ -98,7 +101,7 @@ class QueueManager(QObject):
         item.technical_error = ""
         options = DownloadOptions.from_dict(item.options)
         self.pending.append((item, options))
-        self.history.upsert(item)
+        self._safe_upsert(item)
         self.item_updated.emit(item)
         self._start_available()
 
@@ -133,7 +136,10 @@ class QueueManager(QObject):
         if item is None or item.status.terminal:
             return
         if "status" in update:
-            item.status = DownloadStatus(update["status"])
+            try:
+                item.status = DownloadStatus(update["status"])
+            except (ValueError, KeyError):
+                pass
         for field in ("progress", "speed", "eta", "downloaded_bytes", "total_bytes"):
             if field in update:
                 setattr(item, field, update[field])
@@ -174,9 +180,16 @@ class QueueManager(QObject):
 
     def _finalize(self, item: DownloadItem) -> None:
         self.active.pop(item.id, None)
-        self.history.upsert(item)
+        self._safe_upsert(item)
         self.item_updated.emit(item)
         self.item_finished.emit(item)
         self.active_count_changed.emit(len(self.active))
         self._start_available()
+
+    def _safe_upsert(self, item: DownloadItem) -> None:
+        """Persist state without letting SQLite failures kill the UI thread."""
+        try:
+            self.history.upsert(item)
+        except Exception as error:  # noqa: BLE001 - storage must never crash a slot
+            LOGGER.warning("Não foi possível salvar o item %s no histórico: %s", item.id, error)
 

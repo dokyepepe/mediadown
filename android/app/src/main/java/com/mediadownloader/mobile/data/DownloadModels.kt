@@ -143,9 +143,16 @@ data class MediaFormat(
     val videoCodec: String?,
     val audioCodec: String?,
     val approximateSizeBytes: Long?,
+    val streamUrl: String? = null,
+    val totalBitrate: Long? = null,
 ) {
     val hasVideo: Boolean get() = !videoCodec.isNullOrBlank() && videoCodec != "none"
     val hasAudio: Boolean get() = !audioCodec.isNullOrBlank() && audioCodec != "none"
+
+    /** True when this format exposes a directly playable URL for the preview. */
+    val hasStreamUrl: Boolean
+        get() = !streamUrl.isNullOrBlank() &&
+            (streamUrl.startsWith("http", ignoreCase = true) || streamUrl.contains("://"))
 }
 
 data class MediaAnalysis(

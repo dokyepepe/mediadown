@@ -16,6 +16,7 @@ __pycache__/
 # Android/Gradle (ferramentas locais, caches, artefatos e chaves privadas)
 .android-sdk/
 .android-sdk-download/
+.android-jdk/
 .gradle-dist/
 .gradle/
 android/.gradle/
