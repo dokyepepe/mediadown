@@ -85,6 +85,81 @@ class PreviewRenderer(
         activeProcess?.destroy()
     }
 
+    /**
+     * Renders the requested effects over a fully downloaded media file, keeping
+     * the video stream untouched (stream copy) and re-encoding only the audio so
+     * the same speed / pitch / volume chain a user previews is burned into the
+     * final download. Returns `outputFile` on success.
+     */
+    suspend fun applyEffects(
+        sourceFile: File,
+        outputFile: File,
+        effects: AudioEffects,
+        audioBitrateKbps: Int,
+        includeVideo: Boolean,
+    ): File = withContext(Dispatchers.IO) {
+        val binary = ffmpegResolver(context)
+        val filters = effects.sanitized().filterChain()
+            ?: throw IllegalArgumentException("effects must not be identity")
+        val command = buildList {
+            add(binary.absolutePath)
+            add("-hide_banner")
+            add("-loglevel")
+            add("error")
+            add("-y")
+            add("-i")
+            add(sourceFile.absolutePath)
+            add("-map")
+            add("0")
+            if (includeVideo) {
+                add("-c:v")
+                add("copy")
+            }
+            add("-af")
+            add(filters)
+            addAll(audioEncoding(sourceFile.extension, audioBitrateKbps))
+            add(outputFile.absolutePath)
+        }
+        val process = runInterruptible {
+            ProcessBuilder(command)
+                .redirectErrorStream(true)
+                .apply { setEmbeddedFfmpegEnvironment(context, environment(), binary) }
+                .start()
+        }
+        activeProcess = process
+        try {
+            val finished = runInterruptible {
+                process.waitFor(APPLY_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            }
+            if (!finished) {
+                process.destroy()
+                throw IOException("A aplicação dos efeitos de áudio demorou demais e foi interrompida.")
+            }
+            val log = runInterruptible {
+                process.inputStream.bufferedReader().use { it.readText() }
+            }
+            if (process.exitValue() == 0 && outputFile.exists() && outputFile.length() > 0L) {
+                return@withContext outputFile
+            }
+            throw IOException(readableFfmpegError(log))
+        } catch (error: Throwable) {
+            process.destroy()
+            throw error
+        } finally {
+            activeProcess = null
+        }
+    }
+
+    private fun audioEncoding(extension: String, bitrateKbps: Int): List<String> =
+        when (extension.lowercase()) {
+            "mp3" -> listOf("-c:a", "libmp3lame", "-b:a", "${bitrateKbps}k")
+            "opus", "weba" -> listOf("-c:a", "libopus", "-b:a", "${bitrateKbps}k")
+            "flac" -> listOf("-c:a", "flac")
+            "wav" -> listOf("-c:a", "pcm_s16le")
+            "webm" -> listOf("-c:a", "libopus")
+            else -> listOf("-c:a", "aac", "-b:a", "${bitrateKbps}k")
+        }
+
     private enum class VideoMode { COPY, X264, NONE }
 
     private fun command(
@@ -191,3 +266,4 @@ private fun packagesUserLibDir(context: Context, packageName: String): File =
     )
 
 private const val TIMEOUT_SECONDS = 90L
+private const val APPLY_TIMEOUT_SECONDS = 1200L

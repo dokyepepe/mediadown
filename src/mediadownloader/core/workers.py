@@ -115,6 +115,9 @@ class PreviewRenderWorker(QRunnable):
         audio_filter: str,
         duration: float = 12.0,
         start_time: float = 0.0,
+        video_url: str | None = None,
+        audio_url: str | None = None,
+        headers: dict | None = None,
     ) -> None:
         super().__init__()
         self.ffmpeg = ffmpeg
@@ -123,6 +126,9 @@ class PreviewRenderWorker(QRunnable):
         self.audio_filter = audio_filter
         self.duration = duration
         self.start_time = start_time
+        self.video_url = video_url
+        self.audio_url = audio_url
+        self.headers = headers
         self.signals = PreviewRenderSignals()
 
     @Slot()
@@ -131,6 +137,9 @@ class PreviewRenderWorker(QRunnable):
             self.ffmpeg.render_preview(
                 self.source_url, self.output_path, self.audio_filter, self.duration,
                 self.start_time,
+                video_url=self.video_url,
+                audio_url=self.audio_url,
+                headers=self.headers,
             )
             self.signals.completed.emit(str(self.output_path))
         except Exception as error:

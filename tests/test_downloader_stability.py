@@ -1,4 +1,77 @@
-from mediadownloader.core.downloader import DownloadEngine, _ProgressReporter
+from mediadownloader.core.downloader import (
+    DownloadEngine,
+    _ProgressReporter,
+    _first_stream,
+)
+
+DASH_INFO = {
+    "url": None,
+    "ext": "mp4",
+    "duration": 300.0,
+    "requested_formats": [
+        {
+            "format_id": "137",
+            "url": "https://cdn.example.com/v.mp4",
+            "vcodec": "avc1.640028",
+            "acodec": "none",
+            "ext": "mp4",
+            "http_headers": {"User-Agent": "test-agent", "Accept": "text/html"},
+        },
+        {
+            "format_id": "140",
+            "url": "https://cdn.example.com/a.m4a",
+            "vcodec": "none",
+            "acodec": "mp4a.40.2",
+            "ext": "m4a",
+        },
+    ],
+}
+
+
+class _DashOnlyEngine(DownloadEngine):
+    """Rejects every muxed selector; only resolves separate DASH tracks."""
+
+    def _extract_single(self, url, selector, proxy, cookies_file, cookies_browser):
+        if selector == "bestvideo+bestaudio":
+            return DASH_INFO
+        raise RuntimeError("format muxado indisponível")
+
+
+class _MuxedEngine(DownloadEngine):
+    def _extract_single(self, url, selector, proxy, cookies_file, cookies_browser):
+        return {
+            "url": "https://cdn.example.com/muxed.mp4",
+            "ext": "mp4",
+            "duration": 60.0,
+            "vcodec": "avc1",
+            "acodec": "mp4a",
+        }
+
+
+def test_first_stream_picks_the_requested_track() -> None:
+    video = _first_stream(DASH_INFO["requested_formats"], video=True, audio=False)
+    audio = _first_stream(DASH_INFO["requested_formats"], video=False, audio=True)
+    assert video is not None and video["format_id"] == "137"
+    assert audio is not None and audio["format_id"] == "140"
+    assert _first_stream([], video=True, audio=False) is None
+    assert _first_stream(None, video=True, audio=False) is None
+
+
+def test_preview_source_uses_muxed_stream_when_available() -> None:
+    source = _MuxedEngine().preview_source("https://example.com/v")
+    assert source.needs_merge is False
+    assert source.url == "https://cdn.example.com/muxed.mp4"
+    assert source.video_url is None and source.audio_url is None
+
+
+def test_preview_source_falls_back_to_separate_dash_tracks() -> None:
+    source = _DashOnlyEngine().preview_source("https://example.com/v")
+    assert source.needs_merge is True
+    assert source.has_video is True and source.has_audio is True
+    assert source.video_url == "https://cdn.example.com/v.mp4"
+    assert source.audio_url == "https://cdn.example.com/a.m4a"
+    assert source.headers == {"User-Agent": "test-agent", "Accept": "text/html"}
+    assert source.duration == 300.0
 
 
 def test_progress_reporter_bounds_large_download_event_volume() -> None:

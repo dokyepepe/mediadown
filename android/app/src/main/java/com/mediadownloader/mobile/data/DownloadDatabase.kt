@@ -17,7 +17,17 @@ internal class DownloadDatabase(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Version 1 is the first Android schema. Future versions must migrate in place.
+        if (oldVersion < 2) {
+            db.execSQL(
+                "ALTER TABLE downloads ADD COLUMN audio_speed REAL NOT NULL DEFAULT 1.0",
+            )
+            db.execSQL(
+                "ALTER TABLE downloads ADD COLUMN audio_pitch_semitones REAL NOT NULL DEFAULT 0.0",
+            )
+            db.execSQL(
+                "ALTER TABLE downloads ADD COLUMN audio_volume_percent INTEGER NOT NULL DEFAULT 100",
+            )
+        }
     }
 
     fun upsertDownload(item: DownloadItem) {
@@ -119,6 +129,9 @@ internal class DownloadDatabase(context: Context) :
         put("download_playlist", options.downloadPlaylist.asInt())
         put("include_subtitles", options.includeSubtitles.asInt())
         put("subtitle_languages", options.subtitleLanguages.joinToString(LANGUAGE_SEPARATOR))
+        put("audio_speed", options.audioSpeed)
+        put("audio_pitch_semitones", options.audioPitchSemitones)
+        put("audio_volume_percent", options.audioVolumePercent)
         put("state", state.name)
         put("progress", progress.coerceIn(0, 100))
         putNullable("eta_seconds", etaSeconds)
@@ -160,6 +173,18 @@ internal class DownloadDatabase(context: Context) :
             subtitleLanguages = string("subtitle_languages")
                 .split(LANGUAGE_SEPARATOR)
                 .filter(String::isNotBlank),
+            audioSpeed = float("audio_speed").coerceIn(
+                AudioEffects.MIN_SPEED,
+                AudioEffects.MAX_SPEED,
+            ),
+            audioPitchSemitones = float("audio_pitch_semitones").coerceIn(
+                AudioEffects.MIN_SEMITONES,
+                AudioEffects.MAX_SEMITONES,
+            ),
+            audioVolumePercent = int("audio_volume_percent").coerceIn(
+                AudioEffects.MIN_VOLUME_PERCENT,
+                AudioEffects.MAX_VOLUME_PERCENT,
+            ),
         )
         return DownloadItem(
             id = string("id"),
@@ -201,6 +226,7 @@ internal class DownloadDatabase(context: Context) :
     private fun Cursor.string(column: String) = getString(index(column))
     private fun Cursor.int(column: String) = getInt(index(column))
     private fun Cursor.long(column: String) = getLong(index(column))
+    private fun Cursor.float(column: String) = getFloat(index(column))
     private fun Cursor.nullableString(column: String) =
         index(column).let { if (isNull(it)) null else getString(it) }
     private fun Cursor.nullableInt(column: String) =
@@ -227,7 +253,7 @@ internal class DownloadDatabase(context: Context) :
 
     companion object {
         private const val DATABASE_NAME = "media_downloader.db"
-        private const val DATABASE_VERSION = 1
+        private const val DATABASE_VERSION = 2
         private const val LANGUAGE_SEPARATOR = "\u001F"
 
         private const val CREATE_DOWNLOADS = """
@@ -246,6 +272,9 @@ internal class DownloadDatabase(context: Context) :
                 download_playlist INTEGER NOT NULL,
                 include_subtitles INTEGER NOT NULL,
                 subtitle_languages TEXT NOT NULL,
+                audio_speed REAL NOT NULL DEFAULT 1.0,
+                audio_pitch_semitones REAL NOT NULL DEFAULT 0.0,
+                audio_volume_percent INTEGER NOT NULL DEFAULT 100,
                 state TEXT NOT NULL,
                 progress INTEGER NOT NULL,
                 eta_seconds INTEGER,

@@ -14,6 +14,7 @@ import com.mediadownloader.mobile.data.MediaFormat
 import com.mediadownloader.mobile.data.MediaType
 import com.mediadownloader.mobile.data.StorageCategory
 import com.mediadownloader.mobile.data.VideoContainer
+import com.mediadownloader.mobile.preview.PreviewRenderer
 import com.mediadownloader.mobile.update.YtDlpRuntimeGate
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
@@ -31,6 +32,12 @@ import java.util.concurrent.ConcurrentHashMap
 
 class DownloadCancelledException : IOException("Download cancelado")
 
+/** Media containers that can carry an audio stream a post-download effect pass applies to. */
+private val APPLY_EFFECTS_EXTENSIONS = setOf(
+    "mp4", "mkv", "webm", "mov", "avi",
+    "mp3", "m4a", "opus", "ogg", "flac", "wav",
+)
+
 data class EngineProgress(
     val percent: Int,
     val etaSeconds: Long?,
@@ -43,6 +50,7 @@ class AndroidDownloadEngine(context: Context) {
     private val appContext = context.applicationContext
     private val publisher = MediaStorePublisher(appContext)
     private val cookieStore = CookieStore(appContext)
+    private val effectProcessor = PreviewRenderer(appContext)
     private val initializationMutex = Mutex()
     private val cancelledProcesses = ConcurrentHashMap.newKeySet<String>()
 
@@ -123,6 +131,8 @@ class AndroidDownloadEngine(context: Context) {
                 throw IOException("O yt-dlp terminou sem produzir um arquivo")
             }
 
+            applyAudioEffectsIfNeeded(item = item, stagedFiles = stagedFiles, onProgress = onProgress)
+
             val published = mutableListOf<com.mediadownloader.mobile.data.PublishedFile>()
             val storageCategory = when (item.options.mediaType) {
                 MediaType.VIDEO -> StorageCategory.VIDEO
@@ -143,6 +153,7 @@ class AndroidDownloadEngine(context: Context) {
 
     fun cancel(processId: String): Boolean {
         cancelledProcesses += processId
+        effectProcessor.cancel()
         return YoutubeDL.getInstance().destroyProcessById(processId)
     }
 
@@ -229,6 +240,49 @@ class AndroidDownloadEngine(context: Context) {
 
             VideoContainer.MKV ->
                 "bestvideo$height+bestaudio/best$height/best"
+        }
+    }
+
+    private suspend fun applyAudioEffectsIfNeeded(
+        item: DownloadItem,
+        stagedFiles: List<File>,
+        onProgress: (EngineProgress) -> Unit,
+    ) {
+        val effects = item.options.audioEffects() ?: return
+        onProgress(
+            EngineProgress(
+                percent = 99,
+                etaSeconds = null,
+                outputLine = "Aplicando efeitos de áudio…",
+                processing = true,
+            ),
+        )
+        for (file in stagedFiles) {
+            checkCancelled(item.id)
+            if (file.extension.lowercase() !in APPLY_EFFECTS_EXTENSIONS) continue
+            val pending = File(file.parentFile, "${file.name}.effectors")
+            try {
+                effectProcessor.applyEffects(
+                    sourceFile = file,
+                    outputFile = pending,
+                    effects = effects,
+                    audioBitrateKbps = item.options.audioBitrateKbps,
+                    includeVideo = item.options.mediaType == MediaType.VIDEO,
+                )
+            } catch (error: DownloadCancelledException) {
+                throw error
+            } catch (error: Throwable) {
+                pending.delete()
+                throw IOException(
+                    "Não foi possível aplicar os efeitos de áudio ao arquivo baixado.",
+                    error,
+                )
+            }
+            checkCancelled(item.id)
+            if (!file.delete() || !pending.renameTo(file)) {
+                pending.delete()
+                throw IOException("Não foi possível substituir o arquivo com os efeitos aplicados.")
+            }
         }
     }
 

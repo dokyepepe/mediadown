@@ -111,6 +111,7 @@ class VideoPreviewDialog(QDialog):
         self._render_seq = 0
         self._source_url = ""
         self._source: PreviewSource | None = None
+        self._merged = False
         self._has_audio = True
         self._local_path: Path | None = None
         self._listening_original = False
@@ -278,6 +279,7 @@ class VideoPreviewDialog(QDialog):
         """Load a resolved :class:`PreviewSource` (local or streamed)."""
         self._source = source
         self._has_audio = source.has_audio if source.has_audio is not None else True
+        self._merged = source.needs_merge
         if source.duration and source.duration > 0:
             self.preview_duration = max(1.0, min(float(source.duration), 12.0))
         self.load(source.url)
@@ -286,7 +288,8 @@ class VideoPreviewDialog(QDialog):
         if not _HAS_MULTIMEDIA or self.player is None:
             return
         self._source_url = preview_url
-        self._play_stream("Carregando stream…")
+        if not self._merged:
+            self._play_stream("Carregando stream…")
         self._effect_changed()
 
     def apply_values(self, speed: float, pitch: float, volume: float) -> None:
@@ -330,6 +333,18 @@ class VideoPreviewDialog(QDialog):
         self._update_effect_panel(effects)
         if self.audio_effects is not None:
             self.audio_effects.set_effects(effects)
+        if self._merged:
+            if self.ffmpeg is None or not self.ffmpeg.available:
+                self._set_status(
+                    "Este stream usa áudio e vídeo separados; o componente FFmpeg "
+                    "é necessário para montar a pré-visualização."
+                )
+                return
+            self._pending_render = True
+            self._set_subtitle("Preparando a prévia (áudio e vídeo separados)…")
+            self._set_status("Montando a pré-visualização com o FFmpeg…")
+            self._debounce.start()
+            return
         if not self._has_audio:
             self._cancel_render()
             self._play_stream(
@@ -388,15 +403,21 @@ class VideoPreviewDialog(QDialog):
             return
         effects = self._current_effects()
         chain = effects.filter_chain()
-        if chain is None:
+        if chain is None and not self._merged:
             self._cancel_render()
             return
+        if chain is None:
+            chain = ""
         self._render_seq += 1
         seq = self._render_seq
         start_time, window = self._current_window()
         output = Path(gettempdir()) / f"mediadown_preview_{uuid.uuid4().hex}.mkv"
+        source = self._source
         worker = PreviewRenderWorker(
             self.ffmpeg, self._source_url, output, chain, window, start_time,
+            video_url=source.video_url if source else None,
+            audio_url=source.audio_url if source else None,
+            headers=source.headers if source else None,
         )
         worker.signals.completed.connect(
             lambda path: self._render_ready(seq, Path(path))
@@ -447,11 +468,16 @@ class VideoPreviewDialog(QDialog):
             self.player.setSource(QUrl.fromLocalFile(str(path)))
             self.player.setPosition(0)
             self.player.play()
-        self._set_compare_enabled(True)
-        self._set_subtitle(f"Prévia pronta com {self._current_effects().summary()}.")
-        self._set_status(
-            "Prévia com efeitos tocando. Use “Comparar com original” para ouvir a diferença."
-        )
+        self._set_compare_enabled(not self._merged)
+        summary = self._current_effects().summary()
+        if self._merged:
+            self._set_subtitle(f"Prévia pronta ({summary}).")
+            self._set_status("Prévia montada pelo FFmpeg (áudio e vídeo separados) tocando.")
+        else:
+            self._set_subtitle(f"Prévia pronta com {summary}.")
+            self._set_status(
+                "Prévia com efeitos tocando. Use “Comparar com original” para ouvir a diferença."
+            )
 
     @_guarded
     def _render_failed(self, seq: int, message: str) -> None:
@@ -460,6 +486,12 @@ class VideoPreviewDialog(QDialog):
             return
         self._pending_render = False
         self._set_compare_enabled(False)
+        if self._merged:
+            self._set_status(
+                "Não foi possível montar a prévia deste stream (áudio e vídeo "
+                "separados). Baixe o arquivo para conferir o resultado."
+            )
+            return
         self._set_status(
             "Não foi possível gerar a prévia com efeitos neste stream. "
             "O áudio original continua tocando; baixe o arquivo para conferir o resultado."

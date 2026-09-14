@@ -37,6 +37,27 @@ ProgressCallback = Callable[[dict[str, Any]], None]
 _SESSION_COOKIE_NAMES = frozenset({"SID", "SAPISID", "__Secure-3PAPISID", "LOGIN_INFO"})
 
 
+def _first_stream(
+    formats: Any, *, video: bool, audio: bool
+) -> dict[str, Any] | None:
+    """Pick the first ``requested_formats`` entry matching the required tracks.
+
+    ``requested_formats`` is a list of format dicts as resolved by a merge
+    selector such as ``bestvideo+bestaudio``; each entry carries ``vcodec`` /
+    ``acodec`` and its own direct ``url``.
+    """
+    if not isinstance(formats, list):
+        return None
+    for fmt in formats:
+        if not isinstance(fmt, dict) or not fmt.get("url"):
+            continue
+        has_video = fmt.get("vcodec") not in (None, "none")
+        has_audio = fmt.get("acodec") not in (None, "none")
+        if has_video == video and has_audio == audio:
+            return fmt
+    return None
+
+
 class DownloadCancelled(Exception):
     pass
 
@@ -221,6 +242,30 @@ class DownloadEngine:
                 has_video=info.get("vcodec") not in (None, "none"),
                 has_audio=info.get("acodec") not in (None, "none"),
             )
+        # Some uploads (several YouTube videos) expose only separate DASH/HLS
+        # tracks, so no muxed format exists. Fall back to resolving the best
+        # video and audio streams; the preview merges them locally with FFmpeg.
+        try:
+            dash = self._extract_single(
+                url, "bestvideo+bestaudio", proxy, cookies_file, cookies_browser,
+            )
+        except Exception as error:  # noqa: BLE001
+            last_error = error
+        else:
+            requested = dash.get("requested_formats")
+            video = _first_stream(requested, video=True, audio=False)
+            audio = _first_stream(requested, video=False, audio=True)
+            if video and audio:
+                return PreviewSource(
+                    url=str(video["url"]),
+                    extension=str(video.get("ext") or dash.get("ext") or ""),
+                    duration=dash.get("duration"),
+                    has_video=True,
+                    has_audio=True,
+                    video_url=str(video["url"]),
+                    audio_url=str(audio["url"]),
+                    headers=dict(video.get("http_headers") or {}),
+                )
         if last_error is not None:
             LOGGER.warning("Pré-visualização indisponível: %s", last_error)
         raise FriendlyError(

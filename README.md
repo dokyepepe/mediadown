@@ -205,7 +205,7 @@ release/MediaDownloader-android-debug.apk
 SHA-256 do artefato atual:
 
 ```text
-6cd85cdd04483a7b2cea1bfc74a78cb933c0ed30aa7839577a5774015661d676
+e96143870e72bfc2ff6cb2bb024cec862b4f2c7fb2b3bc7742478fdfb9ad4786
 ```
 
 Para instalar no aparelho conectado por USB:

@@ -142,6 +142,9 @@ data class HomeUiState(
     /** Whether the "Com vídeo" / "Somente áudio" toggle is offered. */
     val canTogglePreviewVideo: Boolean
         get() = preview?.supportsVideo == true
+
+    val audioEffectsDefault: Boolean
+        get() = audioSpeed == 1f && audioPitchSemitones == 0f && audioVolumePercent == 100
 }
 
 data class MediaPreviewUi(
@@ -306,6 +309,7 @@ sealed interface MobileUiAction {
     data class SetAudioSpeed(val value: Float) : MobileUiAction
     data class SetAudioPitch(val semitones: Float) : MobileUiAction
     data class SetAudioVolume(val percent: Int) : MobileUiAction
+    object ResetAudioEffects : MobileUiAction
     object PreviewAudio : MobileUiAction
     object StopAudioPreview : MobileUiAction
     data class SelectPreviewUsesVideo(val enabled: Boolean) : MobileUiAction

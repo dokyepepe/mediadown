@@ -44,13 +44,25 @@ class CookieCheck:
 
 @dataclass(slots=True, frozen=True)
 class PreviewSource:
-    """A directly playable stream used by the in-app media preview."""
+    """A stream (or separate DASH tracks) used by the in-app media preview.
+
+    When the site only exposes separate video and audio tracks
+    (``video_url``/``audio_url``), the preview must merge them locally with
+    FFmpeg before playing; ``needs_merge`` reflects that state.
+    """
 
     url: str
     extension: str = ""
     duration: float | None = None
     has_video: bool = True
     has_audio: bool = True
+    video_url: str | None = None
+    audio_url: str | None = None
+    headers: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def needs_merge(self) -> bool:
+        return bool(self.video_url and self.audio_url)
 
 
 @dataclass(slots=True)

@@ -202,6 +202,7 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             }
             MobileUiAction.PreviewAudio -> previewAudio()
             MobileUiAction.StopAudioPreview -> stopAudioPreview()
+            MobileUiAction.ResetAudioEffects -> resetAudioEffects()
             is MobileUiAction.SelectPreviewUsesVideo -> updateHome {
                 it.copy(previewUsesVideo = action.enabled)
             }
@@ -634,6 +635,17 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             it.copy(
                 isAudioPreviewRendering = false,
                 isAudioPreviewPlaying = false,
+            )
+        }
+    }
+
+    private fun resetAudioEffects() {
+        stopAudioPreview()
+        updateHome {
+            it.copy(
+                audioSpeed = 1f,
+                audioPitchSemitones = 0f,
+                audioVolumePercent = 100,
             )
         }
     }
@@ -1362,6 +1374,9 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
                 audioFormat = AudioFormat.entries.firstOrNull { it.extension == format } ?: AudioFormat.MP3,
                 audioBitrateKbps = quality.toIntOrNull()?.coerceIn(32, 320) ?: 192,
                 downloadPlaylist = downloadPlaylist,
+                audioSpeed = audioSpeed,
+                audioPitchSemitones = audioPitchSemitones,
+                audioVolumePercent = audioVolumePercent,
             )
         } else {
             DownloadOptions(
@@ -1370,6 +1385,9 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
                 videoContainer = VideoContainer.entries.firstOrNull { it.extension == format } ?: VideoContainer.MP4,
                 downloadPlaylist = downloadPlaylist,
                 includeSubtitles = includeSubtitles,
+                audioSpeed = audioSpeed,
+                audioPitchSemitones = audioPitchSemitones,
+                audioVolumePercent = audioVolumePercent,
             )
         }
     }

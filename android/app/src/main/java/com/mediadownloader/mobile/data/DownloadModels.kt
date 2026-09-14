@@ -32,6 +32,9 @@ data class DownloadOptions(
     val downloadPlaylist: Boolean = false,
     val includeSubtitles: Boolean = false,
     val subtitleLanguages: List<String> = listOf("pt", "pt-BR", "en"),
+    val audioSpeed: Float = 1f,
+    val audioPitchSemitones: Float = 0f,
+    val audioVolumePercent: Int = 100,
 ) {
     init {
         require(maxVideoHeight == null || maxVideoHeight > 0) {
@@ -40,7 +43,26 @@ data class DownloadOptions(
         require(audioBitrateKbps in 32..320) {
             "audioBitrateKbps must be between 32 and 320"
         }
+        require(audioSpeed in AudioEffects.MIN_SPEED..AudioEffects.MAX_SPEED) {
+            "audioSpeed must be between ${AudioEffects.MIN_SPEED} and ${AudioEffects.MAX_SPEED}"
+        }
+        require(audioPitchSemitones in AudioEffects.MIN_SEMITONES..AudioEffects.MAX_SEMITONES) {
+            "audioPitchSemitones must be between " +
+                "${AudioEffects.MIN_SEMITONES} and ${AudioEffects.MAX_SEMITONES}"
+        }
+        require(audioVolumePercent in AudioEffects.MIN_VOLUME_PERCENT..AudioEffects.MAX_VOLUME_PERCENT) {
+            "audioVolumePercent must be between " +
+                "${AudioEffects.MIN_VOLUME_PERCENT} and ${AudioEffects.MAX_VOLUME_PERCENT}"
+        }
     }
+
+    /** The effect chain to apply after download, or `null` when everything is default. */
+    fun audioEffects(): AudioEffects? =
+        AudioEffects(
+            speed = audioSpeed,
+            semitones = audioPitchSemitones,
+            volumePercent = audioVolumePercent,
+        ).sanitized().takeUnless { it.isIdentity }
 }
 
 enum class DownloadState {

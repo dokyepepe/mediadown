@@ -102,6 +102,19 @@ class MobileUiStateTest {
     }
 
     @Test
+    fun audioEffectsDefaultReflectsSliderValues() {
+        assertTrue(HomeUiState().audioEffectsDefault)
+        assertFalse(HomeUiState(audioSpeed = 1.5f).audioEffectsDefault)
+        assertFalse(HomeUiState(audioPitchSemitones = 3f).audioEffectsDefault)
+        assertFalse(HomeUiState(audioVolumePercent = 130).audioEffectsDefault)
+        assertTrue(
+            HomeUiState(audioSpeed = 1.5f, audioPitchSemitones = 3f, audioVolumePercent = 130)
+                .copy(audioSpeed = 1f, audioPitchSemitones = 0f, audioVolumePercent = 100)
+                .audioEffectsDefault,
+        )
+    }
+
+    @Test
     fun videoPreviewToggleOnlyOfferedWhenVideoExists() {
         assertFalse(HomeUiState(preview = preview.copy(supportsVideo = false)).canTogglePreviewVideo)
         assertTrue(HomeUiState(preview = preview).canTogglePreviewVideo)

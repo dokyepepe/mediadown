@@ -31,6 +31,7 @@ import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Stop
@@ -398,6 +399,25 @@ private fun AudioEffectsCard(
                         onAction(MobileUiAction.SelectPreviewUsesVideo(usesVideo))
                     },
                 )
+            }
+
+            if (!state.audioEffectsDefault) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(
+                        onClick = { onAction(MobileUiAction.ResetAudioEffects) },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.size(6.dp))
+                        Text("Restaurar padrão")
+                    }
+                }
             }
 
             when {

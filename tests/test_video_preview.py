@@ -31,6 +31,22 @@ class UnavailableFFmpeg:
         raise AssertionError("render não deveria ser chamado")
 
 
+class RecordingFFmpeg:
+    available = True
+
+    def __init__(self, output) -> None:
+        self.calls: list[tuple[tuple, dict]] = []
+        self._output = output
+
+    def version(self) -> str:
+        return "7.0"
+
+    def render_preview(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+        self._output.write_bytes(b"clip")
+        return self._output
+
+
 def _make_dialog(qtbot, ffmpeg=None, audio_effects=None) -> VideoPreviewDialog:
     dialog = VideoPreviewDialog("teste", ffmpeg=ffmpeg, audio_effects=audio_effects)
     qtbot.addWidget(dialog)
@@ -121,3 +137,37 @@ def test_error_occurred_does_not_crash_and_keeps_original(qtbot) -> None:
     dialog._source_url = "https://example.com/audio.mp3"
     dialog._error_occurred("boom")
     assert "Erro" in dialog.effect_status.text()
+
+
+def _merged_source() -> PreviewSource:
+    return PreviewSource(
+        url="https://example.com/v.mp4",
+        has_video=True,
+        has_audio=True,
+        video_url="https://example.com/v.mp4",
+        audio_url="https://example.com/a.m4a",
+        headers={"User-Agent": "test"},
+    )
+
+
+def test_merged_source_renders_even_with_identity_effects(qtbot, tmp_path) -> None:
+    ffmpeg = RecordingFFmpeg(tmp_path / "clip.mkv")
+    dialog = _make_dialog(qtbot, ffmpeg=ffmpeg)
+    dialog.load_source(_merged_source())
+    assert dialog._merged is True
+    dialog._start_render()
+    qtbot.waitUntil(lambda: len(ffmpeg.calls) == 1, timeout=4000)
+    assert len(ffmpeg.calls) == 1
+    _, kwargs = ffmpeg.calls[0]
+    assert kwargs["video_url"] == "https://example.com/v.mp4"
+    assert kwargs["audio_url"] == "https://example.com/a.m4a"
+    assert kwargs["headers"] == {"User-Agent": "test"}
+    assert ffmpeg.calls[0][0][2] == ""
+    assert dialog.compare_button.isEnabled() is False
+
+
+def test_merged_source_without_ffmpeg_reports_message(qtbot) -> None:
+    dialog = _make_dialog(qtbot, ffmpeg=UnavailableFFmpeg())
+    dialog.load_source(_merged_source())
+    assert dialog._pending_render is False
+    assert "separados" in dialog.effect_status.text().lower()
