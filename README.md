@@ -186,7 +186,7 @@ O script cria `.venv/`, instala `requirements-dev.txt`, gera os ícones e manté
 - JDK 17 instalado em `C:\Program Files\Java\jdk-17`;
 - conexão com a internet na primeira configuração.
 
-O setup instala Android SDK 36 em `.android-sdk/`, sem depender de uma instalação global do Android Studio:
+O setup instala Android SDK 36, Build Tools e NDK 26.3 em `.android-sdk/`, sem depender de uma instalação global do Android Studio. O NDK fornece a `libc++_shared.so` exigida pelo FFmpeg embutido do `youtubedl-android`:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup_android.ps1 -AcceptSdkLicenses
@@ -213,6 +213,10 @@ Para instalar no aparelho conectado por USB:
 ```powershell
 .\scripts\build_android.ps1 -Variant Debug -Install
 ```
+
+Cada build gera um `versionCode` crescente automaticamente (baseado na data/hora),
+então instalar uma versão nova **substitui a anterior no lugar**, sem precisar
+desinstalar o app (com `-Install` isso acontece via `adb install -r`).
 
 > [!WARNING]
 > O APK `Debug` usa a chave de desenvolvimento. Para distribuir a variante `Release`, configure uma `signingConfig` própria; o script interrompe o processo se detectar um APK sem assinatura.
