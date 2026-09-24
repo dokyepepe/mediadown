@@ -109,11 +109,11 @@ class YtDlpUpdateManager private constructor(context: Context) {
     }
 
     suspend fun checkForUpdate(): YtDlpCheckResult = withContext(Dispatchers.IO) {
+        val release = fetchStableRelease()
+        cachedRelease = release
         preferences.edit()
             .putLong(KEY_LAST_CHECK_EPOCH_MS, System.currentTimeMillis())
             .commit()
-        val release = fetchStableRelease()
-        cachedRelease = release
         val status = refreshStatusBlocking()
         val outcome = when (
             YtDlpUpdatePolicy.availability(
@@ -544,7 +544,8 @@ class YtDlpUpdateManager private constructor(context: Context) {
                     ?: throw IOException("Journal sem versão de destino"),
             )
         } catch (error: Throwable) {
-            throw IOException("O journal da atualização está corrompido", error)
+            journalFile.delete()
+            null
         }
     }
 

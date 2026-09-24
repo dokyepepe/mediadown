@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import sqlite3
+from io import StringIO
 from pathlib import Path
 from threading import RLock
 
@@ -97,6 +99,23 @@ class HistoryService:
     def clear_completed(self) -> None:
         with self._lock, self._connect() as connection:
             connection.execute("DELETE FROM downloads WHERE status = ?", (DownloadStatus.COMPLETED.value,))
+
+    @staticmethod
+    def to_csv(items: list[DownloadItem]) -> str:
+        """Render completed downloads as a UTF-8 CSV string (feed and timestamps kept raw)."""
+        buffer = StringIO()
+        writer = csv.writer(buffer, lineterminator="\n")
+        writer.writerow([
+            "id", "título", "autor", "plataforma", "formato", "qualidade",
+            "arquivo", "tamanho_bytes", "criado_em", "concluído_em", "url",
+        ])
+        for item in items:
+            writer.writerow([
+                item.id, item.title, item.author, item.platform, item.format, item.quality,
+                item.final_file, item.total_bytes or 0, item.created_at,
+                item.completed_at or "", item.url,
+            ])
+        return buffer.getvalue()
 
     @staticmethod
     def _row_to_item(row: sqlite3.Row) -> DownloadItem:

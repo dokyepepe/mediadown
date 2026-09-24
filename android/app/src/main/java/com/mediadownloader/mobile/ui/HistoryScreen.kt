@@ -14,19 +14,24 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Inventory2
-import androidx.compose.material.icons.rounded.OpenInNew
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -49,6 +54,16 @@ fun HistoryScreen(
     modifier: Modifier = Modifier,
 ) {
     var showClearConfirmation by rememberSaveable { mutableStateOf(false) }
+
+    val query = state.searchQuery.trim().lowercase()
+    val visibleItems = if (query.isEmpty()) {
+        state.items
+    } else {
+        state.items.filter { item ->
+            item.title.contains(query, ignoreCase = true) ||
+                item.detail.contains(query, ignoreCase = true)
+        }
+    }
 
     if (showClearConfirmation) {
         AlertDialog(
@@ -111,36 +126,93 @@ fun HistoryScreen(
                 }
             } else {
                 item {
-                    InfoBanner(
-                        text = "${state.items.size} ${if (state.items.size == 1) "arquivo disponível" else "arquivos disponíveis"} neste aparelho.",
-                        icon = Icons.Rounded.Inventory2,
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    OutlinedTextField(
+                        value = state.searchQuery,
+                        onValueChange = { onAction(MobileUiAction.HistorySearchQueryChanged(it)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Buscar no histórico") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Rounded.Search,
+                                contentDescription = null,
+                            )
+                        },
+                        trailingIcon = if (state.searchQuery.isNotEmpty()) {
+                            {
+                                IconButton(
+                                    onClick = {
+                                        onAction(MobileUiAction.HistorySearchQueryChanged(""))
+                                    },
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Limpar busca",
+                                    )
+                                }
+                            }
+                        } else {
+                            null
+                        },
+                        singleLine = true,
+                        shape = MaterialTheme.shapes.medium,
                     )
                 }
-                items(state.items, key = { it.id }) { item ->
-                    HistoryCard(
-                        item = item,
-                        onAction = onAction,
-                        thumbnail = thumbnail,
-                    )
-                }
-                item {
-                    OutlinedButton(
-                        onClick = { showClearConfirmation = true },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 50.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error,
-                        ),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.DeleteSweep,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
+                if (visibleItems.isEmpty()) {
+                    item {
+                        EmptyState(
+                            icon = Icons.Rounded.Search,
+                            title = "Nada encontrado",
+                            supportingText = "Nenhum registro corresponde a \"${state.searchQuery.trim()}\".",
                         )
-                        Text("Limpar histórico", modifier = Modifier.padding(start = 9.dp))
+                    }
+                } else {
+                    item {
+                        InfoBanner(
+                            text = "${visibleItems.size} ${if (visibleItems.size == 1) "arquivo encontrado" else "arquivos encontrados"} neste aparelho.",
+                            icon = Icons.Rounded.Inventory2,
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                        )
+                    }
+                    items(visibleItems, key = { it.id }) { item ->
+                        HistoryCard(
+                            item = item,
+                            onAction = onAction,
+                            thumbnail = thumbnail,
+                        )
+                    }
+                    item {
+                        OutlinedButton(
+                            onClick = { onAction(MobileUiAction.ExportHistory) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 50.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.FileUpload,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Text("Exportar histórico (CSV)", modifier = Modifier.padding(start = 9.dp))
+                        }
+                    }
+                    item {
+                        OutlinedButton(
+                            onClick = { showClearConfirmation = true },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 50.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error,
+                            ),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.DeleteSweep,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Text("Limpar histórico", modifier = Modifier.padding(start = 9.dp))
+                        }
                     }
                 }
             }
@@ -231,7 +303,7 @@ private fun HistoryCard(
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.OpenInNew,
+                        imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
                     )

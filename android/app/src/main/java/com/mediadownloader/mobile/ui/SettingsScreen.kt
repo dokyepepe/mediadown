@@ -5,6 +5,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,11 +18,13 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Autorenew
 import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.BrightnessAuto
+import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Code
@@ -28,6 +32,7 @@ import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Cookie
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Favorite
@@ -37,21 +42,28 @@ import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PrivacyTip
+import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -70,6 +82,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mediadownloader.mobile.support.SupportConfig
@@ -107,7 +120,23 @@ fun SettingsScreen(
             }
 
             item {
+                NetworkCard(state = state, onAction = onAction)
+            }
+
+            item {
+                FilesCard(state = state, onAction = onAction)
+            }
+
+            item {
+                DefaultsCard(state = state, onAction = onAction)
+            }
+
+            item {
                 CookiesCard(state = state, onAction = onAction)
+            }
+
+            item {
+                SpotifyCard(state = state, onAction = onAction)
             }
 
             item {
@@ -309,6 +338,171 @@ private fun StorageCard(
 }
 
 @Composable
+private fun NetworkCard(
+    state: SettingsUiState,
+    onAction: (MobileUiAction) -> Unit,
+) {
+    SectionCard {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            SectionTitle(
+                title = "Rede e velocidade",
+                supportingText = "Um proxy e um limite de velocidade valem para todos os downloads.",
+                icon = Icons.Rounded.Public,
+            )
+            OutlinedTextField(
+                value = state.proxy,
+                onValueChange = { onAction(MobileUiAction.SetProxy(it)) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Proxy (opcional)") },
+                placeholder = { Text("socks5://127.0.0.1:1080") },
+                supportingText = {
+                    Text(
+                        state.proxyError
+                            ?: "Sem proxy, os downloads usam sua conexão direta.",
+                    )
+                },
+                isError = state.proxyError != null,
+                singleLine = true,
+                shape = MaterialTheme.shapes.medium,
+            )
+            OutlinedTextField(
+                value = state.rateLimitText,
+                onValueChange = { onAction(MobileUiAction.SetRateLimitText(it)) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Limite de velocidade (KiB/s)") },
+                placeholder = { Text("0 ou vazio = sem limite") },
+                supportingText = {
+                    Text("Ex.: 1024 = cerca de 1 MiB/s. Aplicado a cada download.")
+                },
+                isError = false,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                shape = MaterialTheme.shapes.medium,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FilesCard(
+    state: SettingsUiState,
+    onAction: (MobileUiAction) -> Unit,
+) {
+    SectionCard {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            SectionTitle(
+                title = "Nome dos arquivos",
+                supportingText = "Template yt-dlp usado ao salvar. O nome final ainda tem o limite de 180 caracteres.",
+                icon = Icons.Rounded.Description,
+            )
+            OutlinedTextField(
+                value = state.filenameTemplate,
+                onValueChange = { onAction(MobileUiAction.SetFilenameTemplate(it)) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Template (opcional)") },
+                placeholder = { Text("%(title).180B [%(id)s].%(ext)s") },
+                supportingText = {
+                    Text(
+                        if (state.filenameTemplate.isBlank()) {
+                            "Vazio usa o padrão %(title).180B [%(id)s].%(ext)s."
+                        } else {
+                            "Você pode usar %(title)s, %(uploader)s, %(id)s, %(ext)s e pastas como Música/…"
+                        },
+                    )
+                },
+                shape = MaterialTheme.shapes.medium,
+            )
+            OutlinedButton(
+                onClick = { onAction(MobileUiAction.ResetFilenameTemplate) },
+                enabled = state.filenameTemplate.isNotBlank(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 50.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Restore,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text("Restaurar padrão", modifier = Modifier.padding(start = 9.dp))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DefaultsCard(
+    state: SettingsUiState,
+    onAction: (MobileUiAction) -> Unit,
+) {
+    SectionCard {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            SectionTitle(
+                title = "Padrões por tipo de mídia",
+                supportingText = "Valores aplicados assim que você analisa um link. Você ainda pode trocar em cada download.",
+                icon = Icons.Rounded.Tune,
+            )
+
+            ChoiceChips(
+                label = "Vídeo — qualidade",
+                choices = VIDEO_QUALITY_CHOICES,
+                selectedId = state.defaultVideoQualityId,
+                onSelect = { onAction(MobileUiAction.SetDefaultVideoQuality(it)) },
+            )
+            ChoiceChips(
+                label = "Vídeo — formato",
+                choices = VIDEO_FORMAT_CHOICES,
+                selectedId = state.defaultVideoFormatId,
+                onSelect = { onAction(MobileUiAction.SetDefaultVideoFormat(it)) },
+            )
+            ChoiceChips(
+                label = "Áudio — qualidade",
+                choices = AUDIO_QUALITY_CHOICES,
+                selectedId = state.defaultAudioBitrate.toString(),
+                onSelect = { onAction(MobileUiAction.SetDefaultAudioBitrate(it.toInt())) },
+            )
+            ChoiceChips(
+                label = "Áudio — formato",
+                choices = AUDIO_FORMAT_CHOICES,
+                selectedId = state.defaultAudioFormatId,
+                onSelect = { onAction(MobileUiAction.SetDefaultAudioFormat(it)) },
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChoiceChips(
+    label: String,
+    choices: List<Pair<String, String>>,
+    selectedId: String,
+    onSelect: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.SemiBold,
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            choices.forEach { (id, labelText) ->
+                FilterChip(
+                    selected = selectedId == id,
+                    onClick = { onSelect(id) },
+                    label = { Text(labelText) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun CookiesCard(
     state: SettingsUiState,
     onAction: (MobileUiAction) -> Unit,
@@ -417,9 +611,250 @@ private fun CookiesCard(
                 }
             }
 
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+            )
+
+            SectionTitle(
+                title = "Cookies por site",
+                supportingText = "Use arquivos diferentes para sites específicos, quando necessário.",
+                icon = Icons.Rounded.Language,
+            )
+            OutlinedTextField(
+                value = state.siteCookieHosts,
+                onValueChange = { onAction(MobileUiAction.SiteCookieHostsChanged(it)) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Sites (separados por vírgula)") },
+                placeholder = { Text("youtube.com, instagram.com") },
+                supportingText = {
+                    Text(
+                        state.siteCookieHostsError
+                            ?: "O perfil é aplicado automaticamente a este domínio e subdomínios.",
+                    )
+                },
+                isError = state.siteCookieHostsError != null,
+                singleLine = true,
+                shape = MaterialTheme.shapes.medium,
+            )
+            OutlinedButton(
+                onClick = { onAction(MobileUiAction.ChooseSiteCookieFile) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 50.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.FileUpload,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text("Escolher cookies para estes sites", modifier = Modifier.padding(start = 9.dp))
+            }
+
+            state.cookieSubProfiles.forEach { profile ->
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Cookie,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                text = profile.label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = profile.hosts,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = profile.cookie?.message
+                                    ?: "Diagnóstico indisponível para este perfil.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (profile.cookie?.ok == true) {
+                                    MaterialTheme.colorScheme.tertiary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        TextButton(
+                            onClick = { onAction(MobileUiAction.ReplaceSiteCookieFile(profile.id)) },
+                        ) {
+                            Text("Trocar")
+                        }
+                        IconButton(
+                            onClick = { onAction(MobileUiAction.RemoveCookieProfile(profile.id)) },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Delete,
+                                contentDescription = "Remover perfil de cookies",
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                }
+            }
+
             Text(
                 text = "O app nunca lê cookies do navegador nem envia dados para fora;" +
                     " o arquivo fica apenas neste aparelho e passa só para o yt-dlp.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SpotifyCard(
+    state: SettingsUiState,
+    onAction: (MobileUiAction) -> Unit,
+) {
+    val isBusy = state.isSpotifyConnecting
+    SectionCard {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            SectionTitle(
+                title = "Spotify",
+                supportingText = "Leia playlists e metadados oficiais. O áudio protegido nunca é baixado.",
+                icon = Icons.Rounded.MusicNote,
+            )
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium,
+                color = if (state.spotifyConnected) {
+                    MaterialTheme.colorScheme.tertiaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainer
+                },
+                contentColor = if (state.spotifyConnected) {
+                    MaterialTheme.colorScheme.onTertiaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = if (state.spotifyConnected) {
+                            Icons.Rounded.CheckCircle
+                        } else {
+                            Icons.Rounded.MusicNote
+                        },
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = if (state.spotifyConnected) {
+                                "Conta conectada"
+                            } else {
+                                "Não conectado"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = state.spotifyAccountName
+                                ?: "Informe o Client ID do seu aplicativo Spotify para conectar.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            OutlinedTextField(
+                value = state.spotifyClientId,
+                onValueChange = { onAction(MobileUiAction.SetSpotifyClientId(it)) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Client ID do Spotify") },
+                supportingText = {
+                    Text(
+                        state.spotifyClientIdError
+                            ?: "Crie um aplicativo em developer.spotify.com e use o redirecionamento " +
+                            "mediadownloader://spotify/callback.",
+                    )
+                },
+                isError = state.spotifyClientIdError != null,
+                enabled = !isBusy,
+                singleLine = true,
+                shape = MaterialTheme.shapes.medium,
+            )
+
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(
+                    onClick = { onAction(MobileUiAction.ConnectSpotify) },
+                    enabled = !isBusy && !state.spotifyConnected,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp),
+                ) {
+                    if (isBusy) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                        Text("Aguardando autorização…", modifier = Modifier.padding(start = 9.dp))
+                    } else {
+                        Icon(
+                            imageVector = Icons.Rounded.MusicNote,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Text("Conectar Spotify", modifier = Modifier.padding(start = 9.dp))
+                    }
+                }
+                if (state.spotifyConnected) {
+                    TextButton(
+                        onClick = { onAction(MobileUiAction.DisconnectSpotify) },
+                        enabled = !isBusy,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Delete,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Text("Desconectar", modifier = Modifier.padding(start = 9.dp))
+                    }
+                }
+            }
+
+            Text(
+                text = "A sessão fica criptografada neste aparelho. O Media Downloader usa somente " +
+                    "metadados públicos; nada do Spotify é enviado para terceiros.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -773,6 +1208,20 @@ private fun AppInfoCard(
                 }
             }
 
+            TextButton(
+                onClick = { onAction(MobileUiAction.ShareDiagnostics) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 50.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.BugReport,
+                    contentDescription = null,
+                    modifier = Modifier.size(21.dp),
+                )
+                Text("Compartilhar diagnóstico", modifier = Modifier.padding(start = 9.dp))
+            }
+
             Surface(
                 shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
@@ -943,3 +1392,35 @@ private val YtDlpUpdateState.icon: ImageVector
         YtDlpUpdateState.REJECTED -> Icons.Rounded.Block
         YtDlpUpdateState.FAILED -> Icons.Rounded.ErrorOutline
     }
+
+private val VIDEO_QUALITY_CHOICES = listOf(
+    "best" to "Melhor",
+    "2160" to "2160p",
+    "1440" to "1440p",
+    "1080" to "1080p",
+    "720" to "720p",
+    "480" to "480p",
+    "360" to "360p",
+    "240" to "240p",
+)
+
+private val VIDEO_FORMAT_CHOICES = listOf(
+    "mp4" to "MP4",
+    "mkv" to "MKV",
+    "webm" to "WEBM",
+)
+
+private val AUDIO_QUALITY_CHOICES = listOf(
+    "320" to "320 kbps",
+    "256" to "256 kbps",
+    "192" to "192 kbps",
+    "128" to "128 kbps",
+)
+
+private val AUDIO_FORMAT_CHOICES = listOf(
+    "mp3" to "MP3",
+    "m4a" to "M4A",
+    "opus" to "OPUS",
+    "flac" to "FLAC",
+    "wav" to "WAV",
+)

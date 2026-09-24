@@ -196,3 +196,137 @@ def test_controller_clamps_speed_and_volume():
     controller.set_effects(AudioEffects(speed=5.0, pitch=1.0, volume=9.0))
     assert controller.effects.speed == 2.0
     assert controller.effects.volume == 4.0
+
+
+def test_build_audio_filters_toggles_alone():
+    assert build_audio_filters(1.0, 1.0, 1.0, bass=True) == "bass=g=6:f=100"
+    assert build_audio_filters(1.0, 1.0, 1.0, echo=True) == "aecho=0.7:0.7:300:0.3"
+    assert build_audio_filters(1.0, 1.0, 1.0, tremolo=True) == "tremolo=f=5:d=0.25"
+    assert build_audio_filters(1.0, 1.0, 1.0, normalize=True) == (
+        "loudnorm=I=-16:TP=-1.5:LRA=11"
+    )
+
+
+def test_build_audio_filters_toggles_with_speed_and_volume():
+    chain = build_audio_filters(1.5, 1.0, 1.25, bass=True, echo=True, tremolo=True)
+    assert chain == "atempo=1.5,bass=g=6:f=100,aecho=0.7:0.7:300:0.3,tremolo=f=5:d=0.25,volume=1.25"
+
+
+def test_build_audio_filters_normalize_runs_last_after_volume():
+    chain = build_audio_filters(1.0, 1.0, 0.5, normalize=True)
+    assert chain == "volume=0.5,loudnorm=I=-16:TP=-1.5:LRA=11"
+
+
+def test_audio_effects_toggle_is_identity():
+    assert AudioEffects(bass=True).is_identity is False
+    assert AudioEffects(echo=True).is_identity is False
+    assert AudioEffects(tremolo=True).is_identity is False
+    assert AudioEffects(normalize=True).is_identity is False
+
+
+def test_audio_effects_active_names_toggles():
+    names = AudioEffects(bass=True, echo=True, tremolo=True, normalize=True).active_effect_names()
+    text = " ".join(names)
+    assert "Graves" in text
+    assert "Eco" in text
+    assert "Tremolo" in text
+    assert "loudness" in text.lower()
+
+
+def test_audio_effects_summary_toggles():
+    summary = AudioEffects(bass=True, normalize=True).summary()
+    assert "·" in summary
+    assert "Graves" in summary
+    assert "R128" in summary
+
+
+def test_audio_effects_filter_chain_toggles():
+    assert AudioEffects(bass=True).filter_chain() == "bass=g=6:f=100"
+    assert AudioEffects().filter_chain() is None
+
+
+def test_effects_explanations_toggles():
+    explanations = effects_explanations(AudioEffects(bass=True, normalize=True))
+    text = " ".join(explanations)
+    assert len(explanations) == 2
+    assert "bass" in text
+    assert "loudnorm" in text
+
+
+def test_controller_persists_toggles(tmp_path):
+    from mediadownloader.services.settings_service import SettingsService
+
+    settings = SettingsService(tmp_path / "settings.json")
+    controller = AudioEffectsController(settings)
+    controller.set_effects(AudioEffects(
+        speed=1.25, pitch=semitones_to_ratio(1), volume=1.1,
+        bass=True, echo=True, tremolo=True, normalize=True,
+    ))
+
+    reloaded = AudioEffectsController(SettingsService(tmp_path / "settings.json"))
+    assert reloaded.effects.bass is True
+    assert reloaded.effects.echo is True
+    assert reloaded.effects.tremolo is True
+    assert reloaded.effects.normalize is True
+    assert reloaded.effects.speed == 1.25
+
+
+def test_controller_set_toggle_noop_does_not_emit():
+    controller = AudioEffectsController()
+    received = []
+    controller.effects_changed.connect(lambda effects: received.append(effects))
+    controller.set_bass(False)
+    controller.set_echo(False)
+    assert received == []
+    controller.set_bass(True)
+    assert len(received) == 1
+    assert received[0].bass is True
+
+
+def test_controller_set_effects_resets_flags_when_omitted():
+    controller = AudioEffectsController()
+    controller.set_bass(True)
+    controller.set_effects(AudioEffects(speed=1.5, pitch=1.0, volume=1.0))
+    assert controller.effects.bass is False
+    assert controller.effects.speed == 1.5
+
+
+def test_audio_effects_to_dict_roundtrips_flags():
+    effects = AudioEffects(bass=True, echo=True, tremolo=True, normalize=True)
+    assert AudioEffects(**effects.to_dict()) == effects
+
+
+def test_controller_set_speed_preserves_toggles():
+    controller = AudioEffectsController()
+    controller.set_bass(True)
+    controller.set_normalize(True)
+    controller.set_speed(1.5)
+    assert controller.effects.bass is True
+    assert controller.effects.normalize is True
+    assert controller.effects.echo is False
+    assert controller.effects.speed == 1.5
+
+
+def test_controller_set_pitch_preserves_toggles():
+    controller = AudioEffectsController()
+    controller.set_echo(True)
+    controller.set_pitch(semitones_to_ratio(2))
+    assert controller.effects.echo is True
+    assert abs(controller.effects.semitones - 2.0) < 1e-3
+
+
+def test_controller_set_volume_preserves_toggles():
+    controller = AudioEffectsController()
+    controller.set_tremolo(True)
+    controller.set_volume(0.8)
+    assert controller.effects.tremolo is True
+    assert controller.effects.volume == 0.8
+
+
+def test_controller_toggle_preserves_speed_pitch_volume():
+    controller = AudioEffectsController()
+    controller.set_effects(AudioEffects(speed=1.5, pitch=semitones_to_ratio(-2), volume=1.2))
+    controller.set_bass(True)
+    assert controller.effects.speed == 1.5
+    assert abs(controller.effects.semitones + 2.0) < 1e-3
+    assert controller.effects.volume == 1.2

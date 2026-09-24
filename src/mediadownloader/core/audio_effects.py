@@ -225,15 +225,21 @@ def _volume_description(value: float) -> str:
 
 @dataclass(frozen=True, slots=True)
 class AudioEffects:
-    """Immutable snapshot of the three audio adjustments.
+    """Immutable snapshot of the audio adjustments applied by FFmpeg.
 
     Provides both machine-readable values for FFmpeg and human-readable
-    descriptions used by the preview and home page.
+    descriptions used by the preview and home page.  Besides speed / pitch /
+    volume it carries four native FFmpeg toggles (bass boost, echo, tremolo and
+    loudness normalization) that are appended to the filter chain.
     """
 
     speed: float = 1.0
     pitch: float = 1.0   # ratio (1.0 = no shift, >1.0 = sharper, <1.0 = flatter)
     volume: float = 1.0
+    bass: bool = False
+    echo: bool = False
+    tremolo: bool = False
+    normalize: bool = False
 
     @property
     def semitones(self) -> float:
@@ -242,7 +248,10 @@ class AudioEffects:
 
     @property
     def is_identity(self) -> bool:
-        return self.speed == 1.0 and self.pitch == 1.0 and self.volume == 1.0
+        return (
+            self.speed == 1.0 and self.pitch == 1.0 and self.volume == 1.0
+            and not (self.bass or self.echo or self.tremolo or self.normalize)
+        )
 
     def speed_description(self) -> str:
         return _speed_description(self.speed)
@@ -255,7 +264,11 @@ class AudioEffects:
 
     def filter_chain(self) -> str | None:
         """Return the ``-af`` filter string, or ``None`` when nothing is altered."""
-        return build_audio_filters(self.speed, self.pitch, self.volume)
+        return build_audio_filters(
+            self.speed, self.pitch, self.volume,
+            bass=self.bass, echo=self.echo,
+            tremolo=self.tremolo, normalize=self.normalize,
+        )
 
     def active_effect_names(self) -> tuple[str, ...]:
         """One human-readable string per active effect (speed / pitch / volume)."""
@@ -266,6 +279,14 @@ class AudioEffects:
             parts.append(self.pitch_description())
         if self.volume != 1.0:
             parts.append(self.volume_description())
+        if self.bass:
+            parts.append("Graves reforçados (+6 dB)")
+        if self.echo:
+            parts.append("Eco")
+        if self.tremolo:
+            parts.append("Tremolo")
+        if self.normalize:
+            parts.append("Normalização de loudness (EBU R128)")
         return tuple(parts)
 
     def summary(self) -> str:
@@ -275,8 +296,16 @@ class AudioEffects:
             return "Sem efeitos"
         return " · ".join(parts)
 
-    def to_dict(self) -> dict[str, float]:
-        return {"speed": self.speed, "pitch": self.pitch, "volume": self.volume}
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "speed": self.speed,
+            "pitch": self.pitch,
+            "volume": self.volume,
+            "bass": self.bass,
+            "echo": self.echo,
+            "tremolo": self.tremolo,
+            "normalize": self.normalize,
+        }
 
 
 def effects_explanations(effects: AudioEffects) -> tuple[str, ...]:
@@ -296,6 +325,23 @@ def effects_explanations(effects: AudioEffects) -> tuple[str, ...]:
         parts.append(
             f"Volume {effects.volume_description()}: amplifica ou reduz a amplitude final."
         )
+    if effects.bass:
+        parts.append(
+            "Graves reforçados: o filtro bass aplica um ganho de +6 dB em 100 Hz."
+        )
+    if effects.echo:
+        parts.append(
+            "Eco: aecho adiciona uma repetição curta (300 ms) do sinal."
+        )
+    if effects.tremolo:
+        parts.append(
+            "Tremolo: o filtro tremolo modula a amplitude a 5 Hz (profundidade 0,25)."
+        )
+    if effects.normalize:
+        parts.append(
+            "Normalização de loudness: loudnorm ajusta o nível médio para -16 LUFS "
+            "(EBU R128), mantendo o pico abaixo de -1,5 dBTP."
+        )
     return tuple(parts)
 
 
@@ -303,19 +349,29 @@ def build_audio_filters(
     speed: float = 1.0,
     pitch: float = 1.0,
     volume: float = 1.0,
+    *,
+    bass: bool = False,
+    echo: bool = False,
+    tremolo: bool = False,
+    normalize: bool = False,
 ) -> str | None:
-    """Build the FFmpeg ``-af`` filter graph for speed / pitch / volume.
+    """Build the FFmpeg ``-af`` filter graph for speed / pitch / volume + toggles.
 
     Speed is stretched with ``atempo``; pitch shifts use ``asetrate`` +
     ``aresample`` + ``atempo=1/pitch`` (changes the key while preserving
     duration).  ``atempo`` is limited to [0.5, 2.0] per instance, so the
     pitch-recovery and speed stages remain as separate in-range filters.
-    Volume is applied last.  Returns ``None`` when nothing is altered.
+    The optional native filters (bass, aecho, tremolo) run before volume;
+    loudness normalization via ``loudnorm`` is applied last.  Returns ``None``
+    when nothing is altered.
     """
     speed = float(speed or 1.0)
     pitch = float(pitch or 1.0)
     volume = float(volume or 1.0)
-    if speed == 1.0 and pitch == 1.0 and volume == 1.0:
+    if (
+        speed == 1.0 and pitch == 1.0 and volume == 1.0
+        and not (bass or echo or tremolo or normalize)
+    ):
         return None
     filters: list[str] = []
     if pitch != 1.0:
@@ -327,8 +383,16 @@ def build_audio_filters(
         ))
     if speed != 1.0:
         filters.append(f"atempo={speed:g}")
+    if bass:
+        filters.append("bass=g=6:f=100")
+    if echo:
+        filters.append("aecho=0.7:0.7:300:0.3")
+    if tremolo:
+        filters.append("tremolo=f=5:d=0.25")
     if volume != 1.0:
         filters.append(f"volume={volume:g}")
+    if normalize:
+        filters.append("loudnorm=I=-16:TP=-1.5:LRA=11")
     return ",".join(filters)
 
 
@@ -339,6 +403,10 @@ def _effects_equal(first: AudioEffects, second: AudioEffects) -> bool:
         math.isclose(first.speed, second.speed, rel_tol=1e-4)
         and math.isclose(first.pitch, second.pitch, rel_tol=1e-4)
         and math.isclose(first.volume, second.volume, rel_tol=1e-4)
+        and first.bass == second.bass
+        and first.echo == second.echo
+        and first.tremolo == second.tremolo
+        and first.normalize == second.normalize
     )
 
 
@@ -364,6 +432,10 @@ class AudioEffectsController(QObject):
             speed=float(settings.get("downloads.audio_speed", 1.0)) if settings else 1.0,
             pitch=float(settings.get("downloads.audio_pitch", 1.0)) if settings else 1.0,
             volume=float(settings.get("downloads.audio_volume", 1.0)) if settings else 1.0,
+            bass=bool(settings.get("downloads.audio_bass", False)) if settings else False,
+            echo=bool(settings.get("downloads.audio_echo", False)) if settings else False,
+            tremolo=bool(settings.get("downloads.audio_tremolo", False)) if settings else False,
+            normalize=bool(settings.get("downloads.audio_normalize", False)) if settings else False,
         )
 
     @property
@@ -376,6 +448,10 @@ class AudioEffectsController(QObject):
             speed=min(2.0, max(0.5, float(effects.speed or 1.0))),
             pitch=float(effects.pitch or 1.0) or 1.0,
             volume=min(4.0, max(0.0, float(effects.volume or 1.0))),
+            bass=bool(effects.bass),
+            echo=bool(effects.echo),
+            tremolo=bool(effects.tremolo),
+            normalize=bool(effects.normalize),
         )
         if _effects_equal(self._effects, normalized):
             return
@@ -384,20 +460,67 @@ class AudioEffectsController(QObject):
             self._settings.set("downloads.audio_speed", normalized.speed, save=False)
             self._settings.set("downloads.audio_pitch", normalized.pitch, save=False)
             self._settings.set("downloads.audio_volume", normalized.volume, save=False)
+            self._settings.set("downloads.audio_bass", normalized.bass, save=False)
+            self._settings.set("downloads.audio_echo", normalized.echo, save=False)
+            self._settings.set("downloads.audio_tremolo", normalized.tremolo, save=False)
+            self._settings.set("downloads.audio_normalize", normalized.normalize, save=False)
             self._settings.save()
         self.effects_changed.emit(normalized)
 
     def set_speed(self, value: float) -> None:
-        self.set_effects(AudioEffects(value, self._effects.pitch, self._effects.volume))
+        current = self._effects
+        self.set_effects(AudioEffects(
+            value, current.pitch, current.volume,
+            bass=current.bass, echo=current.echo,
+            tremolo=current.tremolo, normalize=current.normalize,
+        ))
 
     def set_pitch(self, ratio: float) -> None:
-        self.set_effects(AudioEffects(self._effects.speed, ratio, self._effects.volume))
+        current = self._effects
+        self.set_effects(AudioEffects(
+            current.speed, ratio, current.volume,
+            bass=current.bass, echo=current.echo,
+            tremolo=current.tremolo, normalize=current.normalize,
+        ))
 
     def set_pitch_semitones(self, semitones: int | float) -> None:
         self.set_pitch(semitones_to_ratio(semitones))
 
     def set_volume(self, value: float) -> None:
-        self.set_effects(AudioEffects(self._effects.speed, self._effects.pitch, value))
+        current = self._effects
+        self.set_effects(AudioEffects(
+            current.speed, current.pitch, value,
+            bass=current.bass, echo=current.echo,
+            tremolo=current.tremolo, normalize=current.normalize,
+        ))
+
+    def set_bass(self, enabled: bool) -> None:
+        self.set_effects(AudioEffects(
+            self._effects.speed, self._effects.pitch, self._effects.volume,
+            bass=bool(enabled), echo=self._effects.echo,
+            tremolo=self._effects.tremolo, normalize=self._effects.normalize,
+        ))
+
+    def set_echo(self, enabled: bool) -> None:
+        self.set_effects(AudioEffects(
+            self._effects.speed, self._effects.pitch, self._effects.volume,
+            bass=self._effects.bass, echo=bool(enabled),
+            tremolo=self._effects.tremolo, normalize=self._effects.normalize,
+        ))
+
+    def set_tremolo(self, enabled: bool) -> None:
+        self.set_effects(AudioEffects(
+            self._effects.speed, self._effects.pitch, self._effects.volume,
+            bass=self._effects.bass, echo=self._effects.echo,
+            tremolo=bool(enabled), normalize=self._effects.normalize,
+        ))
+
+    def set_normalize(self, enabled: bool) -> None:
+        self.set_effects(AudioEffects(
+            self._effects.speed, self._effects.pitch, self._effects.volume,
+            bass=self._effects.bass, echo=self._effects.echo,
+            tremolo=self._effects.tremolo, normalize=bool(enabled),
+        ))
 
     def reset(self) -> None:
         """Restore the identity audio effects."""

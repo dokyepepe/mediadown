@@ -114,24 +114,43 @@ data class HomeUiState(
     val selectedQualityId: String? = null,
     val selectedFormatId: String? = null,
     val downloadPlaylist: Boolean = true,
+    val playlistSelection: Set<Int> = emptySet(),
     val includeSubtitles: Boolean = false,
+    val editorCompatible: Boolean = false,
+    val itemRateLimitText: String = "",
     val canPaste: Boolean = true,
     val isStartingDownload: Boolean = false,
     val analysisHint: String? = null,
     val audioSpeed: Float = 1f,
     val audioPitchSemitones: Float = 0f,
     val audioVolumePercent: Int = 100,
+    val audioBass: Boolean = false,
+    val audioEcho: Boolean = false,
+    val audioTremolo: Boolean = false,
+    val audioNormalize: Boolean = false,
+    val trimStartSeconds: Float = 0f,
+    val trimDurationSeconds: Float? = null,
+    val fadeInSeconds: Float = 0f,
+    val fadeOutSeconds: Float = 0f,
     val previewUsesVideo: Boolean = true,
     val isAudioPreviewRendering: Boolean = false,
     val isAudioPreviewPlaying: Boolean = false,
     val audioPreviewError: String? = null,
+    val spotify: SpotifyMediaUi? = null,
+    val isSpotifyDownloading: Boolean = false,
 ) {
     val canAnalyze: Boolean
-        get() = url.isNotBlank() && !isAnalyzing && !isStartingDownload
+        get() = url.isNotBlank() && !isAnalyzing && !isStartingDownload && !isSpotifyDownloading
 
     val canDownload: Boolean
         get() = preview != null && selectedQualityId != null && selectedFormatId != null &&
-            !isAnalyzing && !isStartingDownload
+            !isAnalyzing && !isStartingDownload &&
+            (!preview.isPlaylist || downloadPlaylist || selectedPlaylistItems.isNotEmpty())
+
+    val selectedPlaylistItems: List<PlaylistItemUi>
+        get() = preview?.playlistItems
+            ?.filter { it.index in playlistSelection }
+            .orEmpty()
 
     val audioPreviewActive: Boolean
         get() = isAudioPreviewRendering || isAudioPreviewPlaying
@@ -144,7 +163,12 @@ data class HomeUiState(
         get() = preview?.supportsVideo == true
 
     val audioEffectsDefault: Boolean
-        get() = audioSpeed == 1f && audioPitchSemitones == 0f && audioVolumePercent == 100
+        get() = audioSpeed == 1f && audioPitchSemitones == 0f && audioVolumePercent == 100 &&
+            !(audioBass || audioEcho || audioTremolo || audioNormalize)
+
+    val audioTrimDefault: Boolean
+        get() = trimStartSeconds == 0f && trimDurationSeconds == null &&
+            fadeInSeconds == 0f && fadeOutSeconds == 0f
 }
 
 data class MediaPreviewUi(
@@ -153,9 +177,11 @@ data class MediaPreviewUi(
     val sourceName: String,
     val sourceUrl: String? = null,
     val durationText: String? = null,
+    val durationSeconds: Float? = null,
     val thumbnailUrl: String? = null,
     val isPlaylist: Boolean = false,
     val playlistItemCount: Int? = null,
+    val playlistItems: List<PlaylistItemUi> = emptyList(),
     val supportsVideo: Boolean = true,
     val supportsAudio: Boolean = true,
     val supportsSubtitles: Boolean = false,
@@ -177,9 +203,75 @@ enum class MediaKind(val label: String, val supportingText: String) {
     AUDIO("Áudio", "Somente o áudio"),
 }
 
+data class PlaylistItemUi(
+    val index: Int,
+    val id: String,
+    val title: String,
+    val url: String,
+    val thumbnailUrl: String? = null,
+)
+
+/** Metadata-only Spotify preview shown on the home tab. */
+data class SpotifyMediaUi(
+    val title: String,
+    val subtitle: String?,
+    val thumbnailUrl: String?,
+    val resourceLabel: String,
+    val webpageUrl: String,
+    val isPlaylist: Boolean,
+    val requiresAuth: Boolean,
+    val authenticated: Boolean,
+    val notice: String?,
+    val itemCount: Int?,
+    val tracks: List<SpotifyTrackUi>,
+) {
+    val hasTracks: Boolean
+        get() = tracks.isNotEmpty()
+}
+
+data class SpotifyTrackUi(
+    val index: Int,
+    val title: String,
+    val artist: String,
+    val album: String,
+    val durationText: String?,
+    val thumbnailUrl: String?,
+    /** The `ytsearch1:` query used to obtain the audio from YouTube. */
+    val query: String,
+)
+
+/** One queue entry resolved from the current analysis. */
+data class QueuedDownloadTarget(
+    val url: String,
+    val title: String,
+    val thumbnailUrl: String? = null,
+)
+
+/**
+ * Resolves which URLs become queue items. A single media, an unrecognized playlist or a
+ * "whole playlist" download resolves to the original source; otherwise every selected
+ * entry is queued individually. An empty list means a partial playlist has no selection.
+ */
+fun playlistDownloadTargets(
+    preview: MediaPreviewUi,
+    selection: Set<Int>,
+    wholePlaylist: Boolean,
+    fallbackUrl: String,
+    fallbackTitle: String,
+    fallbackThumbnail: String? = null,
+): List<QueuedDownloadTarget> {
+    if (!preview.isPlaylist || wholePlaylist || preview.playlistItems.isEmpty()) {
+        return listOf(QueuedDownloadTarget(fallbackUrl, fallbackTitle, fallbackThumbnail))
+    }
+    return preview.playlistItems
+        .filter { it.index in selection }
+        .map { QueuedDownloadTarget(it.url, it.title, it.thumbnailUrl ?: fallbackThumbnail) }
+}
+
 data class DownloadsUiState(
     val items: List<DownloadItemUi> = emptyList(),
     val selectedFilter: DownloadFilter = DownloadFilter.ALL,
+    val searchQuery: String = "",
 )
 
 enum class DownloadFilter(val label: String) {
@@ -215,6 +307,7 @@ enum class DownloadStatus(val label: String) {
 
 data class HistoryUiState(
     val items: List<HistoryItemUi> = emptyList(),
+    val searchQuery: String = "",
 )
 
 data class HistoryItemUi(
@@ -244,6 +337,22 @@ data class SettingsUiState(
     },
     val cookieFileName: String? = null,
     val cookie: CookieCheckUi? = null,
+    val cookieSubProfiles: List<CookieSubProfileUi> = emptyList(),
+    val siteCookieHosts: String = "",
+    val siteCookieHostsError: String? = null,
+    val proxy: String = "",
+    val proxyError: String? = null,
+    val rateLimitText: String = "",
+    val filenameTemplate: String = "",
+    val defaultVideoQualityId: String = "best",
+    val defaultVideoFormatId: String = "mp4",
+    val defaultAudioBitrate: Int = 192,
+    val defaultAudioFormatId: String = "mp3",
+    val spotifyClientId: String = "",
+    val spotifyClientIdError: String? = null,
+    val spotifyConnected: Boolean = false,
+    val spotifyAccountName: String? = null,
+    val isSpotifyConnecting: Boolean = false,
 ) {
     val isYtDlpOperationBusy: Boolean
         get() = updateState == YtDlpUpdateState.CHECKING ||
@@ -259,6 +368,14 @@ data class StorageLocationUi(
     val category: StorageCategory,
     val locationLabel: String = "Downloads/MediaDownloader",
     val isCustom: Boolean = false,
+)
+
+/** A cookies.txt profile scoped to specific site hosts, shown in Settings. */
+data class CookieSubProfileUi(
+    val id: String,
+    val label: String,
+    val hosts: String,
+    val cookie: CookieCheckUi? = null,
 )
 
 enum class ThemePreference(val label: String) {
@@ -304,11 +421,24 @@ sealed interface MobileUiAction {
     data class SelectQuality(val id: String) : MobileUiAction
     data class SelectFormat(val id: String) : MobileUiAction
     data class SetDownloadPlaylist(val enabled: Boolean) : MobileUiAction
+    data class TogglePlaylistItem(val index: Int) : MobileUiAction
+    data class SelectAllPlaylistItems(val selected: Boolean) : MobileUiAction
     data class SetIncludeSubtitles(val enabled: Boolean) : MobileUiAction
+    data class SelectPreviewKind(val kind: MediaKind) : MobileUiAction
+    data class SetItemRateLimitText(val value: String) : MobileUiAction
+    data class ToggleEditorCompatibility(val enabled: Boolean) : MobileUiAction
     object StartDownload : MobileUiAction
     data class SetAudioSpeed(val value: Float) : MobileUiAction
     data class SetAudioPitch(val semitones: Float) : MobileUiAction
     data class SetAudioVolume(val percent: Int) : MobileUiAction
+    data class SetAudioBass(val enabled: Boolean) : MobileUiAction
+    data class SetAudioEcho(val enabled: Boolean) : MobileUiAction
+    data class SetAudioTremolo(val enabled: Boolean) : MobileUiAction
+    data class SetAudioNormalize(val enabled: Boolean) : MobileUiAction
+    data class SetTrimStartSeconds(val value: Float) : MobileUiAction
+    data class SetTrimDurationSeconds(val value: Float?) : MobileUiAction
+    data class SetFadeInSeconds(val value: Float) : MobileUiAction
+    data class SetFadeOutSeconds(val value: Float) : MobileUiAction
     object ResetAudioEffects : MobileUiAction
     object PreviewAudio : MobileUiAction
     object StopAudioPreview : MobileUiAction
@@ -326,6 +456,7 @@ sealed interface MobileUiAction {
     data class OpenSiteFile(val id: String) : MobileUiAction
 
     data class SelectDownloadFilter(val filter: DownloadFilter) : MobileUiAction
+    data class DownloadsSearchQueryChanged(val value: String) : MobileUiAction
     data class CancelDownload(val id: String) : MobileUiAction
     data class RetryDownload(val id: String) : MobileUiAction
     data class RemoveDownload(val id: String) : MobileUiAction
@@ -334,6 +465,8 @@ sealed interface MobileUiAction {
 
     data class OpenHistoryItem(val id: String) : MobileUiAction
     data class ShareHistoryItem(val id: String) : MobileUiAction
+    data class HistorySearchQueryChanged(val value: String) : MobileUiAction
+    object ExportHistory : MobileUiAction
     object ClearHistory : MobileUiAction
 
     data class SetTheme(val theme: ThemePreference) : MobileUiAction
@@ -347,6 +480,24 @@ sealed interface MobileUiAction {
     data class ResetDownloadLocation(val category: StorageCategory) : MobileUiAction
     object ChooseCookieFile : MobileUiAction
     object ClearCookies : MobileUiAction
+    data class SiteCookieHostsChanged(val value: String) : MobileUiAction
+    object ChooseSiteCookieFile : MobileUiAction
+    data class ReplaceSiteCookieFile(val id: String) : MobileUiAction
+    data class RemoveCookieProfile(val id: String) : MobileUiAction
+    data class SetProxy(val value: String) : MobileUiAction
+    data class SetRateLimitText(val value: String) : MobileUiAction
+    data class SetFilenameTemplate(val value: String) : MobileUiAction
+    object ResetFilenameTemplate : MobileUiAction
+    data class SetDefaultVideoQuality(val id: String) : MobileUiAction
+    data class SetDefaultVideoFormat(val id: String) : MobileUiAction
+    data class SetDefaultAudioBitrate(val value: Int) : MobileUiAction
+    data class SetDefaultAudioFormat(val id: String) : MobileUiAction
+    object ShareDiagnostics : MobileUiAction
+    object WidgetDownloadFromClipboard : MobileUiAction
+    data class SetSpotifyClientId(val value: String) : MobileUiAction
+    object ConnectSpotify : MobileUiAction
+    object DisconnectSpotify : MobileUiAction
+    object DownloadSpotifyOnYouTube : MobileUiAction
     object CopySupportPixPayload : MobileUiAction
     object CopySupportPixKey : MobileUiAction
     data class OpenLegalDocument(val document: LegalDocument) : MobileUiAction

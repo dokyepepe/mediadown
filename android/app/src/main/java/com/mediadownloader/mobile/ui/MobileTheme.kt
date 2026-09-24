@@ -1,14 +1,18 @@
 package com.mediadownloader.mobile.ui
 
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -200,8 +204,19 @@ fun MediaDownloaderTheme(
         ThemePreference.DARK -> true
     }
 
+    // Material You: no modo Sistema, Android 12+ reflete o wallpaper do usuário.
+    val colorScheme = if (
+        preference == ThemePreference.SYSTEM &&
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    ) {
+        val context = LocalContext.current
+        if (useDarkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    } else {
+        if (useDarkTheme) DarkColors else LightColors
+    }
+
     MaterialTheme(
-        colorScheme = if (useDarkTheme) DarkColors else LightColors,
+        colorScheme = colorScheme,
         typography = AppTypography,
         shapes = AppShapes,
         content = content,

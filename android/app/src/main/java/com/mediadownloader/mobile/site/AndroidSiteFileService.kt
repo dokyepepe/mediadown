@@ -173,6 +173,7 @@ class AndroidSiteFileService(context: Context) {
     }
 
     private fun kindFromResponse(url: String, contentType: String): SiteFileKind? = when {
+        contentType.startsWith("text/") || "html" in contentType -> null
         contentType == "application/pdf" -> SiteFileKind.PDF
         contentType.startsWith("image/") -> SiteFileKind.IMAGE
         else -> SiteFileDiscovery.kindFromUrl(url)

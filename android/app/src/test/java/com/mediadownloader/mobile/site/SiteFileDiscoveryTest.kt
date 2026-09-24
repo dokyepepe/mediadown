@@ -122,4 +122,48 @@ class SiteFileDiscoveryTest {
         assertEquals(1, result.files.size)
         assertEquals("Relatório_ 2026_.pdf", result.files.single().name)
     }
+
+    @Test
+    fun keepsAttributesAfterGreaterThanInsideQuotedValues() {
+        val html = """
+            <a href="/docs/relatorio.pdf" title="Ata > Resumo do encontro">Ata</a>
+            <img src="/cover.jpg" alt="antes > depois">
+        """.trimIndent()
+
+        val result = SiteFileDiscovery.parse(
+            "https://example.com",
+            "https://example.com",
+            html,
+        )
+
+        assertTrue(result.files.any { it.url == "https://example.com/docs/relatorio.pdf" })
+        assertTrue(result.files.any { it.url == "https://example.com/cover.jpg" })
+    }
+
+    @Test
+    fun keepsSrcsetUrlsThatContainCommas() {
+        val html = """<img src="/base.jpg" srcset="/resize.php?v=1,2 1x, /large.png 2x">""".trimIndent()
+
+        val result = SiteFileDiscovery.parse(
+            "https://example.com",
+            "https://example.com/page",
+            html,
+        )
+
+        assertTrue(result.files.any { it.url == "https://example.com/resize.php?v=1,2" })
+        assertTrue(result.files.any { it.url == "https://example.com/large.png" })
+    }
+
+    @Test
+    fun preservesEncodedSignaturesWhenResolving() {
+        val resolved = SiteFileDiscovery.resolveWebUrl(
+            "https://example.com/area",
+            "https://cdn.example.com/file.pdf?Expires=1&Signature=a%2Bb%2Fc%3Dd",
+        )
+
+        assertEquals(
+            "https://cdn.example.com/file.pdf?Expires=1&Signature=a%2Bb%2Fc%3Dd",
+            resolved,
+        )
+    }
 }

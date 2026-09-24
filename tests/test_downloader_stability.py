@@ -4,6 +4,7 @@ from mediadownloader.core.downloader import (
     _first_stream,
     _is_container_remux_failure,
     _predict_merged_extension,
+    rate_limit_value,
 )
 
 DASH_INFO = {
@@ -145,4 +146,22 @@ def test_container_remux_failure_detection() -> None:
         DownloadError("ERROR: Unable to download webpage: 403 Forbidden")
     )
     assert not _is_container_remux_failure(DownloadError("ERROR: Video unavailable"))
+
+
+def test_rate_limit_value_converts_kib_to_bytes() -> None:
+    assert rate_limit_value(0) is None
+    assert rate_limit_value(-10) is None
+    assert rate_limit_value(512) == 512 * 1024
+    assert rate_limit_value(1_000) == 1_024_000
+    assert rate_limit_value(True) is None
+    assert rate_limit_value("500") is None
+
+
+def test_download_options_rate_limit_round_trips() -> None:
+    from mediadownloader.models import DownloadOptions
+
+    options = DownloadOptions(rate_limit_kbps=256)
+    restored = DownloadOptions.from_dict(options.to_dict())
+    assert restored.rate_limit_kbps == 256
+    assert DownloadOptions.from_dict({}).rate_limit_kbps == 0
 

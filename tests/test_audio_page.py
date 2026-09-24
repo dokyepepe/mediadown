@@ -194,3 +194,49 @@ def test_preview_success_opens_and_closes_dialog(qtbot, tmp_path) -> None:
     dialog.reject()
     qtbot.waitUntil(lambda: page._preview_dialog is None, timeout=4000)
     assert page.preview_button.isEnabled() is True
+
+
+def test_toggle_checkboxes_push_to_controller(qtbot) -> None:
+    page, controller = _make_page(qtbot)
+    page.bass_box.setChecked(True)
+    page.echo_box.setChecked(True)
+    assert controller.effects.bass is True
+    assert controller.effects.echo is True
+    page.tremolo_box.setChecked(True)
+    page.normalize_box.setChecked(True)
+    assert controller.effects.tremolo is True
+    assert controller.effects.normalize is True
+
+
+def test_controller_toggles_sync_to_checkboxes(qtbot) -> None:
+    page, controller = _make_page(qtbot)
+    controller.set_bass(True)
+    assert page.bass_box.isChecked() is True
+    controller.set_normalize(True)
+    assert page.normalize_box.isChecked() is True
+
+
+def test_reset_clears_toggles(qtbot) -> None:
+    page, controller = _make_page(qtbot)
+    page.bass_box.setChecked(True)
+    page.echo_box.setChecked(True)
+    page.reset_button.click()
+    assert controller.effects.is_identity
+    assert page.bass_box.isChecked() is False
+    assert page.echo_box.isChecked() is False
+
+
+def test_chain_label_mentions_toggle(qtbot) -> None:
+    page, _ = _make_page(qtbot)
+    page.bass_box.setChecked(True)
+    assert "bass" in page.chain_label.text()
+    page.normalize_box.setChecked(True)
+    assert "loudnorm" in page.chain_label.text()
+
+
+def test_summary_mentions_toggles(qtbot) -> None:
+    page, _ = _make_page(qtbot)
+    page.echo_box.setChecked(True)
+    page.tremolo_box.setChecked(True)
+    assert "Eco" in page.summary_label.text()
+    assert "Tremolo" in page.summary_label.text()

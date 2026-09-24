@@ -1,8 +1,10 @@
 package com.mediadownloader.mobile.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DownloadModelsTest {
@@ -62,17 +64,72 @@ class DownloadModelsTest {
     }
 
     @Test
+    fun optionsCarryNativeToggleEffects() {
+        assertEquals(
+            null,
+            DownloadOptions(audioBass = false, audioEcho = false).audioEffects(),
+        )
+
+        val effects = DownloadOptions(
+            audioBass = true,
+            audioEcho = true,
+            audioTremolo = true,
+            audioNormalize = true,
+        ).audioEffects()
+        assertEquals(true, effects!!.bass)
+        assertEquals(true, effects.echo)
+        assertEquals(true, effects.tremolo)
+        assertEquals(true, effects.normalize)
+    }
+
+    @Test
+    fun optionsConsiderTrimsAndFadesAsAudioProcessing() {
+        assertFalse(DownloadOptions().hasAudioProcessing)
+        assertTrue(DownloadOptions(trimStartSeconds = 5f).hasAudioProcessing)
+        assertTrue(DownloadOptions(trimDurationSeconds = 10f).hasAudioProcessing)
+        assertTrue(DownloadOptions(fadeInSeconds = 2f).hasAudioProcessing)
+        assertTrue(DownloadOptions(fadeOutSeconds = 2f).hasAudioProcessing)
+        assertTrue(
+            DownloadOptions(audioSpeed = 1.5f).hasAudioProcessing,
+        )
+        // A trim/fade pass is independent from the effect chain.
+        assertEquals(null, DownloadOptions(trimStartSeconds = 5f).audioEffects())
+    }
+
+    @Test
+    fun optionsRejectInvalidTrimAndFades() {
+        assertThrows(IllegalArgumentException::class.java) {
+            DownloadOptions(trimStartSeconds = -1f)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            DownloadOptions(trimDurationSeconds = 0f)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            DownloadOptions(fadeInSeconds = -1f)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            DownloadOptions(fadeOutSeconds = -1f)
+        }
+    }
+
+    @Test
     fun optionsFilterChainMatchesAudioFilterChain() {
         val options = DownloadOptions(
             audioSpeed = 1.25f,
             audioPitchSemitones = -3f,
             audioVolumePercent = 80,
+            audioEcho = true,
+            audioNormalize = true,
         ).audioEffects()!!
         assertEquals(
             AudioFilterChain.build(
                 speed = options.speed,
                 pitchRatio = AudioEffects(1f, options.semitones, 100).pitchRatio,
                 volumeFactor = options.volumeFactor,
+                bass = options.bass,
+                echo = options.echo,
+                tremolo = options.tremolo,
+                normalize = options.normalize,
             ),
             options.filterChain(),
         )

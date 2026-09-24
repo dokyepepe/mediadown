@@ -101,6 +101,16 @@ def _is_container_remux_failure(error: Exception) -> bool:
     return any(marker in text for marker in _CONTAINER_REMUX_MARKERS)
 
 
+def rate_limit_value(kbps: int) -> int | None:
+    """Convert a KiB/s limit to the ``ratelimit`` option yt-dlp expects.
+
+    ``0`` (or any non-positive value) means "no limit" and returns ``None``.
+    """
+    if isinstance(kbps, bool) or not isinstance(kbps, int):
+        return None
+    return kbps * 1024 if kbps > 0 else None
+
+
 class DownloadCancelled(Exception):
     pass
 
@@ -553,6 +563,8 @@ class DownloadEngine:
             ydl_options["cookiefile"] = options.cookies_file
         elif options.cookies_browser:
             ydl_options["cookiesfrombrowser"] = (options.cookies_browser,)
+        if ratelimit := rate_limit_value(options.rate_limit_kbps):
+            ydl_options["ratelimit"] = ratelimit
         if options.subtitle_mode != "none":
             ydl_options["writesubtitles"] = True
             ydl_options["writeautomaticsub"] = True

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from uuid import uuid4
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel,
-    QLineEdit, QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame,
+    QHBoxLayout, QLabel, QLineEdit, QListWidget, QMessageBox, QPushButton, QScrollArea,
+    QVBoxLayout, QWidget,
 )
 
 from mediadownloader.core import DownloadEngine, FFmpegManager, QueueManager
@@ -51,6 +53,79 @@ def _check_cookies_worker(ffmpeg, source: str, file: str, browser: str):
         return engine.check_cookies(source, file, browser)
 
     return run
+
+
+class ProfileDialog(QDialog):
+    """Collect a per-site cookies.txt profile (label, hosts, file)."""
+
+    def __init__(self, parent=None, profile: dict | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Editar perfil de cookies por site" if profile else "Novo perfil de cookies por site")
+        self.setAccessibleName("Editar perfil de cookies por site")
+        self.resize(520, -1)
+        form_widget = QVBoxLayout(self)
+        form = QFormLayout()
+        form.setHorizontalSpacing(26)
+        form.setVerticalSpacing(12)
+        self.label_edit = QLineEdit()
+        self.label_edit.setPlaceholderText("Ex.: Conta principal, Conta de trabalho…")
+        self.hosts_edit = QLineEdit()
+        self.hosts_edit.setPlaceholderText("youtube.com, m.youtube.com")
+        self.file_edit = QLineEdit()
+        file_row = QWidget()
+        file_layout = QHBoxLayout(file_row)
+        file_layout.setContentsMargins(0, 0, 0, 0)
+        file_layout.addWidget(self.file_edit, 1)
+        choose_button = QPushButton("Escolher")
+        set_button_icon(choose_button, "file")
+        choose_button.clicked.connect(self._browse)
+        file_layout.addWidget(choose_button)
+        form.addRow("Nome", self.label_edit)
+        form.addRow("Sites", self.hosts_edit)
+        form.addRow("cookies.txt", file_row)
+        form_widget.addLayout(form)
+        hint = QLabel(
+            "Os sites podem conter domínios e subdomínios (ex.: youtube.com também cobre "
+            "www.youtube.com e m.youtube.com). Este perfil tem prioridade sobre a fonte global."
+        )
+        hint.setObjectName("Muted")
+        hint.setWordWrap(True)
+        form_widget.addWidget(hint)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form_widget.addWidget(buttons)
+        if profile is not None:
+            self.label_edit.setText(str(profile.get("label") or ""))
+            self.hosts_edit.setText(", ".join(str(host) for host in profile.get("hosts") or []))
+            self.file_edit.setText(str(profile.get("file") or ""))
+
+    def _browse(self) -> None:
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "Selecionar cookies.txt", "", "Cookies Netscape (*.txt)"
+        )
+        if filename:
+            self.file_edit.setText(filename)
+
+    def accept(self) -> None:
+        if not self.hosts_edit.text().strip() or not self.file_edit.text().strip():
+            QMessageBox.warning(
+                self,
+                "Perfil de cookies por site",
+                "Informe ao menos um site e um arquivo cookies.txt.",
+            )
+            return
+        super().accept()
+
+    def profile_data(self) -> dict:
+        return {
+            "id": uuid4().hex,
+            "label": self.label_edit.text().strip() or "Perfil sem nome",
+            "hosts": [host.strip() for host in self.hosts_edit.text().split(",") if host.strip()],
+            "file": self.file_edit.text().strip(),
+        }
 
 
 class SettingsSection(QFrame):
@@ -239,8 +314,11 @@ class SettingsPage(QWidget):
         )
         self.proxy_type = WheelSafeComboBox(); self.proxy_type.addItem("Nenhum", "none"); self.proxy_type.addItem("HTTP", "http"); self.proxy_type.addItem("HTTPS", "https"); self.proxy_type.addItem("SOCKS", "socks")
         self.proxy_url = QLineEdit(); self.proxy_url.setPlaceholderText("http://host:porta (evite credenciais no campo)")
+        self.rate_limit = WheelSafeSpinBox(); self.rate_limit.setRange(0, 1_000_000); self.rate_limit.setSuffix(" KiB/s"); self.rate_limit.setSpecialValueText("Sem limite")
+        self.rate_limit.setToolTip("Limita a velocidade de cada download. 0 (Sem limite) usa toda a banda disponível.")
         network.form.addRow("Proxy", self.proxy_type)
         network.form.addRow("Endereço", self.proxy_url)
+        network.form.addRow("Limite de velocidade", self.rate_limit)
         root.addWidget(network)
 
         cookies = SettingsSection("Cookies", "Use apenas para serviços nos quais você possui acesso legítimo. Nada é importado sem sua ação explícita.", "shield")
@@ -272,6 +350,37 @@ class SettingsPage(QWidget):
         cookies_status_layout.addWidget(self.test_cookies_button)
         cookies.form.addRow("Validação", self.cookies_status_panel)
         root.addWidget(cookies)
+
+        profiles = SettingsSection(
+            "Cookies por site",
+            "Anexe arquivos cookies.txt a sites específicos. Eles são usados automaticamente "
+            "ao analisar links desses sites e têm prioridade sobre a fonte global.",
+            "subtitles",
+        )
+        self.profile_list = QListWidget()
+        self.profile_list.setAccessibleName("Perfis de cookies por site")
+        self.profile_list.setAccessibleDescription(
+            "Cada perfil associa um arquivo cookies.txt a uma lista de sites."
+        )
+        self.profile_list.setMaximumHeight(200)
+        self.profile_list.currentRowChanged.connect(lambda _row: self._refresh_profile_buttons())
+        profiles.form.addRow(self.profile_list)
+        profile_actions = QWidget()
+        profile_actions_row = QHBoxLayout(profile_actions)
+        profile_actions_row.setContentsMargins(0, 0, 0, 0)
+        profile_actions_row.setSpacing(8)
+        self.add_profile_button = SecondaryButton("Adicionar perfil", icon_name="file")
+        self.add_profile_button.clicked.connect(self._add_profile)
+        self.edit_profile_button = SecondaryButton("Editar perfil", icon_name="settings")
+        self.edit_profile_button.clicked.connect(self._edit_profile)
+        self.remove_profile_button = SecondaryButton("Remover perfil", icon_name="trash")
+        self.remove_profile_button.clicked.connect(self._remove_profile)
+        profile_actions_row.addWidget(self.add_profile_button)
+        profile_actions_row.addWidget(self.edit_profile_button)
+        profile_actions_row.addWidget(self.remove_profile_button)
+        profile_actions_row.addStretch()
+        profiles.form.addRow("", profile_actions)
+        root.addWidget(profiles)
 
         spotify = SettingsSection(
             "Spotify",
@@ -393,6 +502,7 @@ class SettingsPage(QWidget):
         self._active_component_worker: TaskWorker | None = None
         self._cookies_worker: TaskWorker | None = None
         self._spotify_worker: TaskWorker | None = None
+        self._profiles: list[dict] = []
         self._load()
         self._refresh_component_status()
         self._configure_accessibility()
@@ -415,6 +525,7 @@ class SettingsPage(QWidget):
             self.duplicate_policy: "Ação para arquivo existente",
             self.proxy_type: "Tipo de proxy",
             self.proxy_url: "Endereço do proxy",
+            self.rate_limit: "Limite de velocidade de download",
             self.cookie_source: "Fonte de cookies autorizada",
             self.cookies_file: "Caminho do arquivo cookies.txt",
             self.browser: "Navegador para importar cookies",
@@ -429,6 +540,9 @@ class SettingsPage(QWidget):
         self.update_ytdlp_button.setAccessibleName("Atualizar yt-dlp")
         self.rollback_ytdlp_button.setAccessibleName("Restaurar versão de recuperação do yt-dlp")
         self.cancel_ytdlp_change_button.setAccessibleName("Cancelar alteração pendente do yt-dlp")
+        self.add_profile_button.setAccessibleName("Adicionar perfil de cookies por site")
+        self.edit_profile_button.setAccessibleName("Editar perfil de cookies selecionado")
+        self.remove_profile_button.setAccessibleName("Remover perfil de cookies selecionado")
         self.theme.setToolTip("A alteração é aplicada ao salvar as configurações.")
         self.concurrent.setToolTip("A roda do mouse não altera este valor; use as setas ou digite.")
 
@@ -456,9 +570,12 @@ class SettingsPage(QWidget):
         self._select_data(self.duplicate_policy, self.settings.get("downloads.duplicate_policy", "rename"))
         self._select_data(self.proxy_type, self.settings.get("network.proxy_type", "none"))
         self.proxy_url.setText(self.settings.get("network.proxy_url", ""))
+        self.rate_limit.setValue(int(self.settings.get("network.rate_limit_kbps", 0)))
         self._select_data(self.cookie_source, self.settings.get("cookies.source", "none"))
         self.cookies_file.setText(self.settings.get("cookies.file", ""))
         self.browser.setCurrentText(self.settings.get("cookies.browser", "chrome"))
+        self._profiles = list(self.settings.get("cookies.profiles", []) or [])
+        self._reload_profile_list()
         self.spotify_client_id.setText(self.settings.get("spotify.client_id", ""))
         self._refresh_spotify_status()
         self._refresh_cookies_status()
@@ -486,8 +603,8 @@ class SettingsPage(QWidget):
             "add_metadata": self.add_metadata.isChecked(), "duplicate_policy": self.duplicate_policy.currentData(),
         })
         self.settings.update_section("filenames", {"template": self.filename_template.text()})
-        self.settings.update_section("network", {"proxy_type": self.proxy_type.currentData(), "proxy_url": self.proxy_url.text().strip()})
-        self.settings.update_section("cookies", {"source": self.cookie_source.currentData(), "file": self.cookies_file.text(), "browser": self.browser.currentText()})
+        self.settings.update_section("network", {"proxy_type": self.proxy_type.currentData(), "proxy_url": self.proxy_url.text().strip(), "rate_limit_kbps": self.rate_limit.value()})
+        self.settings.update_section("cookies", {"source": self.cookie_source.currentData(), "file": self.cookies_file.text(), "browser": self.browser.currentText(), "profiles": list(self._profiles)})
         self.settings.update_section("spotify", {"client_id": self.spotify_client_id.text().strip()})
         self.queue.set_concurrency(self.concurrent.value())
         self.theme_changed.emit(str(self.theme.currentData()))
@@ -630,6 +747,52 @@ class SettingsPage(QWidget):
         self.cookies_status.setText(f"Não foi possível validar os cookies. {error}")
         self._set_cookies_panel_state("error")
         self._set_cookies_button_enabled()
+
+    def _reload_profile_list(self) -> None:
+        self.profile_list.clear()
+        for profile in self._profiles:
+            hosts = ", ".join(str(host) for host in profile.get("hosts") or [])
+            label = str(profile.get("label") or "Perfil")
+            self.profile_list.addItem(f"{label} — {hosts}")
+        self._refresh_profile_buttons()
+
+    def _refresh_profile_buttons(self) -> None:
+        selected = self.profile_list.currentRow() >= 0
+        self.edit_profile_button.setEnabled(selected)
+        self.remove_profile_button.setEnabled(selected)
+
+    def _add_profile(self) -> None:
+        dialog = ProfileDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self._profiles.append(dialog.profile_data())
+            self._reload_profile_list()
+            self.profile_list.setCurrentRow(len(self._profiles) - 1)
+
+    def _edit_profile(self) -> None:
+        row = self.profile_list.currentRow()
+        if row < 0 or row >= len(self._profiles):
+            return
+        dialog = ProfileDialog(self, self._profiles[row])
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            updated = dialog.profile_data()
+            updated["id"] = str(self._profiles[row].get("id") or updated["id"])
+            self._profiles[row] = updated
+            self._reload_profile_list()
+            self.profile_list.setCurrentRow(row)
+
+    def _remove_profile(self) -> None:
+        row = self.profile_list.currentRow()
+        if row < 0 or row >= len(self._profiles):
+            return
+        profile = self._profiles[row]
+        answer = QMessageBox.question(
+            self,
+            "Remover perfil de cookies",
+            f"Remover o perfil \"{profile.get('label', 'Perfil')}\"? O arquivo cookies.txt não será apagado.",
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            del self._profiles[row]
+            self._reload_profile_list()
 
     def _refresh_component_status(self) -> None:
         status = self.updates.status()

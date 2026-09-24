@@ -49,17 +49,18 @@ def test_main_window_uses_desktop_dimensions_and_sidebar(monkeypatch, qapp, qtbo
     assert window.minimumWidth() == 900
     assert window.minimumHeight() == 620
     assert window.maximumWidth() > 480
-    assert len(window.nav_buttons) == 8
+    assert len(window.nav_buttons) == 9
     assert all(isinstance(button, SidebarButton) for button in window.nav_buttons)
     assert window.nav_buttons[0].text() == "Início"
     assert window.nav_buttons[3].text() == "Áudio"
-    assert window.nav_buttons[4].text() == "Configurações"
-    assert window.nav_buttons[5].text() == "Arquivos do site"
-    assert window.nav_buttons[6].text() == "QR Code"
+    assert window.nav_buttons[4].text() == "Editor de áudio"
+    assert window.nav_buttons[5].text() == "Configurações"
+    assert window.nav_buttons[6].text() == "Arquivos do site"
+    assert window.nav_buttons[7].text() == "QR Code"
 
-    qtbot.mouseClick(window.nav_buttons[4], Qt.MouseButton.LeftButton)
-    assert window.stack.currentIndex() == 4
-    assert window.nav_buttons[4].isChecked()
+    qtbot.mouseClick(window.nav_buttons[5], Qt.MouseButton.LeftButton)
+    assert window.stack.currentIndex() == 5
+    assert window.nav_buttons[5].isChecked()
     assert "Configurações" in window.windowTitle()
     assert window.settings_page.check_update_button.text() == "Verificar atualização"
     assert window.settings_page.rollback_ytdlp_button.isEnabled() is False

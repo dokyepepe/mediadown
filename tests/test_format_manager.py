@@ -70,3 +70,35 @@ def test_build_audio_filters_all_stages():
         "atempo=1.5,volume=1.25"
     )
 
+
+def test_build_audio_filters_toggles_forwarded():
+    chain = FormatManager.build_audio_filters(1.0, 1.0, 1.0, bass=True, normalize=True)
+    assert chain == "bass=g=6:f=100,loudnorm=I=-16:TP=-1.5:LRA=11"
+
+
+def test_audio_adjustment_args_toggles():
+    options = DownloadOptions(
+        media_type=MediaType.AUDIO,
+        audio_bass=True,
+        audio_echo=True,
+        audio_tremolo=True,
+        audio_normalize=True,
+    )
+    args = FormatManager.audio_postprocessor_args(options)
+    assert args["ExtractAudio+ffmpeg"] == [
+        "-af",
+        "bass=g=6:f=100,aecho=0.7:0.7:300:0.3,tremolo=f=5:d=0.25,"
+        "loudnorm=I=-16:TP=-1.5:LRA=11",
+    ]
+
+
+def test_audio_adjustment_args_toggles_combine_with_volume():
+    options = DownloadOptions(media_type=MediaType.AUDIO, audio_volume=0.5, audio_bass=True)
+    args = FormatManager.audio_postprocessor_args(options)
+    assert args["ExtractAudio+ffmpeg"] == ["-af", "bass=g=6:f=100,volume=0.5"]
+
+
+def test_audio_adjustment_toggles_ignored_for_video():
+    options = DownloadOptions(media_type=MediaType.VIDEO, audio_bass=True, audio_normalize=True)
+    assert FormatManager.audio_postprocessor_args(options) is None
+

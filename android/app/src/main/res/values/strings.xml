@@ -3,4 +3,8 @@
     <string name="app_name">Media Downloader</string>
     <string name="download_channel_name">Downloads</string>
     <string name="download_channel_description">Progresso dos downloads de mídia</string>
+    <string name="quick_download_widget_description">Baixa rapidamente o link da área de transferência</string>
+    <string name="quick_download_widget_subtitle">Baixe o link que está na área de transferência</string>
+    <string name="quick_download_widget_download">Colar e baixar</string>
+    <string name="quick_download_widget_open">Abrir</string>
 </resources>

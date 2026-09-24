@@ -7,7 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QApplication, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMenu,
+    QApplication, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMenu,
     QMessageBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -52,11 +52,15 @@ class HistoryPage(QWidget):
         self.filter.currentIndexChanged.connect(self.reload)
         self.count_label = QLabel("0 itens")
         self.count_label.setObjectName("Muted")
+        export = SecondaryButton("Exportar CSV", icon_name="file")
+        export.clicked.connect(self._export_csv)
+        export.setToolTip("Salva os downloads concluídos como uma planilha CSV, somente neste computador.")
         clear = SecondaryButton("Limpar histórico", icon_name="trash")
         clear.clicked.connect(self._clear)
         tools.addWidget(self.search, 1)
         tools.addWidget(self.filter)
         tools.addWidget(self.count_label)
+        tools.addWidget(export)
         tools.addWidget(clear)
         root.addWidget(toolbar)
         self.empty = EmptyState(
@@ -171,3 +175,29 @@ class HistoryPage(QWidget):
         if answer == QMessageBox.StandardButton.Yes:
             self.history.clear_completed()
             self.reload()
+
+    def _export_csv(self) -> None:
+        items = self.history.completed(self.search.text(), str(self.filter.currentData()))
+        if not items:
+            QMessageBox.information(self, "Exportar histórico", "Não há downloads concluídos para exportar.")
+            return
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exportar histórico",
+            str(Path.home() / "media_downloader_historico.csv"),
+            "Planilha CSV (*.csv)",
+        )
+        if not filename:
+            return
+        try:
+            Path(filename).write_text(self.history.to_csv(items), encoding="utf-8-sig")
+        except OSError as error:
+            QMessageBox.warning(
+                self, "Exportar histórico", f"Não foi possível salvar o arquivo: {error}"
+            )
+            return
+        QMessageBox.information(
+            self,
+            "Exportar histórico",
+            f"{len(items)} item(ns) exportado(s) para {filename}",
+        )

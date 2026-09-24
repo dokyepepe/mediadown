@@ -28,6 +28,42 @@ internal class DownloadDatabase(context: Context) :
                 "ALTER TABLE downloads ADD COLUMN audio_volume_percent INTEGER NOT NULL DEFAULT 100",
             )
         }
+        if (oldVersion < 3) {
+            db.execSQL(
+                "ALTER TABLE downloads ADD COLUMN audio_bass INTEGER NOT NULL DEFAULT 0",
+            )
+            db.execSQL(
+                "ALTER TABLE downloads ADD COLUMN audio_echo INTEGER NOT NULL DEFAULT 0",
+            )
+            db.execSQL(
+                "ALTER TABLE downloads ADD COLUMN audio_tremolo INTEGER NOT NULL DEFAULT 0",
+            )
+            db.execSQL(
+                "ALTER TABLE downloads ADD COLUMN audio_normalize INTEGER NOT NULL DEFAULT 0",
+            )
+        }
+        if (oldVersion < 4) {
+            db.execSQL(
+                "ALTER TABLE downloads ADD COLUMN trim_start_seconds REAL NOT NULL DEFAULT 0.0",
+            )
+            db.execSQL(
+                "ALTER TABLE downloads ADD COLUMN trim_duration_seconds REAL",
+            )
+            db.execSQL(
+                "ALTER TABLE downloads ADD COLUMN fade_in_seconds REAL NOT NULL DEFAULT 0.0",
+            )
+            db.execSQL(
+                "ALTER TABLE downloads ADD COLUMN fade_out_seconds REAL NOT NULL DEFAULT 0.0",
+            )
+        }
+        if (oldVersion < 5) {
+            db.execSQL(
+                "ALTER TABLE downloads ADD COLUMN editor_compatible INTEGER NOT NULL DEFAULT 0",
+            )
+            db.execSQL(
+                "ALTER TABLE downloads ADD COLUMN rate_limit_kbps INTEGER NOT NULL DEFAULT 0",
+            )
+        }
     }
 
     fun upsertDownload(item: DownloadItem) {
@@ -123,6 +159,8 @@ internal class DownloadDatabase(context: Context) :
         put("media_type", options.mediaType.name)
         putNullable("max_video_height", options.maxVideoHeight)
         put("video_container", options.videoContainer.name)
+        put("editor_compatible", options.editorCompatible.asInt())
+        put("rate_limit_kbps", options.rateLimitKbps)
         put("audio_format", options.audioFormat.name)
         put("audio_bitrate", options.audioBitrateKbps)
         putNullable("format_id", options.formatId)
@@ -132,6 +170,14 @@ internal class DownloadDatabase(context: Context) :
         put("audio_speed", options.audioSpeed)
         put("audio_pitch_semitones", options.audioPitchSemitones)
         put("audio_volume_percent", options.audioVolumePercent)
+        put("audio_bass", options.audioBass.asInt())
+        put("audio_echo", options.audioEcho.asInt())
+        put("audio_tremolo", options.audioTremolo.asInt())
+        put("audio_normalize", options.audioNormalize.asInt())
+        put("trim_start_seconds", options.trimStartSeconds)
+        putNullable("trim_duration_seconds", options.trimDurationSeconds)
+        put("fade_in_seconds", options.fadeInSeconds)
+        put("fade_out_seconds", options.fadeOutSeconds)
         put("state", state.name)
         put("progress", progress.coerceIn(0, 100))
         putNullable("eta_seconds", etaSeconds)
@@ -165,6 +211,8 @@ internal class DownloadDatabase(context: Context) :
             mediaType = enumOrDefault(string("media_type"), MediaType.VIDEO),
             maxVideoHeight = nullableInt("max_video_height"),
             videoContainer = enumOrDefault(string("video_container"), VideoContainer.MP4),
+            editorCompatible = int("editor_compatible") != 0,
+            rateLimitKbps = int("rate_limit_kbps").coerceAtLeast(0),
             audioFormat = enumOrDefault(string("audio_format"), AudioFormat.MP3),
             audioBitrateKbps = int("audio_bitrate").coerceIn(32, 320),
             formatId = nullableString("format_id"),
@@ -185,6 +233,15 @@ internal class DownloadDatabase(context: Context) :
                 AudioEffects.MIN_VOLUME_PERCENT,
                 AudioEffects.MAX_VOLUME_PERCENT,
             ),
+            audioBass = int("audio_bass") != 0,
+            audioEcho = int("audio_echo") != 0,
+            audioTremolo = int("audio_tremolo") != 0,
+            audioNormalize = int("audio_normalize") != 0,
+            trimStartSeconds = float("trim_start_seconds").coerceAtLeast(0f),
+            trimDurationSeconds = nullableFloat("trim_duration_seconds")
+                ?.takeIf { it > 0f },
+            fadeInSeconds = float("fade_in_seconds").coerceAtLeast(0f),
+            fadeOutSeconds = float("fade_out_seconds").coerceAtLeast(0f),
         )
         return DownloadItem(
             id = string("id"),
@@ -233,6 +290,8 @@ internal class DownloadDatabase(context: Context) :
         index(column).let { if (isNull(it)) null else getInt(it) }
     private fun Cursor.nullableLong(column: String) =
         index(column).let { if (isNull(it)) null else getLong(it) }
+    private fun Cursor.nullableFloat(column: String) =
+        index(column).let { if (isNull(it)) null else getFloat(it) }
 
     private fun ContentValues.putNullable(key: String, value: String?) {
         if (value == null) putNull(key) else put(key, value)
@@ -246,6 +305,10 @@ internal class DownloadDatabase(context: Context) :
         if (value == null) putNull(key) else put(key, value)
     }
 
+    private fun ContentValues.putNullable(key: String, value: Float?) {
+        if (value == null) putNull(key) else put(key, value)
+    }
+
     private inline fun <reified T : Enum<T>> enumOrDefault(raw: String, default: T): T =
         enumValues<T>().firstOrNull { it.name == raw } ?: default
 
@@ -253,7 +316,7 @@ internal class DownloadDatabase(context: Context) :
 
     companion object {
         private const val DATABASE_NAME = "media_downloader.db"
-        private const val DATABASE_VERSION = 2
+        private const val DATABASE_VERSION = 5
         private const val LANGUAGE_SEPARATOR = "\u001F"
 
         private const val CREATE_DOWNLOADS = """
@@ -266,6 +329,8 @@ internal class DownloadDatabase(context: Context) :
                 media_type TEXT NOT NULL,
                 max_video_height INTEGER,
                 video_container TEXT NOT NULL,
+                editor_compatible INTEGER NOT NULL DEFAULT 0,
+                rate_limit_kbps INTEGER NOT NULL DEFAULT 0,
                 audio_format TEXT NOT NULL,
                 audio_bitrate INTEGER NOT NULL,
                 format_id TEXT,
@@ -275,6 +340,14 @@ internal class DownloadDatabase(context: Context) :
                 audio_speed REAL NOT NULL DEFAULT 1.0,
                 audio_pitch_semitones REAL NOT NULL DEFAULT 0.0,
                 audio_volume_percent INTEGER NOT NULL DEFAULT 100,
+                audio_bass INTEGER NOT NULL DEFAULT 0,
+                audio_echo INTEGER NOT NULL DEFAULT 0,
+                audio_tremolo INTEGER NOT NULL DEFAULT 0,
+                audio_normalize INTEGER NOT NULL DEFAULT 0,
+                trim_start_seconds REAL NOT NULL DEFAULT 0.0,
+                trim_duration_seconds REAL,
+                fade_in_seconds REAL NOT NULL DEFAULT 0.0,
+                fade_out_seconds REAL NOT NULL DEFAULT 0.0,
                 state TEXT NOT NULL,
                 progress INTEGER NOT NULL,
                 eta_seconds INTEGER,

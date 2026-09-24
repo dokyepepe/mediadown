@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+import platform
 import sys
 
 import qrcode
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from mediadownloader.core.platform_catalog import PlatformInfo, extractor_count, supported_platforms
 from mediadownloader.support import SUPPORT_PIX_KEY, SUPPORT_PIX_PAYLOAD
+from mediadownloader.utils.paths import database_path, logs_dir, reveal_in_explorer, settings_path
 from mediadownloader.version import APP_VERSION
 
 from ..icons import svg_pixmap
@@ -37,6 +39,40 @@ def _support_qr_pixmap() -> QPixmap:
     pixmap = QPixmap()
     pixmap.loadFromData(buffer.getvalue(), "PNG")
     return pixmap
+
+
+def build_diagnostics_summary(
+    settings_location: str,
+    history_location: str,
+    logs_location: str,
+    extractors: int,
+) -> str:
+    """Compile a privacy-conscious support summary without creating any folder.
+
+    Logs may contain URLs, so the summary only points at the folders instead of
+    dumping their contents.
+    """
+    try:
+        import PySide6
+
+        qt_version = str(getattr(PySide6, "__version__", "") or "desconhecida")
+    except Exception:
+        qt_version = "desconhecida"
+    lines = [
+        f"Media Downloader {APP_VERSION}",
+        "",
+        "Sistema",
+        f"  Sistema operacional: {platform.system()} {platform.release()} ({platform.machine()})",
+        f"  Python: {platform.python_version()}",
+        f"  Qt / PySide6: {qt_version}",
+        f"  Extractors disponíveis: {extractors}",
+        "",
+        "Localizações",
+        f"  Configurações: {settings_location}",
+        f"  Histórico: {history_location}",
+        f"  Logs: {logs_location}",
+    ]
+    return "\n".join(lines)
 
 
 class SupportCard(QFrame):
@@ -283,6 +319,42 @@ class AboutPage(QWidget):
         more_layout.addWidget(more_text, 1)
         root.addWidget(more)
 
+        diagnostics_card = QFrame()
+        diagnostics_card.setObjectName("Card")
+        diagnostics_card.setAccessibleName("Diagnóstico e suporte")
+        diagnostics_layout = QVBoxLayout(diagnostics_card)
+        diagnostics_layout.setContentsMargins(18, 16, 18, 18)
+        diagnostics_layout.setSpacing(10)
+        diagnostics_title = QLabel("Diagnóstico")
+        diagnostics_title.setObjectName("SectionTitle")
+        diagnostics_description = QLabel(
+            "Copie um resumo local do aplicativo para colar num pedido de suporte. "
+            "Os logs podem conter URLs, então eles ficam nesta máquina; abra a pasta somente quando precisar."
+        )
+        diagnostics_description.setObjectName("Muted")
+        diagnostics_description.setWordWrap(True)
+        diagnostics_actions = QWidget()
+        diagnostics_actions_row = QHBoxLayout(diagnostics_actions)
+        diagnostics_actions_row.setContentsMargins(0, 0, 0, 0)
+        diagnostics_actions_row.setSpacing(8)
+        self.copy_diagnostics_button = SecondaryButton("Copiar diagnóstico", icon_name="copy")
+        self.copy_diagnostics_button.setAccessibleDescription(
+            "Copia um resumo sobre versões e locais de arquivos para a área de transferência."
+        )
+        self.copy_diagnostics_button.clicked.connect(self._copy_diagnostics)
+        self.open_logs_button = SecondaryButton("Abrir pasta de logs", icon_name="folder")
+        self.open_logs_button.setAccessibleDescription(
+            "Abre no explorador de arquivos a pasta onde o aplicativo grava seus logs locais."
+        )
+        self.open_logs_button.clicked.connect(lambda: reveal_in_explorer(logs_dir()))
+        diagnostics_actions_row.addWidget(self.copy_diagnostics_button)
+        diagnostics_actions_row.addWidget(self.open_logs_button)
+        diagnostics_actions_row.addStretch()
+        diagnostics_layout.addWidget(diagnostics_title)
+        diagnostics_layout.addWidget(diagnostics_description)
+        diagnostics_layout.addWidget(diagnostics_actions)
+        root.addWidget(diagnostics_card)
+
         third = QFrame()
         third.setObjectName("Card")
         third_layout = QVBoxLayout(third)
@@ -309,3 +381,13 @@ class AboutPage(QWidget):
         root.addStretch()
         scroll.setWidget(content)
         outer.addWidget(scroll)
+
+    def _copy_diagnostics(self) -> None:
+        summary = build_diagnostics_summary(
+            str(settings_path()),
+            str(database_path()),
+            str(logs_dir()),
+            extractor_count(),
+        )
+        QApplication.clipboard().setText(summary)
+        self.copy_diagnostics_button.setText("Diagnóstico copiado")

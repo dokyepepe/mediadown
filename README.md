@@ -87,14 +87,18 @@ Não existe uma WebView compartilhada entre elas: interface, engine, persistênc
 | **Análise** | Título, autor, duração, plataforma, miniatura, playlist e formatos disponíveis sem bloquear a interface |
 | **Vídeo** | Seleção automática ou MP4, MKV e WEBM, com limite de resolução |
 | **Áudio** | MP3, M4A, OPUS, FLAC e WAV; a edição desktop também oferece AAC |
+| **Editor de áudio** | Desktop: recorte de trecho na forma de onda, fades de entrada/saída e exportação local (MP3, M4A, OPUS, FLAC, WAV) com a cadeia de efeitos aplicada. Android: recorte por início/duração e fades de entrada/saída aplicados na pós-conversão, espelhando a mesma cadeia |
 | **Arquivos de sites** | Descoberta e seleção de PDFs vinculados/incorporados e imagens públicas, incluindo URLs relativas e imagens responsivas |
 | **Destinos separados** | Pastas independentes para vídeos, áudios e arquivos extraídos de sites |
-| **Playlists** | Download integral nas duas edições e seleção item a item no desktop |
+| **Playlists** | Download integral e seleção item a item nas duas edições |
 | **Legendas** | Legendas oficiais ou automáticas, com opções de download/incorporação conforme a edição |
 | **Fila** | Progresso, velocidade, ETA, cancelamento, nova tentativa e estados separados de download e pós-processamento |
-| **Histórico** | Persistência local em SQLite, filtros e ações para abrir, compartilhar ou localizar arquivos |
+| **Histórico** | Persistência local em SQLite, filtros e ações para abrir, compartilhar ou localizar arquivos; exportação em CSV no Android |
 | **Personalização** | Tema claro, escuro ou do sistema; qualidade, formato, destino e preferências persistentes |
+| **Rede e arquivos** | Proxy, limite de velocidade e template de nome de arquivo configuráveis nas duas edições |
+| **Widget e tema** | Widget de download rápido na home screen (Android) e tema dinâmico do sistema no modo Sistema (Android 12+) |
 | **QR Code** | Geração local a partir de URLs nas edições desktop e Android; copiar/salvar PNG no desktop |
+| **Spotify** | Metadados oficiais por OAuth 2.0 PKCE nas duas edições; no Android, cada faixa é buscada no YouTube antes do download de áudio |
 | **Manutenção** | Atualização controlada do yt-dlp e componentes empacotados para dispensar configuração manual no uso final |
 
 ### Desktop ou Android?
@@ -104,13 +108,16 @@ Não existe uma WebView compartilhada entre elas: interface, engine, persistênc
 | Interface nativa | PySide6 / Qt | Kotlin / Compose |
 | Vídeo e áudio | ✅ | ✅ |
 | PDFs e imagens de sites | seleção e pasta configurável | seleção e `Downloads/MediaDownloader` |
-| Playlists | seleção ou playlist completa | playlist completa |
+| Playlists | seleção ou playlist completa | seleção item a item ou playlist completa |
 | Processamento da fila | até 5 downloads concorrentes | persistente, em serviço de primeiro plano |
-| Histórico local | pesquisável e filtrável | abrir e compartilhar |
-| Cookies e proxy | ✅ | cookies ✅ · proxy — |
-| Template de nome de arquivo | ✅ | — |
-| Metadados do Spotify | ✅ | — |
+| Histórico local | pesquisável e filtrável | pesquisar e exportar CSV, abrir e compartilhar |
+| Cookies e proxy | ✅ | ✅ (cookies globais ou por site) |
+| Template de nome de arquivo | ✅ | ✅ |
+| Limite de velocidade | ✅ | ✅ |
+| Metadados do Spotify | ✅ | ✅ |
 | Gerador de QR Code | gerar, copiar e salvar PNG | gerar e visualizar |
+| Tema do sistema | claro, escuro ou sistema | claro, escuro ou sistema; Material You no modo Sistema (Android 12+) |
+| Widget de download rápido | — | ✅ |
 | Destino | pasta configurável | pastas configuráveis por categoria |
 
 As edições disponíveis deste repositório são Windows, Linux em formato AppImage e Android.
@@ -206,7 +213,7 @@ release/MediaDownloader-android-debug.apk
 SHA-256 do artefato atual:
 
 ```text
-30fe2c4e68acc3b935cc2c6892d8e0bb984c410c763d6c5c1251cdcb01696d94
+8CB06AADFD15F08A39E22D7672D7900E0169943331D834B2F02F204DE2CFB785
 ```
 
 Para instalar no aparelho conectado por USB:
@@ -379,22 +386,23 @@ No Android, o `ViewModel` coordena a UI e persiste a fila; um serviço em primei
 
 ## Spotify: metadados, não downloads
 
-A integração do Spotify existe **somente no desktop** e é deliberadamente limitada a metadados:
+A integração do Spotify existe nas edições **desktop e Android** e é deliberadamente limitada a metadados:
 
 - links de faixa, álbum, artista, playlist, show, episódio e audiobook podem ser analisados via oEmbed sem login;
-- playlists autorizadas podem exibir até 20 itens por OAuth 2.0 Authorization Code com PKCE;
-- o botão **Abrir Spotify** leva o usuário ao serviço oficial;
+- playlists autorizadas podem exibir itens por OAuth 2.0 Authorization Code com PKCE (até 20 itens no desktop e 50 no Android);
+- no desktop, o botão **Abrir Spotify** leva ao serviço oficial;
+- no Android, cada faixa analisada é localizada no YouTube pela busca `ytsearch1:"Artista Título"` e baixada como áudio;
 - nenhum áudio do Spotify é baixado, descriptografado, convertido ou exportado.
 
 Para conectar uma playlist da sua conta:
 
 1. Crie um aplicativo no [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
-2. Cadastre exatamente `http://127.0.0.1:43819/callback` em **Redirect URIs**.
+2. Cadastre a redirect URI da sua edição: `http://127.0.0.1:43819/callback` (desktop) ou `mediadownloader://spotify/callback` (Android).
 3. Copie o **Client ID** — o aplicativo nunca solicita o Client Secret.
-4. Em **Ajustes → Spotify**, informe o Client ID e selecione **Conectar conta**.
+4. Em **Ajustes → Spotify**, informe o Client ID e selecione **Conectar conta** (desktop) ou **Conectar Spotify** (Android).
 5. Autorize os escopos de leitura apresentados no navegador.
 
-Os tokens ficam no Gerenciador de Credenciais do Windows, na entrada `MediaDownloader/SpotifyOAuth`, e não no arquivo de configurações. Use **Desconectar** para removê-los. As regras do Development Mode são definidas pelo Spotify e podem mudar; consulte a [documentação oficial de autorização](https://developer.spotify.com/documentation/web-api/concepts/authorization).
+No desktop, os tokens ficam no Gerenciador de Credenciais do Windows, na entrada `MediaDownloader/SpotifyOAuth`. No Android, a sessão é cifrada com uma chave AES-256-GCM do Android Keystore. Use **Desconectar** para removê-los. As regras do Development Mode são definidas pelo Spotify e podem mudar; consulte a [documentação oficial de autorização](https://developer.spotify.com/documentation/web-api/concepts/authorization).
 
 ## Privacidade e segurança
 
@@ -413,7 +421,7 @@ Os tokens ficam no Gerenciador de Credenciais do Windows, na entrada `MediaDownl
 | Fila e histórico | `history.sqlite3` sob `%LOCALAPPDATA%` | banco SQLite privado |
 | Logs | diretório local de logs resolvido por `platformdirs` | logs do sistema Android |
 | Mídias concluídas | pasta escolhida pelo usuário | `Downloads/MediaDownloader` via MediaStore |
-| Token Spotify | Gerenciador de Credenciais | não aplicável |
+| Token Spotify | Gerenciador de Credenciais | Android Keystore (AES-256-GCM) |
 
 ## Solução de problemas
 
@@ -422,10 +430,10 @@ Os tokens ficam no Gerenciador de Credenciais do Windows, na entrada `MediaDownl
 | **“FFmpeg não encontrado”** | Execute `.\scripts\setup_ffmpeg.ps1` e reinicie o desktop |
 | **Um site deixou de funcionar** | Em **Ajustes → Componentes**, verifique ou atualize o yt-dlp |
 | **Falha no YouTube** | Confirme também se Deno e yt-dlp-ejs foram preparados pelo setup |
-| **Conteúdo privado não abre** | No desktop, configure cookies apenas para uma conta com acesso legítimo |
+| **Conteúdo privado não abre** | No desktop ou no Android, configure cookies (globais ou por site) apenas para uma conta com acesso legítimo |
 | **Erro de merge ou conversão** | Confira espaço em disco, logs e a versão do FFmpeg |
 | **Build local sinalizado pelo antivírus** | Binários PyInstaller sem assinatura podem gerar falso positivo; distribuições públicas devem usar Authenticode |
-| **Spotify não conecta** | Confirme o Client ID, a redirect URI exata e a disponibilidade da porta local `43819` |
+| **Spotify não conecta** | Confirme o Client ID e a redirect URI exata — no desktop `http://127.0.0.1:43819/callback`, no Android `mediadownloader://spotify/callback` |
 | **Playlist Spotify retorna acesso negado** | Verifique se a conta é proprietária/colaboradora e reconecte a autorização |
 | **APK não instala** | Ative a depuração USB, autorize o computador e confira a conexão com `adb devices` |
 | **Restrição geográfica ou DRM** | O aplicativo informa a restrição, mas não tenta contorná-la |
@@ -441,7 +449,9 @@ No Windows, os detalhes técnicos ficam em `app.log`, no diretório retornado po
 - executáveis e instaladores locais recebem assinatura Authenticode (certificado próprio) ao rodar `sign_build.ps1`; sem isso, o SmartScreen/antivírus pode sinalizar falso positivo;
 - somente o yt-dlp possui atualização controlada no app; a aplicação completa não tem auto-update;
 - a edição Android usa um destino fixo no MediaStore e processa a fila por serviço em primeiro plano;
-- o Spotify fornece apenas metadados, limitado aos primeiros 20 itens de playlists autorizadas.
+- o tema Material You reflete o papel de parede apenas no modo **Sistema** com Android 12 ou superior; nos demais casos o app usa paleta própria;
+- o widget de download rápido enfileira o link presente na área de transferência e abre o app para o usuário confirmar a ação;
+- o Spotify fornece apenas metadados; playlists autorizadas exibem até 20 itens no desktop e 50 no Android, e o download do áudio protegido continua indisponível.
 
 ## Versionamento e publicação
 

@@ -58,7 +58,9 @@ class MainActivity : ComponentActivity() {
         viewModel.setCookieFileRequester {
             cookieFile.launch(arrayOf("text/plain", "application/octet-stream", "text/*"))
         }
-        viewModel.receiveIntent(intent)
+        if (savedInstanceState == null && !handleSpotifyRedirect(intent)) {
+            viewModel.receiveIntent(intent)
+        }
         setContent {
             MediaDownloaderApp(controller = viewModel)
         }
@@ -67,7 +69,21 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        viewModel.receiveIntent(intent)
+        if (!handleSpotifyRedirect(intent)) {
+            viewModel.receiveIntent(intent)
+        }
+    }
+
+    /** Returns true when the intent is the Spotify OAuth deep link. */
+    private fun handleSpotifyRedirect(intent: Intent?): Boolean {
+        val data = intent?.dataString ?: return false
+        if (intent.action != Intent.ACTION_VIEW ||
+            !data.startsWith("mediadownloader://spotify/callback")
+        ) {
+            return false
+        }
+        viewModel.onSpotifyAuthUri(data)
+        return true
     }
 
     private fun requestNotificationPermissionIfNeeded() {

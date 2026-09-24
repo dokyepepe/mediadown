@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 
 from PySide6.QtCore import QThreadPool, QUrl, Qt
 from PySide6.QtWidgets import (
-    QApplication, QFrame, QHBoxLayout, QLabel, QLineEdit, QScrollArea, QSlider,
+    QApplication, QCheckBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QScrollArea, QSlider,
     QVBoxLayout, QWidget,
 )
 
@@ -43,6 +43,7 @@ from mediadownloader.core.downloader import DownloadEngine
 from mediadownloader.core.ffmpeg_manager import FFmpegManager
 from mediadownloader.core.workers import PreviewRenderWorker, PreviewWorker
 from mediadownloader.models import PreviewSource
+from mediadownloader.utils.cookie_profiles import resolve_cookies
 from mediadownloader.utils.errors import FriendlyError
 from mediadownloader.utils.validators import validate_url
 
@@ -233,6 +234,32 @@ class AudioPage(QWidget):
         volume_row.addWidget(self.volume_combo)
         volume_row.addWidget(self.volume_tone_button)
         canvas_layout.addLayout(volume_row)
+
+        texture_heading = self._card_heading(
+            "Texturas e masterização",
+            "Efeitos extras aplicados na mesma cadeia FFmpeg, junto com tom, velocidade e volume.",
+        )
+        canvas_layout.addLayout(texture_heading)
+        texture_row = QHBoxLayout()
+        texture_row.setSpacing(14)
+        self.bass_box = QCheckBox("Reforçar graves (+6 dB)")
+        self.bass_box.setAccessibleName("Reforçar graves")
+        self.bass_box.setToolTip("Ganho de +6 dB em 100 Hz (filtro bass do FFmpeg).")
+        self.echo_box = QCheckBox("Eco")
+        self.echo_box.setAccessibleName("Eco")
+        self.echo_box.setToolTip("Repetição curta (300 ms) do sinal (filtro aecho).")
+        self.tremolo_box = QCheckBox("Tremolo")
+        self.tremolo_box.setAccessibleName("Tremolo")
+        self.tremolo_box.setToolTip("Modulação de amplitude a 5 Hz (filtro tremolo).")
+        self.normalize_box = QCheckBox("Normalizar volume (EBU R128)")
+        self.normalize_box.setAccessibleName("Normalizar volume")
+        self.normalize_box.setToolTip(
+            "Ajusta o nível médio para -16 LUFS com pico abaixo de -1,5 dBTP (loudnorm)."
+        )
+        for box in (self.bass_box, self.echo_box, self.tremolo_box, self.normalize_box):
+            texture_row.addWidget(box)
+        texture_row.addStretch()
+        canvas_layout.addLayout(texture_row)
         root.addWidget(self.canvas_card)
 
         chain_card = QFrame()
@@ -347,7 +374,7 @@ class AudioPage(QWidget):
         root.addWidget(ab_card)
 
         self.reset_button = SecondaryButton("RESTAURAR PADRÃO (SEM EFEITOS)", icon_name="retry")
-        self.reset_button.setToolTip("Zera tom, velocidade e volume para a fonte original.")
+        self.reset_button.setToolTip("Zera tom, velocidade, volume e efeitos adicionais.")
         self.reset_button.clicked.connect(self.audio_effects.reset)
         foot = QHBoxLayout()
         foot.addWidget(self.reset_button)
@@ -372,6 +399,10 @@ class AudioPage(QWidget):
         self.speed_combo.currentIndexChanged.connect(self._speed_combo_changed)
         self.volume_slider.valueChanged.connect(self._volume_slider_changed)
         self.volume_combo.currentIndexChanged.connect(self._volume_combo_changed)
+        self.bass_box.toggled.connect(self._bass_toggled)
+        self.echo_box.toggled.connect(self._echo_toggled)
+        self.tremolo_box.toggled.connect(self._tremolo_toggled)
+        self.normalize_box.toggled.connect(self._normalize_toggled)
 
         scroll.setWidget(content)
         outer.addWidget(scroll)
@@ -427,6 +458,16 @@ class AudioPage(QWidget):
         self.volume_combo.blockSignals(True)
         select_effect_preset(self.volume_combo, effects.volume)
         self.volume_combo.blockSignals(False)
+
+        for box, enabled in (
+            (self.bass_box, effects.bass),
+            (self.echo_box, effects.echo),
+            (self.tremolo_box, effects.tremolo),
+            (self.normalize_box, effects.normalize),
+        ):
+            box.blockSignals(True)
+            box.setChecked(enabled)
+            box.blockSignals(False)
 
         self.pitch_value.setText(f"{semitones:+d} semitons")
         self.pitch_note.setText(semitones_note_name(semitones))
@@ -542,6 +583,18 @@ class AudioPage(QWidget):
         self.volume_slider.blockSignals(False)
         self.audio_effects.set_volume(volume)
 
+    def _bass_toggled(self, checked: bool) -> None:
+        self.audio_effects.set_bass(checked)
+
+    def _echo_toggled(self, checked: bool) -> None:
+        self.audio_effects.set_echo(checked)
+
+    def _tremolo_toggled(self, checked: bool) -> None:
+        self.audio_effects.set_tremolo(checked)
+
+    def _normalize_toggled(self, checked: bool) -> None:
+        self.audio_effects.set_normalize(checked)
+
     # ── Unified media preview ─────────────────────────────────────────────────
 
     def _paste_url(self) -> None:
@@ -578,13 +631,12 @@ class AudioPage(QWidget):
                 self.settings.get("network.proxy_url", "")
                 if self.settings.get("network.proxy_type") != "none" else ""
             )
-            cookies_file = (
-                self.settings.get("cookies.file", "")
-                if self.settings.get("cookies.source") == "file" else ""
-            )
-            cookies_browser = (
-                self.settings.get("cookies.browser", "")
-                if self.settings.get("cookies.source") == "browser" else ""
+            cookies_file, cookies_browser = resolve_cookies(
+                self.settings.get("cookies.source", "none"),
+                self.settings.get("cookies.file", ""),
+                self.settings.get("cookies.browser", ""),
+                self.settings.get("cookies.profiles", []),
+                url,
             )
         worker = PreviewWorker(self.engine, url, proxy, cookies_file, cookies_browser)
         worker.signals.completed.connect(
@@ -610,6 +662,10 @@ class AudioPage(QWidget):
             speed=effects.speed,
             pitch=effects.pitch,
             volume=effects.volume,
+            bass=effects.bass,
+            echo=effects.echo,
+            tremolo=effects.tremolo,
+            normalize=effects.normalize,
             parent=self,
         )
         dialog.rejected.connect(lambda: self._clear_preview_dialog())

@@ -22,6 +22,10 @@ class DownloadOptions:
     audio_speed: float = 1.0
     audio_pitch: float = 1.0
     audio_volume: float = 1.0
+    audio_bass: bool = False
+    audio_echo: bool = False
+    audio_tremolo: bool = False
+    audio_normalize: bool = False
     output_dir: str = ""
     filename_template: str = "%(title)s.%(ext)s"
     create_playlist_folder: bool = True
@@ -29,6 +33,7 @@ class DownloadOptions:
     proxy: str = ""
     cookies_file: str = ""
     cookies_browser: str = ""
+    rate_limit_kbps: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)

@@ -21,8 +21,8 @@ from mediadownloader.utils.paths import asset_path, reveal_in_explorer
 from mediadownloader.version import APP_NAME, APP_VERSION
 
 from .pages import (
-    AboutPage, AudioPage, DownloadsPage, HistoryPage, HomePage, QrCodePage, SettingsPage,
-    SiteFilesPage,
+    AboutPage, AudioEditorPage, AudioPage, DownloadsPage, HistoryPage, HomePage, QrCodePage,
+    SettingsPage, SiteFilesPage,
 )
 from .theme import apply_theme
 from .widgets import PageHeader, SidebarButton, ThemedIconLabel
@@ -103,6 +103,7 @@ class MainWindow(QMainWindow):
         self.downloads_page = DownloadsPage(self.queue)
         self.history_page = HistoryPage(self.history)
         self.audio_page = AudioPage(self.audio_effects, self.ffmpeg, engine=self.engine, settings=self.settings)
+        self.audio_editor_page = AudioEditorPage(self.audio_effects, self.ffmpeg)
         self.settings_page = SettingsPage(self.settings, self.queue, self.ffmpeg, self.spotify)
         self.site_files_page = SiteFilesPage(self.settings)
         self.qrcode_page = QrCodePage()
@@ -112,6 +113,7 @@ class MainWindow(QMainWindow):
             ("Downloads", "downloads", self.downloads_page),
             ("Histórico", "history", self.history_page),
             ("Áudio", "audio", self.audio_page),
+            ("Editor de áudio", "audio", self.audio_editor_page),
             ("Configurações", "settings", self.settings_page),
             ("Arquivos do site", "file", self.site_files_page),
             ("QR Code", "qrcode", self.qrcode_page),

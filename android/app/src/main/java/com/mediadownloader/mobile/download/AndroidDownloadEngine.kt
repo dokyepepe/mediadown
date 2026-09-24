@@ -4,14 +4,18 @@ import android.content.Context
 import android.os.Environment
 import android.webkit.URLUtil
 import com.mediadownloader.mobile.MediaDownloaderApplication
+import com.mediadownloader.mobile.data.AudioEffects
 import com.mediadownloader.mobile.data.AudioFormat
-import com.mediadownloader.mobile.data.CookieStore
+import com.mediadownloader.mobile.data.CookieProfilesStore
 import com.mediadownloader.mobile.data.DownloadItem
 import com.mediadownloader.mobile.data.DownloadOptions
 import com.mediadownloader.mobile.data.DownloadResult
+import com.mediadownloader.mobile.data.FileNameTemplates
 import com.mediadownloader.mobile.data.MediaAnalysis
 import com.mediadownloader.mobile.data.MediaFormat
 import com.mediadownloader.mobile.data.MediaType
+import com.mediadownloader.mobile.data.MobileSettingsStore
+import com.mediadownloader.mobile.data.PlaylistEntry
 import com.mediadownloader.mobile.data.StorageCategory
 import com.mediadownloader.mobile.data.VideoContainer
 import com.mediadownloader.mobile.preview.PreviewRenderer
@@ -50,7 +54,8 @@ data class EngineProgress(
 class AndroidDownloadEngine(context: Context) {
     private val appContext = context.applicationContext
     private val publisher = MediaStorePublisher(appContext)
-    private val cookieStore = CookieStore(appContext)
+    private val cookieProfilesStore = CookieProfilesStore(appContext)
+    private val networkSettings = MobileSettingsStore.open(appContext)
     private val effectProcessor = PreviewRenderer(appContext)
     private val initializationMutex = Mutex()
     private val cancelledProcesses = ConcurrentHashMap.newKeySet<String>()
@@ -67,7 +72,7 @@ class AndroidDownloadEngine(context: Context) {
             addOption("--skip-download")
             addOption("--no-warnings")
             addOption("--flat-playlist")
-            addCookieFileIfConfigured()
+            addCookieFileFor(url)
         }
         val response = runInterruptible {
             YtDlpRuntimeGate.withInterruptibleReadLock {
@@ -180,17 +185,17 @@ class AndroidDownloadEngine(context: Context) {
     }
 
     private fun buildDownloadRequest(item: DownloadItem, stagingDirectory: File): YoutubeDLRequest {
-        val outputTemplate = File(
-            stagingDirectory,
-            "%(title).180B [%(id)s].%(ext)s",
-        ).absolutePath
+        val template = FileNameTemplates.resolved(networkSettings.fileNameTemplate)
+        val outputTemplate = File(stagingDirectory, template).absolutePath
         return YoutubeDLRequest(item.sourceUrl).apply {
             addOption("--newline")
             addOption("--no-mtime")
             addOption("--trim-filenames", 180)
             addOption("--output", outputTemplate)
             addOption(if (item.options.downloadPlaylist) "--yes-playlist" else "--no-playlist")
-            addCookieFileIfConfigured()
+            addCookieFileFor(item.sourceUrl)
+            addNetworkOptions()
+            addItemRateLimit(item)
             addMediaOptions(item.options)
             if (item.options.includeSubtitles) {
                 addOption("--write-subs")
@@ -201,8 +206,29 @@ class AndroidDownloadEngine(context: Context) {
         }
     }
 
-    private fun YoutubeDLRequest.addCookieFileIfConfigured() {
-        cookieStore.cookieFile?.absolutePath?.let { path -> addOption("--cookiefile", path) }
+    /** Applies cookie profiles resolved from the page host when present. */
+    private fun YoutubeDLRequest.addCookieFileFor(url: String) {
+        val profile = cookieProfilesStore.resolveForUrl(url) ?: return
+        cookieProfilesStore.fileFor(profile.id)?.absolutePath
+            ?.let { path -> addOption("--cookiefile", path) }
+    }
+
+    /** Applies the proxy and the download speed cap from the persistent settings. */
+    private fun YoutubeDLRequest.addNetworkOptions() {
+        networkSettings.proxy.takeIf(String::isNotBlank)?.let { proxy ->
+            addOption("--proxy", proxy)
+        }
+        val limit = networkSettings.rateLimitKbps
+        if (limit > 0) addOption("--limit-rate", "${limit}K")
+    }
+
+    /**
+     * Applies the per-item download speed cap when set (it wins over the
+     * persistent network limit, matching the desktop item override).
+     */
+    private fun YoutubeDLRequest.addItemRateLimit(item: DownloadItem) {
+        val limit = item.options.rateLimitKbps
+        if (limit > 0) addOption("--limit-rate", "${limit}K")
     }
 
     private fun YoutubeDLRequest.addMediaOptions(options: DownloadOptions) {
@@ -220,6 +246,17 @@ class AndroidDownloadEngine(context: Context) {
                 addOption("--format", videoSelector(options))
                 addOption("--merge-output-format", options.videoContainer.extension)
                 addOption("--remux-video", options.videoContainer.extension)
+                if (options.editorCompatible) {
+                    // Editors (Premiere, DaVinci, CapCut…) expect AVC/AAC inside MP4 and a
+                    // seekable moov atom; reject formats that fail to probe instead of
+                    // shipping a truncated/corrupt file.
+                    addOption("--format-sort", "codec:h264:m4a,res,ext:mp4")
+                    addOption("--check-formats")
+                    addOption(
+                        "--postprocessor-args",
+                        "ffmpeg:-c copy -movflags +faststart",
+                    )
+                }
                 addOption("--add-metadata")
             }
         }
@@ -249,12 +286,12 @@ class AndroidDownloadEngine(context: Context) {
         stagedFiles: List<File>,
         onProgress: (EngineProgress) -> Unit,
     ) {
-        val effects = item.options.audioEffects() ?: return
+        if (!item.options.hasAudioProcessing) return
         onProgress(
             EngineProgress(
                 percent = 99,
                 etaSeconds = null,
-                outputLine = "Aplicando efeitos de áudio…",
+                outputLine = "Processando recorte e efeitos de áudio…",
                 processing = true,
             ),
         )
@@ -272,9 +309,13 @@ class AndroidDownloadEngine(context: Context) {
                 effectProcessor.applyEffects(
                     sourceFile = file,
                     outputFile = pending,
-                    effects = effects,
+                    effects = item.options.audioEffects() ?: AudioEffects(),
                     audioBitrateKbps = item.options.audioBitrateKbps,
                     includeVideo = item.options.mediaType == MediaType.VIDEO,
+                    trimStartSeconds = item.options.trimStartSeconds,
+                    trimDurationSeconds = item.options.trimDurationSeconds,
+                    fadeInSeconds = item.options.fadeInSeconds,
+                    fadeOutSeconds = item.options.fadeOutSeconds,
                 )
             } catch (error: DownloadCancelledException) {
                 throw error
@@ -330,6 +371,27 @@ class AndroidDownloadEngine(context: Context) {
         val isPlaylist = entries != null || json.optNullableString("_type") == "playlist"
         val itemCount = json.optPositiveInt("playlist_count")
             ?: entries?.length()?.takeIf { it > 0 }
+        val playlistItems = entries?.let { array ->
+            buildList {
+                for (index in 0 until array.length()) {
+                    val entry = array.optJSONObject(index) ?: continue
+                    val entryUrl = entry.optNullableString("webpage_url")
+                        ?.takeIf(::isHttpUrl)
+                        ?: entry.optNullableString("url")?.takeIf(::isHttpUrl)
+                        ?: continue
+                    val entryIndex = entry.optPositiveInt("playlist_index") ?: (index + 1)
+                    add(
+                        PlaylistEntry(
+                            index = entryIndex,
+                            id = entry.optNullableString("id") ?: entryUrl,
+                            title = entry.optNullableString("title") ?: "Item ${entryIndex}",
+                            url = entryUrl,
+                            thumbnailUrl = entry.optNullableString("thumbnail"),
+                        ),
+                    )
+                }
+            }
+        }.orEmpty()
         val manualSubtitleLangs = json.optJSONObject("subtitles")?.length() ?: 0
         val autoSubtitleLangs = json.optJSONObject("automatic_captions")?.length() ?: 0
         return MediaAnalysis(
@@ -343,6 +405,7 @@ class AndroidDownloadEngine(context: Context) {
             durationSeconds = json.optPositiveLong("duration"),
             isPlaylist = isPlaylist,
             playlistItemCount = itemCount,
+            playlistItems = playlistItems,
             formats = formats,
             supportsSubtitles = manualSubtitleLangs > 0 || autoSubtitleLangs > 0 || isPlaylist,
         )
@@ -430,10 +493,18 @@ class AndroidDownloadEngine(context: Context) {
 
     private fun validateUrl(url: String) {
         val normalized = url.trim()
-        require(URLUtil.isHttpUrl(normalized) || URLUtil.isHttpsUrl(normalized)) {
+        require(
+            URLUtil.isHttpUrl(normalized) ||
+                URLUtil.isHttpsUrl(normalized) ||
+                isYouTubeSearch(normalized),
+        ) {
             "Informe uma URL HTTP ou HTTPS válida"
         }
     }
+
+    /** Spotify metadata is resolved through a `ytsearch<page>:<query>` bridge. */
+    private fun isYouTubeSearch(value: String): Boolean =
+        value.startsWith("ytsearch", ignoreCase = true) && value.contains(':')
 
     private fun JSONObject.optNullableString(name: String): String? =
         if (!has(name) || isNull(name)) null else optString(name).takeIf(String::isNotBlank)

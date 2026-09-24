@@ -22,7 +22,7 @@ from tempfile import gettempdir
 
 from PySide6.QtCore import QThreadPool, QTimer, QUrl, Qt
 from PySide6.QtWidgets import (
-    QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QSlider, QVBoxLayout,
+    QCheckBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QSlider, QVBoxLayout,
     QWidget,
 )
 
@@ -86,6 +86,10 @@ class VideoPreviewDialog(QDialog):
         speed: float = 1.0,
         pitch: float = 1.0,
         volume: float = 1.0,
+        bass: bool = False,
+        echo: bool = False,
+        tremolo: bool = False,
+        normalize: bool = False,
         duration: float = 12.0,
         parent: QWidget | None = None,
     ) -> None:
@@ -117,6 +121,13 @@ class VideoPreviewDialog(QDialog):
         select_effect_preset(self.speed_combo, speed)
         select_effect_preset(self.pitch_combo, pitch)
         select_effect_preset(self.volume_combo, volume)
+        for box, enabled in (
+            (self.bass_box, bass),
+            (self.echo_box, echo),
+            (self.tremolo_box, tremolo),
+            (self.normalize_box, normalize),
+        ):
+            box.setChecked(bool(enabled))
         if not _HAS_MULTIMEDIA:
             self._set_status("Módulo multimídia indisponível. Atualize o PySide6.")
 
@@ -215,14 +226,28 @@ class VideoPreviewDialog(QDialog):
             effects_grid.addWidget(self.pitch_combo, 1, 1)
             effects_grid.addWidget(QLabel("Volume"), 0, 2)
             effects_grid.addWidget(self.volume_combo, 1, 2)
-            effects_grid.addWidget(self.effects_summary, 2, 0, 1, 3)
-            effects_grid.addWidget(self.chain_label, 3, 0, 1, 3)
-            effects_grid.addWidget(self.effect_status, 4, 0, 1, 3)
+            self.bass_box = QCheckBox("Graves (+6 dB)")
+            self.bass_box.setAccessibleName("Reforçar graves na pré-visualização")
+            self.echo_box = QCheckBox("Eco")
+            self.echo_box.setAccessibleName("Eco na pré-visualização")
+            self.tremolo_box = QCheckBox("Tremolo")
+            self.tremolo_box.setAccessibleName("Tremolo na pré-visualização")
+            self.normalize_box = QCheckBox("Normalizar (EBU R128)")
+            self.normalize_box.setAccessibleName("Normalização de volume na pré-visualização")
+            effects_grid.addWidget(self.bass_box, 2, 0)
+            effects_grid.addWidget(self.echo_box, 2, 1)
+            effects_grid.addWidget(self.tremolo_box, 2, 2)
+            effects_grid.addWidget(self.normalize_box, 3, 0)
+            effects_grid.addWidget(self.effects_summary, 4, 0, 1, 3)
+            effects_grid.addWidget(self.chain_label, 5, 0, 1, 3)
+            effects_grid.addWidget(self.effect_status, 6, 0, 1, 3)
             root.addWidget(effects)
 
             self.speed_combo.currentIndexChanged.connect(self._effect_changed)
             self.pitch_combo.currentIndexChanged.connect(self._effect_changed)
             self.volume_combo.currentIndexChanged.connect(self._effect_changed)
+            for box in (self.bass_box, self.echo_box, self.tremolo_box, self.normalize_box):
+                box.toggled.connect(self._effect_changed)
         else:
             placeholder = QLabel(
                 "A pré-visualização requer o módulo PySide6.QtMultimediaWidgets."
@@ -238,6 +263,10 @@ class VideoPreviewDialog(QDialog):
             self.speed_combo = WheelSafeComboBox()
             self.pitch_combo = WheelSafeComboBox()
             self.volume_combo = WheelSafeComboBox()
+            self.bass_box = QCheckBox()
+            self.echo_box = QCheckBox()
+            self.tremolo_box = QCheckBox()
+            self.normalize_box = QCheckBox()
             self.effect_status = QLabel()
             self.effects_summary = QLabel()
             self.chain_label = QLabel()
@@ -267,7 +296,17 @@ class VideoPreviewDialog(QDialog):
             self._play_stream("Carregando stream…")
         self._effect_changed()
 
-    def apply_values(self, speed: float, pitch: float, volume: float) -> None:
+    def apply_values(
+        self,
+        speed: float,
+        pitch: float,
+        volume: float,
+        *,
+        bass: bool = False,
+        echo: bool = False,
+        tremolo: bool = False,
+        normalize: bool = False,
+    ) -> None:
         if not _HAS_MULTIMEDIA:
             return
         for combo, value in (
@@ -278,6 +317,15 @@ class VideoPreviewDialog(QDialog):
             combo.blockSignals(True)
             select_effect_preset(combo, value)
             combo.blockSignals(False)
+        for box, enabled in (
+            (self.bass_box, bass),
+            (self.echo_box, echo),
+            (self.tremolo_box, tremolo),
+            (self.normalize_box, normalize),
+        ):
+            box.blockSignals(True)
+            box.setChecked(bool(enabled))
+            box.blockSignals(False)
         self._effect_changed()
 
     def _current_effects(self) -> AudioEffects:
@@ -285,6 +333,10 @@ class VideoPreviewDialog(QDialog):
             speed=combo_effect_value(self.speed_combo),
             pitch=combo_effect_value(self.pitch_combo),
             volume=combo_effect_value(self.volume_combo),
+            bass=bool(self.bass_box.isChecked()) if self.bass_box is not None else False,
+            echo=bool(self.echo_box.isChecked()) if self.echo_box is not None else False,
+            tremolo=bool(self.tremolo_box.isChecked()) if self.tremolo_box is not None else False,
+            normalize=bool(self.normalize_box.isChecked()) if self.normalize_box is not None else False,
         )
 
     @_guarded

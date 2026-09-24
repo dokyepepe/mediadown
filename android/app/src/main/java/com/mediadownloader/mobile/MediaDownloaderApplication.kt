@@ -25,6 +25,8 @@ class MediaDownloaderApplication : Application() {
     }
 
     suspend fun awaitYtDlpStartup() {
-        ytDlpStartup.await()?.let { throw it }
+        val failure = ytDlpStartup.await() ?: return
+        val retried = runCatching { ytDlpUpdateManager.initializeAndRecover() }.exceptionOrNull()
+        if (retried != null) throw retried
     }
 }

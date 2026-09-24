@@ -31,7 +31,7 @@ object SiteFileDiscovery {
         "tif", "tiff", "webp",
     )
     private val tagRegex = Regex(
-        """<\s*([a-z][\w:-]*)\b([^>]*)>""",
+        """<\s*([a-z][\w:-]*)\b((?:[^>"']|"[^"]*"|'[^']*')*)>""",
         RegexOption.IGNORE_CASE,
     )
     private val attributeRegex = Regex(
@@ -42,7 +42,7 @@ object SiteFileDiscovery {
         RegexOption.IGNORE_CASE,
         RegexOption.DOT_MATCHES_ALL,
     ))
-    private val anchorPairRegex = Regex("""<a\b([^>]*)>(.*?)</a\s*>""", setOf(
+    private val anchorPairRegex = Regex("""<a\b((?:[^>"']|"[^"]*"|'[^']*')*)>(.*?)</a\s*>""", setOf(
         RegexOption.IGNORE_CASE,
         RegexOption.DOT_MATCHES_ALL,
     ))
@@ -91,7 +91,7 @@ object SiteFileDiscovery {
                     }
                 }
                 listOf("srcset", "data-srcset").forEach { key ->
-                    attrs[key].orEmpty().split(',').forEach { entry ->
+                    attrs[key].orEmpty().split(Regex(""",(?=\s|$)""")).forEach { entry ->
                         entry.trim().substringBefore(' ').takeIf(String::isNotBlank)?.let {
                             add(it, SiteFileKind.IMAGE, attrs["alt"] ?: attrs["title"])
                         }
@@ -205,16 +205,17 @@ object SiteFileDiscovery {
         return runCatching {
             val resolved = URI(baseUrl).resolve(value.replace(" ", "%20"))
             if (resolved.scheme.equals("http", true) || resolved.scheme.equals("https", true)) {
-                if (resolved.host.isNullOrBlank()) null
-                else URI(
-                    resolved.scheme,
-                    resolved.userInfo,
-                    resolved.host,
-                    resolved.port,
-                    resolved.path,
-                    resolved.query,
-                    null,
-                ).toASCIIString()
+                if (resolved.host.isNullOrBlank()) {
+                    null
+                } else {
+                    val rebuilt = buildString {
+                        append(resolved.scheme).append(':')
+                        if (!resolved.rawAuthority.isNullOrBlank()) append("//").append(resolved.rawAuthority)
+                        append(resolved.rawPath)
+                        if (!resolved.rawQuery.isNullOrBlank()) append('?').append(resolved.rawQuery)
+                    }
+                    URI(rebuilt).toASCIIString()
+                }
             } else null
         }.getOrNull()
     }

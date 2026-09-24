@@ -19,22 +19,26 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Autorenew
 import androidx.compose.material.icons.rounded.Cancel
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ErrorOutline
-import androidx.compose.material.icons.rounded.List
-import androidx.compose.material.icons.rounded.OpenInNew
+import androidx.compose.material.icons.automirrored.rounded.List
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedFilterChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -57,6 +61,7 @@ fun DownloadsScreen(
     thumbnail: ThumbnailRenderer,
     modifier: Modifier = Modifier,
 ) {
+    val query = state.searchQuery.trim().lowercase()
     val visibleItems = state.items.filter { item ->
         when (state.selectedFilter) {
             DownloadFilter.ALL -> true
@@ -64,7 +69,9 @@ fun DownloadsScreen(
             DownloadFilter.COMPLETED -> item.status == DownloadStatus.COMPLETED
             DownloadFilter.FAILED -> item.status == DownloadStatus.FAILED ||
                 item.status == DownloadStatus.CANCELLED
-        }
+        } && (query.isEmpty() ||
+            item.title.contains(query, ignoreCase = true) ||
+            item.detail.contains(query, ignoreCase = true))
     }
     val activeCount = state.items.count { it.status.isActive }
     val completedCount = state.items.count { it.status == DownloadStatus.COMPLETED }
@@ -103,6 +110,39 @@ fun DownloadsScreen(
             }
 
             item {
+                OutlinedTextField(
+                    value = state.searchQuery,
+                    onValueChange = { onAction(MobileUiAction.DownloadsSearchQueryChanged(it)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Buscar por título ou origem") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Search,
+                            contentDescription = null,
+                        )
+                    },
+                    trailingIcon = if (state.searchQuery.isNotEmpty()) {
+                        {
+                            IconButton(
+                                onClick = {
+                                    onAction(MobileUiAction.DownloadsSearchQueryChanged(""))
+                                },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Close,
+                                    contentDescription = "Limpar busca",
+                                )
+                            }
+                        }
+                    } else {
+                        null
+                    },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.medium,
+                )
+            }
+
+            item {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(DownloadFilter.entries, key = { it.name }) { filter ->
                         val count = state.items.countFor(filter)
@@ -126,9 +166,11 @@ fun DownloadsScreen(
                 item {
                     EmptyState(
                         icon = Icons.Rounded.CloudDownload,
-                        title = if (state.items.isEmpty()) "Sua fila está vazia" else "Nada neste filtro",
+                        title = if (state.items.isEmpty()) "Sua fila está vazia" else "Nada encontrado",
                         supportingText = if (state.items.isEmpty()) {
                             "Os downloads adicionados na tela Início aparecerão aqui com o progresso em tempo real."
+                        } else if (query.isNotEmpty()) {
+                            "Nenhum download corresponde a \"${state.searchQuery.trim()}\". Confira a busca e o filtro selecionado."
                         } else {
                             "Selecione outro filtro para encontrar seus downloads."
                         },
@@ -428,7 +470,7 @@ private fun DownloadActions(
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.OpenInNew,
+                        imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
                     )
@@ -472,7 +514,7 @@ private val DownloadStatus.icon: ImageVector
 
 private val DownloadFilter.icon: ImageVector
     get() = when (this) {
-        DownloadFilter.ALL -> Icons.Rounded.List
+        DownloadFilter.ALL -> Icons.AutoMirrored.Rounded.List
         DownloadFilter.ACTIVE -> Icons.Rounded.Download
         DownloadFilter.COMPLETED -> Icons.Rounded.CheckCircle
         DownloadFilter.FAILED -> Icons.Rounded.ErrorOutline

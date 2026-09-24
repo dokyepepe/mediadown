@@ -54,17 +54,26 @@ class FormatManager:
         return processors
 
     @classmethod
-    def build_audio_filters(cls, speed: float, pitch: float, volume: float) -> str | None:
-        """Build the FFmpeg ``-af`` filter graph for speed/pitch/volume.
+    def build_audio_filters(
+        cls,
+        speed: float,
+        pitch: float,
+        volume: float,
+        *,
+        bass: bool = False,
+        echo: bool = False,
+        tremolo: bool = False,
+        normalize: bool = False,
+    ) -> str | None:
+        """Build the FFmpeg ``-af`` filter graph for speed/pitch/volume + toggles.
 
-        Speed is stretched with ``atempo``; pitch shifts use ``asetrate`` +
-        ``aresample`` + ``atempo=1/pitch``, which changes the key while keeping
-        the duration. ``atempo`` is limited to [0.5, 2.0] per filter instance,
-        so the pitch-recovery and speed stages are kept as separate, in-range
-        filters. Volume is applied last. Returns ``None`` when nothing is
-        altered.
+        Delegates to :func:`build_audio_filters`. Returns ``None`` when nothing
+        is altered.
         """
-        return build_audio_filters(speed, pitch, volume)
+        return build_audio_filters(
+            speed, pitch, volume,
+            bass=bass, echo=echo, tremolo=tremolo, normalize=normalize,
+        )
 
     @classmethod
     def audio_postprocessor_args(cls, options: DownloadOptions) -> dict | None:
@@ -79,6 +88,10 @@ class FormatManager:
             getattr(options, "audio_speed", 1.0),
             getattr(options, "audio_pitch", 1.0),
             getattr(options, "audio_volume", 1.0),
+            bass=getattr(options, "audio_bass", False),
+            echo=getattr(options, "audio_echo", False),
+            tremolo=getattr(options, "audio_tremolo", False),
+            normalize=getattr(options, "audio_normalize", False),
         )
         if chain is None:
             return None

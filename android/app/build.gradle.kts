@@ -1,8 +1,23 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+// Chaves de release ficam em android/key.properties (gitignored). Sem esse arquivo
+// o assembleRelease assina com a chave de debug, para builds/CI não falharem.
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(keystorePropertiesFile.inputStream())
+}
+val hasReleaseSigning = keystorePropertiesFile.exists() &&
+    keystoreProperties.getProperty("storeFile") != null &&
+    keystoreProperties.getProperty("storePassword") != null &&
+    keystoreProperties.getProperty("keyAlias") != null &&
+    keystoreProperties.getProperty("keyPassword") != null
 
 android {
     namespace = "com.mediadownloader.mobile"
@@ -14,12 +29,23 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = generatedVersionCode()
-        versionName = "1.2.0"
+        versionName = "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
         }
     }
 
@@ -34,6 +60,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
@@ -113,6 +144,9 @@ tasks.named("preBuild").configure { dependsOn(copyCppShared) }
 /**
  * Strictly increasing version code so every build replaces the previous one
  * in place, instead of forcing `adb install` to uninstall the app first.
+ *
+ * The marker file keeps the code monotonic even when the device clock rolls
+ * backwards (or is held), avoiding a `adb install` downgrade rejection.
  */
 fun generatedVersionCode(): Int {
     val now = System.currentTimeMillis()
@@ -120,7 +154,19 @@ fun generatedVersionCode(): Int {
     val minuteOfDay = ((now % 86_400_000L) / 60_000L).toInt()
     // `days*1440 + minuteOfDay` grows with every minute; `days*100 + minuteOfDay`
     // would regress whenever a new day started late in the day.
-    return 10_000 + daysSince2020 * 1440 + minuteOfDay
+    val computed = 10_000 + daysSince2020 * 1440 + minuteOfDay
+    val markerFile = layout.buildDirectory.file("lastGeneratedVersionCode.txt").get().asFile
+    val previous = markerFile.takeIf(File::isFile)
+        ?.readText()
+        ?.trim()
+        ?.toIntOrNull()
+        ?: 0
+    val result = maxOf(computed, previous + 1)
+    if (result != previous) {
+        markerFile.parentFile?.mkdirs()
+        markerFile.writeText(result.toString())
+    }
+    return result
 }
 
 dependencies {
@@ -148,6 +194,7 @@ dependencies {
     implementation("io.github.junkfood02.youtubedl-android:ffmpeg:$youtubeDlAndroid")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")

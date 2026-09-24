@@ -26,15 +26,25 @@ data class DownloadOptions(
     val mediaType: MediaType = MediaType.VIDEO,
     val maxVideoHeight: Int? = 1080,
     val videoContainer: VideoContainer = VideoContainer.MP4,
+    val editorCompatible: Boolean = false,
     val audioFormat: AudioFormat = AudioFormat.MP3,
     val audioBitrateKbps: Int = 192,
     val formatId: String? = null,
+    val rateLimitKbps: Int = 0,
     val downloadPlaylist: Boolean = false,
     val includeSubtitles: Boolean = false,
     val subtitleLanguages: List<String> = listOf("pt", "pt-BR", "en"),
     val audioSpeed: Float = 1f,
     val audioPitchSemitones: Float = 0f,
     val audioVolumePercent: Int = 100,
+    val audioBass: Boolean = false,
+    val audioEcho: Boolean = false,
+    val audioTremolo: Boolean = false,
+    val audioNormalize: Boolean = false,
+    val trimStartSeconds: Float = 0f,
+    val trimDurationSeconds: Float? = null,
+    val fadeInSeconds: Float = 0f,
+    val fadeOutSeconds: Float = 0f,
 ) {
     init {
         require(maxVideoHeight == null || maxVideoHeight > 0) {
@@ -42,6 +52,9 @@ data class DownloadOptions(
         }
         require(audioBitrateKbps in 32..320) {
             "audioBitrateKbps must be between 32 and 320"
+        }
+        require(rateLimitKbps >= 0) {
+            "rateLimitKbps must be non-negative"
         }
         require(audioSpeed in AudioEffects.MIN_SPEED..AudioEffects.MAX_SPEED) {
             "audioSpeed must be between ${AudioEffects.MIN_SPEED} and ${AudioEffects.MAX_SPEED}"
@@ -54,6 +67,15 @@ data class DownloadOptions(
             "audioVolumePercent must be between " +
                 "${AudioEffects.MIN_VOLUME_PERCENT} and ${AudioEffects.MAX_VOLUME_PERCENT}"
         }
+        require(trimStartSeconds >= 0f) {
+            "trimStartSeconds must be non-negative"
+        }
+        require(trimDurationSeconds == null || trimDurationSeconds > 0f) {
+            "trimDurationSeconds must be null or positive"
+        }
+        require(fadeInSeconds >= 0f && fadeOutSeconds >= 0f) {
+            "fade durations must be non-negative"
+        }
     }
 
     /** The effect chain to apply after download, or `null` when everything is default. */
@@ -62,7 +84,22 @@ data class DownloadOptions(
             speed = audioSpeed,
             semitones = audioPitchSemitones,
             volumePercent = audioVolumePercent,
+            bass = audioBass,
+            echo = audioEcho,
+            tremolo = audioTremolo,
+            normalize = audioNormalize,
         ).sanitized().takeUnless { it.isIdentity }
+
+    /**
+     * Whether the download needs a post-processing pass: the effect chain, a
+     * trim (start and/or explicit duration) or attenuating fades.
+     */
+    val hasAudioProcessing: Boolean
+        get() = audioEffects() != null ||
+            trimStartSeconds > 0f ||
+            trimDurationSeconds != null ||
+            fadeInSeconds > 0f ||
+            fadeOutSeconds > 0f
 }
 
 enum class DownloadState {
@@ -177,6 +214,14 @@ data class MediaFormat(
             (streamUrl.startsWith("http", ignoreCase = true) || streamUrl.contains("://"))
 }
 
+data class PlaylistEntry(
+    val index: Int,
+    val id: String,
+    val title: String,
+    val url: String,
+    val thumbnailUrl: String? = null,
+)
+
 data class MediaAnalysis(
     val sourceUrl: String,
     val title: String,
@@ -186,6 +231,7 @@ data class MediaAnalysis(
     val durationSeconds: Long?,
     val isPlaylist: Boolean,
     val playlistItemCount: Int?,
+    val playlistItems: List<PlaylistEntry> = emptyList(),
     val formats: List<MediaFormat>,
     val supportsSubtitles: Boolean = true,
 )

@@ -1,6 +1,7 @@
 package com.mediadownloader.mobile.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,25 +14,35 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.ClosedCaption
+import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.ContentPaste
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.HighlightOff
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Stop
@@ -53,6 +64,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -101,7 +114,9 @@ fun HomeScreen(
                 }
             }
 
-            state.preview?.let { preview ->
+            val analyzedPreview = state.preview
+            if (analyzedPreview != null) {
+                val preview = analyzedPreview
                 item {
                     PreviewCard(
                         preview = preview,
@@ -119,11 +134,28 @@ fun HomeScreen(
                 }
 
                 item {
+                    TrimAndFadeCard(
+                        state = state,
+                        onAction = onAction,
+                    )
+                }
+
+                item {
                     DownloadOptionsCard(
                         state = state,
                         preview = preview,
                         onAction = onAction,
                     )
+                }
+
+                if (preview.isPlaylist && preview.playlistItems.isNotEmpty()) {
+                    item {
+                        PlaylistSelectionCard(
+                            state = state,
+                            preview = preview,
+                            onAction = onAction,
+                        )
+                    }
                 }
 
                 item {
@@ -151,28 +183,206 @@ fun HomeScreen(
                             )
                             Spacer(Modifier.size(9.dp))
                             Text(
-                                if (preview.isPlaylist && state.downloadPlaylist) {
-                                    "Baixar playlist"
-                                } else {
-                                    "Baixar agora"
+                                when {
+                                    preview.isPlaylist && state.downloadPlaylist -> "Baixar playlist"
+                                    preview.isPlaylist -> "Baixar ${state.selectedPlaylistItems.size} " +
+                                        if (state.selectedPlaylistItems.size == 1) "item" else "itens"
+                                    else -> "Baixar agora"
                                 },
                             )
                         }
                     }
                 }
-            } ?: item {
-                InfoBanner(
-                    text = "Seus links e downloads permanecem neste aparelho — sem conta e sem telemetria.",
-                    icon = Icons.Rounded.Lock,
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.72f),
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                )
+            } else if (state.spotify != null) {
+                item {
+                    SpotifyCard(
+                        media = state.spotify,
+                        isDownloading = state.isSpotifyDownloading,
+                        onAction = onAction,
+                    )
+                }
+            } else {
+                item {
+                    InfoBanner(
+                        text = "Seus links e downloads permanecem neste aparelho — sem conta e sem telemetria.",
+                        icon = Icons.Rounded.Lock,
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.72f),
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    )
+                }
             }
 
             item { Spacer(Modifier.height(4.dp)) }
         }
     }
 }
+
+@Composable
+private fun SpotifyCard(
+    media: SpotifyMediaUi,
+    isDownloading: Boolean,
+    onAction: (MobileUiAction) -> Unit,
+) {
+    SectionCard {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            SectionTitle(
+                title = "Spotify",
+                supportingText = "Metadados oficiais. O áudio é buscado no YouTube, nunca no Spotify.",
+                icon = Icons.Rounded.MusicNote,
+            )
+
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceContainer,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = media.resourceLabel.uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = media.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    media.subtitle?.takeIf(String::isNotBlank)?.let { subtitle ->
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    val count = media.itemCount ?: media.tracks.size.takeIf { it > 0 }
+                    if (count != null) {
+                        Text(
+                            text = if (count == 1) "1 faixa" else "$count faixas",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            if (media.requiresAuth && !media.authenticated) {
+                InfoBanner(
+                    text = "Conecte sua conta do Spotify nos Ajustes para ver as faixas desta playlist.",
+                    icon = Icons.Rounded.Lock,
+                )
+            }
+            media.notice?.takeIf(String::isNotBlank)?.let { notice ->
+                InfoBanner(text = notice, icon = Icons.Rounded.Info)
+            }
+
+            if (media.tracks.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    media.tracks.take(SPOTIFY_TRACK_PREVIEW_LIMIT).forEach { track ->
+                        SpotifyTrackRow(track)
+                    }
+                    if (media.tracks.size > SPOTIFY_TRACK_PREVIEW_LIMIT) {
+                        Text(
+                            text = "+ ${media.tracks.size - SPOTIFY_TRACK_PREVIEW_LIMIT} faixas",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            Button(
+                onClick = { onAction(MobileUiAction.DownloadSpotifyOnYouTube) },
+                enabled = !isDownloading,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp),
+                shape = MaterialTheme.shapes.medium,
+            ) {
+                if (isDownloading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                    Spacer(Modifier.size(10.dp))
+                    Text("Adicionando à fila…")
+                } else {
+                    Icon(
+                        imageVector = Icons.Rounded.CloudDownload,
+                        contentDescription = null,
+                        modifier = Modifier.size(21.dp),
+                    )
+                    Spacer(Modifier.size(9.dp))
+                    Text(
+                        if (media.tracks.size > 1) {
+                            "Baixar faixas pelo YouTube"
+                        } else {
+                            "Baixar áudio pelo YouTube"
+                        },
+                    )
+                }
+            }
+
+            Text(
+                text = "O download do áudio protegido pelo Spotify não é possível; " +
+                    "cada faixa é localizada por uma busca no YouTube.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SpotifyTrackRow(track: SpotifyTrackUi) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = track.index.toString(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(22.dp),
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = track.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (track.artist.isNotBlank()) {
+                Text(
+                    text = track.artist,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        track.durationText?.let { duration ->
+            Text(
+                text = duration,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private const val SPOTIFY_TRACK_PREVIEW_LIMIT = 20
 
 @Composable
 private fun UrlInputCard(
@@ -354,9 +564,9 @@ private fun AudioEffectsCard(
             SectionTitle(
                 title = "Ouça com efeitos",
                 supportingText = if (state.canTogglePreviewVideo) {
-                    "Ajuste tom, velocidade e volume, e toque as prévias antes de baixar."
+                    "Ajuste tom, velocidade, volume, graves, eco, tremolo e normalização, e toque as prévias antes de baixar."
                 } else {
-                    "Ajuste tom, velocidade e volume, e toque até 30 s antes de baixar."
+                    "Ajuste tom, velocidade, volume, graves, eco, tremolo e normalização, e toque até 30 s antes de baixar."
                 },
                 icon = Icons.Rounded.Tune,
             )
@@ -391,6 +601,42 @@ private fun AudioEffectsCard(
                 onValueChange = { onAction(MobileUiAction.SetAudioVolume(it.toInt())) },
             )
 
+            EffectToggle(
+                title = "Graves reforçados",
+                supportingText = "+6 dB em 100 Hz",
+                checked = state.audioBass,
+                enabled = !state.audioPreviewActive,
+                icon = Icons.Rounded.GraphicEq,
+                onCheckedChange = { onAction(MobileUiAction.SetAudioBass(it)) },
+            )
+
+            EffectToggle(
+                title = "Eco",
+                supportingText = "Decaimento suave de 300 ms",
+                checked = state.audioEcho,
+                enabled = !state.audioPreviewActive,
+                icon = Icons.Rounded.Repeat,
+                onCheckedChange = { onAction(MobileUiAction.SetAudioEcho(it)) },
+            )
+
+            EffectToggle(
+                title = "Tremolo",
+                supportingText = "Oscilação de 5 Hz",
+                checked = state.audioTremolo,
+                enabled = !state.audioPreviewActive,
+                icon = Icons.Rounded.GraphicEq,
+                onCheckedChange = { onAction(MobileUiAction.SetAudioTremolo(it)) },
+            )
+
+            EffectToggle(
+                title = "Normalização",
+                supportingText = "Loudness uniforme (EBU R128)",
+                checked = state.audioNormalize,
+                enabled = !state.audioPreviewActive,
+                icon = Icons.AutoMirrored.Rounded.VolumeUp,
+                onCheckedChange = { onAction(MobileUiAction.SetAudioNormalize(it)) },
+            )
+
             if (state.canTogglePreviewVideo) {
                 PreviewVideoModeSelector(
                     usesVideo = state.previewUsesVideo,
@@ -401,7 +647,7 @@ private fun AudioEffectsCard(
                 )
             }
 
-            if (!state.audioEffectsDefault) {
+            if (!state.audioEffectsDefault || !state.audioTrimDefault) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
@@ -511,6 +757,90 @@ private fun AudioEffectsCard(
 }
 
 @Composable
+private fun TrimAndFadeCard(
+    state: HomeUiState,
+    onAction: (MobileUiAction) -> Unit,
+) {
+    val maxSeconds = (
+        state.preview?.durationSeconds
+            ?.takeIf { it >= MIN_SEGMENT_SECONDS }
+            ?: MAX_TRIM_SLIDER_SECONDS
+        ).coerceAtMost(MAX_TRIM_SLIDER_SECONDS)
+    SectionCard {
+        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            SectionTitle(
+                title = "Recorte e fades",
+                supportingText = "Comece a mídia em outro trecho e suavize as bordas do trecho salvo.",
+                icon = Icons.Rounded.ContentCut,
+            )
+
+            EffectSlider(
+                title = "Início do recorte",
+                valueText = formatTrimSeconds(state.trimStartSeconds),
+                value = state.trimStartSeconds.coerceIn(0f, maxSeconds),
+                valueRange = 0f..maxSeconds,
+                steps = 0,
+                enabled = !state.audioPreviewActive,
+                onValueChange = { onAction(MobileUiAction.SetTrimStartSeconds(it)) },
+            )
+
+            SwitchOption(
+                title = "Recorte até o fim",
+                supportingText = when (state.trimDurationSeconds) {
+                    null -> "O trecho segue até o final da mídia"
+                    else -> "Interrompe o trecho na duração escolhida"
+                },
+                checked = state.trimDurationSeconds == null,
+                icon = Icons.Rounded.HighlightOff,
+                onCheckedChange = { untilEnd ->
+                    if (untilEnd) {
+                        onAction(MobileUiAction.SetTrimDurationSeconds(null))
+                    } else {
+                        onAction(
+                            MobileUiAction.SetTrimDurationSeconds(
+                                state.trimDurationSeconds ?: DEFAULT_TRIM_DURATION,
+                            ),
+                        )
+                    }
+                },
+            )
+
+            state.trimDurationSeconds?.let { duration ->
+                EffectSlider(
+                    title = "Duração do trecho",
+                    valueText = formatTrimSeconds(duration),
+                    value = duration.coerceIn(MIN_SEGMENT_SECONDS, maxSeconds),
+                    valueRange = MIN_SEGMENT_SECONDS..maxSeconds,
+                    steps = 0,
+                    enabled = !state.audioPreviewActive,
+                    onValueChange = { onAction(MobileUiAction.SetTrimDurationSeconds(it)) },
+                )
+            }
+
+            EffectSlider(
+                title = "Fade de entrada",
+                valueText = formatTrimSeconds(state.fadeInSeconds),
+                value = state.fadeInSeconds.coerceIn(0f, MAX_FADE_SLIDER_SECONDS),
+                valueRange = 0f..MAX_FADE_SLIDER_SECONDS,
+                steps = 0,
+                enabled = !state.audioPreviewActive,
+                onValueChange = { onAction(MobileUiAction.SetFadeInSeconds(it)) },
+            )
+
+            EffectSlider(
+                title = "Fade de saída",
+                valueText = formatTrimSeconds(state.fadeOutSeconds),
+                value = state.fadeOutSeconds.coerceIn(0f, MAX_FADE_SLIDER_SECONDS),
+                valueRange = 0f..MAX_FADE_SLIDER_SECONDS,
+                steps = 0,
+                enabled = !state.audioPreviewActive,
+                onValueChange = { onAction(MobileUiAction.SetFadeOutSeconds(it)) },
+            )
+        }
+    }
+}
+
+@Composable
 private fun EffectSlider(
     title: String,
     valueText: String,
@@ -542,6 +872,113 @@ private fun EffectSlider(
             enabled = enabled,
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+}
+
+@Composable
+private fun PlaylistSelectionCard(
+    state: HomeUiState,
+    preview: MediaPreviewUi,
+    onAction: (MobileUiAction) -> Unit,
+) {
+    if (!preview.isPlaylist || preview.playlistItems.isEmpty()) return
+    SectionCard {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SectionTitle(
+                title = "Itens da playlist",
+                supportingText = "Escolha quais músicas ou vídeos entrarão na fila.",
+                icon = Icons.AutoMirrored.Rounded.PlaylistPlay,
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                FilledTonalButton(
+                    onClick = { onAction(MobileUiAction.SelectAllPlaylistItems(true)) },
+                    enabled = state.playlistSelection.size < preview.playlistItems.size,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 44.dp),
+                ) {
+                    Text("Selecionar tudo")
+                }
+                FilledTonalButton(
+                    onClick = { onAction(MobileUiAction.SelectAllPlaylistItems(false)) },
+                    enabled = state.playlistSelection.isNotEmpty(),
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 44.dp),
+                ) {
+                    Text("Limpar seleção")
+                }
+            }
+
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 320.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items(preview.playlistItems, key = { "item-${it.index}" }) { item ->
+                    val selected = item.index in state.playlistSelection
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .toggleable(
+                                value = selected,
+                                role = Role.Checkbox,
+                                onValueChange = { onAction(MobileUiAction.TogglePlaylistItem(item.index)) },
+                            ),
+                        shape = MaterialTheme.shapes.medium,
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainer
+                        },
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(if (selected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        Color.Transparent
+                                    }),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (selected) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                    )
+                                }
+                            }
+                            Text(
+                                text = item.index.toString(),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.width(28.dp),
+                            )
+                            Text(
+                                text = item.title,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -606,16 +1043,6 @@ private fun DownloadOptionsCard(
                 onSelect = { onAction(MobileUiAction.SelectFormat(it)) },
             )
 
-            if (preview.isPlaylist) {
-                SwitchOption(
-                    title = "Baixar a playlist inteira",
-                    supportingText = preview.playlistItemCount?.let { "$it itens encontrados" },
-                    checked = state.downloadPlaylist,
-                    icon = Icons.Rounded.PlaylistPlay,
-                    onCheckedChange = { onAction(MobileUiAction.SetDownloadPlaylist(it)) },
-                )
-            }
-
             if (preview.supportsSubtitles && state.selectedKind == MediaKind.VIDEO) {
                 SwitchOption(
                     title = "Incluir legendas",
@@ -625,6 +1052,33 @@ private fun DownloadOptionsCard(
                     onCheckedChange = { onAction(MobileUiAction.SetIncludeSubtitles(it)) },
                 )
             }
+
+            if (state.selectedKind == MediaKind.VIDEO) {
+                SwitchOption(
+                    title = "Compatível com editores",
+                    supportingText = "H.264/AAC .mp4 com moov no início (Premiere, DaVinci, CapCut)",
+                    checked = state.editorCompatible,
+                    icon = Icons.Rounded.Videocam,
+                    onCheckedChange = { onAction(MobileUiAction.ToggleEditorCompatibility(it)) },
+                )
+            }
+
+            OutlinedTextField(
+                value = state.itemRateLimitText,
+                onValueChange = { onAction(MobileUiAction.SetItemRateLimitText(it)) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Limite de velocidade por item (KiB/s)") },
+                placeholder = { Text("Vazio = sem limite") },
+                supportingText = {
+                    Text("Aplica-se a este item, os parâmetros em segundo plano ficam intactos.")
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Next,
+                ),
+                singleLine = true,
+                shape = MaterialTheme.shapes.medium,
+            )
         }
     }
 }
@@ -852,6 +1306,62 @@ private fun ChoiceSelector(
 }
 
 @Composable
+private fun EffectToggle(
+    title: String,
+    supportingText: String,
+    checked: Boolean,
+    enabled: Boolean,
+    icon: ImageVector,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.toggleable(
+            value = checked,
+            enabled = enabled,
+            role = Role.Switch,
+            onValueChange = onCheckedChange,
+        ),
+        shape = MaterialTheme.shapes.medium,
+        color = if (checked) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(23.dp),
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = supportingText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = checked,
+                enabled = enabled,
+                onCheckedChange = null,
+            )
+        }
+    }
+}
+
+@Composable
 private fun SwitchOption(
     title: String,
     supportingText: String?,
@@ -919,6 +1429,17 @@ private fun formatSemitones(value: Float): String =
     }
 
 private fun formatVolume(percent: Int): String = "$percent%"
+
+private fun formatTrimSeconds(value: Float): String = when {
+    value <= 0.05f -> "0 s"
+    value < 10f -> String.format(Locale.US, "%.1f", value).replace('.', ',') + " s"
+    else -> String.format(Locale.US, "%.0f", value).replace('.', ',') + " s"
+}
+
+private const val MIN_SEGMENT_SECONDS = 1f
+private const val MAX_TRIM_SLIDER_SECONDS = 600f
+private const val MAX_FADE_SLIDER_SECONDS = 30f
+private const val DEFAULT_TRIM_DURATION = 5f
 
 private val MediaKind.icon: ImageVector
     get() = when (this) {

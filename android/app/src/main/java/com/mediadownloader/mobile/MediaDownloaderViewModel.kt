@@ -17,19 +17,29 @@ import com.mediadownloader.mobile.data.AudioEffects
 import com.mediadownloader.mobile.data.AudioFormat
 import com.mediadownloader.mobile.data.CookieCheckUi
 import com.mediadownloader.mobile.data.CookieDiagnostics
-import com.mediadownloader.mobile.data.CookieStore
+import com.mediadownloader.mobile.data.CookieProfile
+import com.mediadownloader.mobile.data.CookieProfilesStore
 import com.mediadownloader.mobile.data.DownloadItem
 import com.mediadownloader.mobile.data.DownloadOptions
 import com.mediadownloader.mobile.data.DownloadRepository
 import com.mediadownloader.mobile.data.DownloadState
+import com.mediadownloader.mobile.data.HistoryCsvRow
 import com.mediadownloader.mobile.data.HistoryItem
 import com.mediadownloader.mobile.data.MediaAnalysis
 import com.mediadownloader.mobile.data.MediaFormat
 import com.mediadownloader.mobile.data.MediaType
+import com.mediadownloader.mobile.data.MobileSettingsStore
 import com.mediadownloader.mobile.data.PreviewSourceResolver
+import com.mediadownloader.mobile.data.SpotifyMedia
+import com.mediadownloader.mobile.data.SpotifyModels
+import com.mediadownloader.mobile.data.SpotifyTokenStore
+import com.mediadownloader.mobile.data.SpotifyTrack
 import com.mediadownloader.mobile.data.StorageCategory
 import com.mediadownloader.mobile.data.StorageLocationStore
+import com.mediadownloader.mobile.data.UrlExtraction
 import com.mediadownloader.mobile.data.VideoContainer
+import com.mediadownloader.mobile.data.historyToCsv
+import com.mediadownloader.mobile.data.resolveChoiceId
 import com.mediadownloader.mobile.download.AndroidDownloadEngine
 import com.mediadownloader.mobile.download.DownloadService
 import com.mediadownloader.mobile.preview.PreviewPlayer
@@ -37,9 +47,11 @@ import com.mediadownloader.mobile.preview.PreviewRenderer
 import com.mediadownloader.mobile.site.AndroidSiteFileService
 import com.mediadownloader.mobile.site.SiteFile
 import com.mediadownloader.mobile.site.SiteFileKind
+import com.mediadownloader.mobile.spotify.SpotifyMetadataClient
 import com.mediadownloader.mobile.support.SupportConfig
 import com.mediadownloader.mobile.ui.AppTab
 import com.mediadownloader.mobile.ui.ChoiceUi
+import com.mediadownloader.mobile.ui.CookieSubProfileUi
 import com.mediadownloader.mobile.ui.DownloadFilter
 import com.mediadownloader.mobile.ui.DownloadItemUi
 import com.mediadownloader.mobile.ui.DownloadStatus
@@ -51,6 +63,7 @@ import com.mediadownloader.mobile.ui.MediaPreviewUi
 import com.mediadownloader.mobile.ui.MobileUiAction
 import com.mediadownloader.mobile.ui.MobileUiController
 import com.mediadownloader.mobile.ui.MobileUiState
+import com.mediadownloader.mobile.ui.PlaylistItemUi
 import com.mediadownloader.mobile.ui.QrCodeFileService
 import com.mediadownloader.mobile.ui.SettingsUiState
 import com.mediadownloader.mobile.ui.StorageLocationUi
@@ -58,9 +71,12 @@ import com.mediadownloader.mobile.ui.SiteFileKindUi
 import com.mediadownloader.mobile.ui.SiteFileStatus
 import com.mediadownloader.mobile.ui.SiteFileUi
 import com.mediadownloader.mobile.ui.SiteFilesUiState
+import com.mediadownloader.mobile.ui.SpotifyMediaUi
+import com.mediadownloader.mobile.ui.SpotifyTrackUi
 import com.mediadownloader.mobile.ui.ThemePreference
 import com.mediadownloader.mobile.ui.UiMessage
 import com.mediadownloader.mobile.ui.YtDlpUpdateState
+import com.mediadownloader.mobile.ui.playlistDownloadTargets
 import com.mediadownloader.mobile.update.YtDlpCheckOutcome
 import com.mediadownloader.mobile.update.YtDlpInstallOutcome
 import com.mediadownloader.mobile.update.YtDlpRuntimeStatus
@@ -91,8 +107,15 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
     private val siteFileService = AndroidSiteFileService(appContext)
     private val qrCodeFiles = QrCodeFileService(appContext)
     private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+    private val settingsStore = MobileSettingsStore(preferences)
     private val storageLocations = StorageLocationStore(appContext)
-    private val cookieStore = CookieStore(appContext)
+    private val cookieProfilesStore = CookieProfilesStore(appContext)
+    private val spotifyTokenStore = SpotifyTokenStore(appContext)
+    private val spotifyClient = SpotifyMetadataClient(spotifyTokenStore, ::savedSpotifyClientId)
+    private var spotifyVerifier: String? = null
+    private var spotifyState: String? = null
+    private var pendingCookieProfileId: String? = null
+    private var pendingCookieHosts: List<String> = emptyList()
     private val analysisMutex = Mutex()
     private val ytDlpUpdateManager = (application as? MediaDownloaderApplication)
         ?.ytDlpUpdateManager
@@ -109,7 +132,18 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
                 previousYtDlpVersion = initialYtDlpStatus.previousVersion,
                 canRollbackYtDlp = initialYtDlpStatus.canRollback,
                 storageLocations = storageLocationUi(),
-                cookieFileName = cookieStore.label.takeIf(String::isNotBlank),
+                cookieFileName = cookieProfilesStore.globalProfile?.label?.takeIf(String::isNotBlank),
+                spotifyClientId = savedSpotifyClientId(),
+                spotifyConnected = spotifyClient.isConnected(),
+                spotifyAccountName = spotifyClient.accountName(),
+                proxy = settingsStore.proxy,
+                rateLimitText = settingsStore.rateLimitKbps.toString(),
+                filenameTemplate = settingsStore.fileNameTemplate,
+                defaultVideoQualityId = settingsStore.defaultVideoQuality,
+                defaultVideoFormatId = settingsStore.defaultVideoFormat,
+                defaultAudioBitrate = settingsStore.defaultAudioBitrate,
+                defaultAudioFormatId = settingsStore.defaultAudioFormat,
+                cookieSubProfiles = cookieSubProfilesUi(),
             ),
         ),
     )
@@ -157,6 +191,9 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
         viewModelScope.launch {
             refreshCookieDiagnostics()
         }
+        viewModelScope.launch {
+            autoFillFromClipboardIfQuiet()
+        }
     }
 
     override fun onAction(action: MobileUiAction) {
@@ -179,10 +216,12 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
                         url = action.value,
                         urlError = null,
                         preview = null,
+                        spotify = null,
                         analysisHint = null,
                         audioPreviewError = null,
                         previewUsesVideo = true,
                         isAnalyzing = false,
+                        isSpotifyDownloading = false,
                     )
                 }
             }
@@ -193,6 +232,25 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             is MobileUiAction.SelectQuality -> updateHome { it.copy(selectedQualityId = action.id) }
             is MobileUiAction.SelectFormat -> updateHome { it.copy(selectedFormatId = action.id) }
             is MobileUiAction.SetDownloadPlaylist -> updateHome { it.copy(downloadPlaylist = action.enabled) }
+            is MobileUiAction.TogglePlaylistItem -> updateHome { home ->
+                home.copy(
+                    playlistSelection = if (action.index in home.playlistSelection) {
+                        home.playlistSelection - action.index
+                    } else {
+                        home.playlistSelection + action.index
+                    },
+                )
+            }
+            is MobileUiAction.SelectAllPlaylistItems -> updateHome { home ->
+                home.copy(
+                    playlistSelection = if (action.selected) {
+                        home.preview?.playlistItems?.mapTo(mutableSetOf(), PlaylistItemUi::index)
+                            ?: emptySet()
+                    } else {
+                        emptySet()
+                    },
+                )
+            }
             is MobileUiAction.SetIncludeSubtitles -> updateHome { it.copy(includeSubtitles = action.enabled) }
             is MobileUiAction.SetAudioSpeed -> updateHome { it.copy(audioSpeed = action.value.coerceIn(0.5f, 2f)) }
             is MobileUiAction.SetAudioPitch -> updateHome {
@@ -200,6 +258,22 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             }
             is MobileUiAction.SetAudioVolume -> updateHome {
                 it.copy(audioVolumePercent = action.percent.coerceIn(5, 200))
+            }
+            is MobileUiAction.SetAudioBass -> updateHome { it.copy(audioBass = action.enabled) }
+            is MobileUiAction.SetAudioEcho -> updateHome { it.copy(audioEcho = action.enabled) }
+            is MobileUiAction.SetAudioTremolo -> updateHome { it.copy(audioTremolo = action.enabled) }
+            is MobileUiAction.SetAudioNormalize -> updateHome { it.copy(audioNormalize = action.enabled) }
+            is MobileUiAction.SetTrimStartSeconds -> updateHome {
+                it.copy(trimStartSeconds = action.value.coerceAtLeast(0f))
+            }
+            is MobileUiAction.SetTrimDurationSeconds -> updateHome {
+                it.copy(trimDurationSeconds = action.value?.takeIf { value -> value > 0f })
+            }
+            is MobileUiAction.SetFadeInSeconds -> updateHome {
+                it.copy(fadeInSeconds = action.value.coerceIn(0f, MAX_FADE_SECONDS))
+            }
+            is MobileUiAction.SetFadeOutSeconds -> updateHome {
+                it.copy(fadeOutSeconds = action.value.coerceIn(0f, MAX_FADE_SECONDS))
             }
             MobileUiAction.PreviewAudio -> previewAudio()
             MobileUiAction.StopAudioPreview -> stopAudioPreview()
@@ -235,6 +309,9 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             is MobileUiAction.SelectDownloadFilter -> updateState {
                 it.copy(downloads = it.downloads.copy(selectedFilter = action.filter))
             }
+            is MobileUiAction.DownloadsSearchQueryChanged -> updateState {
+                it.copy(downloads = it.downloads.copy(searchQuery = action.value))
+            }
             is MobileUiAction.CancelDownload -> cancelDownload(action.id)
             is MobileUiAction.RetryDownload -> retryDownload(action.id)
             is MobileUiAction.RemoveDownload -> launchRepositoryAction { repository.deleteDownload(action.id) }
@@ -242,6 +319,10 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             MobileUiAction.ClearFinishedDownloads -> launchRepositoryAction(repository::clearFinishedDownloads)
             is MobileUiAction.OpenHistoryItem -> openHistoryItem(action.id)
             is MobileUiAction.ShareHistoryItem -> shareHistoryItem(action.id)
+            is MobileUiAction.HistorySearchQueryChanged -> updateState {
+                it.copy(history = it.history.copy(searchQuery = action.value))
+            }
+            MobileUiAction.ExportHistory -> exportHistory()
             MobileUiAction.ClearHistory -> launchRepositoryAction(repository::clearHistory)
             is MobileUiAction.SetTheme -> saveTheme(action.theme)
             is MobileUiAction.SetAutoUpdateYtDlp -> saveAutoUpdate(action.enabled)
@@ -261,6 +342,31 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             is MobileUiAction.ResetDownloadLocation -> resetDownloadLocation(action.category)
             MobileUiAction.ChooseCookieFile -> chooseCookieFile()
             MobileUiAction.ClearCookies -> clearCookies()
+            is MobileUiAction.SiteCookieHostsChanged -> updateSettings {
+                it.copy(siteCookieHosts = action.value, siteCookieHostsError = null)
+            }
+            MobileUiAction.ChooseSiteCookieFile -> chooseSiteCookieFile()
+            is MobileUiAction.ReplaceSiteCookieFile -> replaceSiteCookieFile(action.id)
+            is MobileUiAction.RemoveCookieProfile -> removeCookieProfile(action.id)
+            is MobileUiAction.SetProxy -> setProxy(action.value)
+            is MobileUiAction.SetRateLimitText -> setRateLimitText(action.value)
+            is MobileUiAction.SetItemRateLimitText -> setItemRateLimitText(action.value)
+            is MobileUiAction.ToggleEditorCompatibility -> updateHome {
+                it.copy(editorCompatible = action.enabled)
+            }
+            is MobileUiAction.SelectPreviewKind -> updateHome { it.copy(selectedKind = action.kind) }
+            is MobileUiAction.SetFilenameTemplate -> setFilenameTemplate(action.value)
+            MobileUiAction.ResetFilenameTemplate -> resetFilenameTemplate()
+            is MobileUiAction.SetDefaultVideoQuality -> setDefaultVideoQuality(action.id)
+            is MobileUiAction.SetDefaultVideoFormat -> setDefaultVideoFormat(action.id)
+            is MobileUiAction.SetDefaultAudioBitrate -> setDefaultAudioBitrate(action.value)
+            is MobileUiAction.SetDefaultAudioFormat -> setDefaultAudioFormat(action.id)
+            MobileUiAction.ShareDiagnostics -> shareDiagnostics()
+            MobileUiAction.WidgetDownloadFromClipboard -> widgetDownloadFromClipboard()
+            is MobileUiAction.SetSpotifyClientId -> changeSpotifyClientId(action.value)
+            MobileUiAction.ConnectSpotify -> connectSpotify()
+            MobileUiAction.DisconnectSpotify -> disconnectSpotify()
+            MobileUiAction.DownloadSpotifyOnYouTube -> downloadSpotifyOnYouTube()
             MobileUiAction.CopySupportPixPayload -> copySupportPixPayload()
             MobileUiAction.CopySupportPixKey -> copySupportPixKey()
             is MobileUiAction.OpenLegalDocument -> updateState { it.copy(legalDocument = action.document) }
@@ -272,6 +378,10 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
     }
 
     fun receiveIntent(intent: Intent?) {
+        if (intent?.action == WIDGET_ACTION_DOWNLOAD) {
+            onAction(MobileUiAction.WidgetDownloadFromClipboard)
+            return
+        }
         val value = when (intent?.action) {
             Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
             Intent.ACTION_VIEW -> intent.dataString
@@ -327,7 +437,26 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
         if (uri == null) return
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                cookieStore.setContent(cookieFileText(uri), cookieFileName(uri))
+                val content = cookieFileText(uri)
+                val name = cookieFileName(uri)
+                val targetId = pendingCookieProfileId
+                pendingCookieProfileId = null
+                when {
+                    targetId == null -> cookieProfilesStore.upsert(
+                        CookieProfile(CookieProfilesStore.DEFAULT_PROFILE_ID, name),
+                        content,
+                    )
+                    targetId == CREATE_SITE_PROFILE_ID -> cookieProfilesStore.upsert(
+                        CookieProfile(java.util.UUID.randomUUID().toString(), name, pendingCookieHosts),
+                        content,
+                    )
+                    else -> {
+                        val hosts = cookieProfilesStore.list()
+                            .firstOrNull { it.id == targetId }?.hosts.orEmpty()
+                        cookieProfilesStore.upsert(CookieProfile(targetId, name, hosts), content)
+                    }
+                }
+                pendingCookieHosts = emptyList()
                 refreshCookieDiagnostics()
                 showMessage("Cookies carregados de ${_state.value.settings.cookieFileName.orEmpty()}.")
             } catch (error: Throwable) {
@@ -343,31 +472,85 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
     }
 
     private fun chooseCookieFile() {
+        pendingCookieProfileId = null
         requestCookieFile?.invoke() ?: showMessage("Não foi possível abrir o seletor de arquivos.")
     }
 
+    private fun chooseSiteCookieFile() {
+        val hosts = parseCookieHosts(_state.value.settings.siteCookieHosts)
+        if (hosts.isEmpty()) {
+            updateSettings {
+                it.copy(siteCookieHostsError = "Digite ao menos um site (ex.: youtube.com) separado por vírgula.")
+            }
+            return
+        }
+        pendingCookieProfileId = CREATE_SITE_PROFILE_ID
+        pendingCookieHosts = hosts
+        requestCookieFile?.invoke() ?: showMessage("Não foi possível abrir o seletor de arquivos.")
+    }
+
+    private fun replaceSiteCookieFile(id: String) {
+        pendingCookieProfileId = id
+        requestCookieFile?.invoke() ?: showMessage("Não foi possível abrir o seletor de arquivos.")
+    }
+
+    private fun removeCookieProfile(id: String) {
+        cookieProfilesStore.remove(id)
+        viewModelScope.launch { refreshCookieDiagnostics() }
+        showMessage("Cookies do perfil removidos.")
+    }
+
+    private fun parseCookieHosts(raw: String): List<String> = raw
+        .split(Regex("[,;\\s]+"))
+        .map(String::trim)
+        .filter(String::isNotBlank)
+        .distinct()
+
     private fun clearCookies() {
-        cookieStore.clear()
+        cookieProfilesStore.remove(CookieProfilesStore.DEFAULT_PROFILE_ID)
         viewModelScope.launch { refreshCookieDiagnostics() }
         showMessage("Cookies removidos do Media Downloader.")
     }
 
+    private fun cookieSubProfilesUi(): List<CookieSubProfileUi> = cookieProfilesStore.subProfiles
+        .map { profile ->
+            val check = cookieProfilesStore.fileFor(profile.id)?.let { file ->
+                CookieDiagnostics.check(file.readText(), profile.label)
+            }
+            CookieSubProfileUi(
+                id = profile.id,
+                label = profile.label,
+                hosts = profile.hosts.joinToString(", "),
+                cookie = check,
+            )
+        }
+
     private suspend fun refreshCookieDiagnostics() {
-        val file = cookieStore.cookieFile
-        val label = cookieStore.label.takeIf(String::isNotBlank) ?: "cookies.txt"
-        val check = if (file == null) {
+        val global = cookieProfilesStore.globalProfile
+        val label = global?.label?.takeIf(String::isNotBlank) ?: "cookies.txt"
+        val check = if (global == null) {
             CookieCheckUi(
                 ok = false,
                 message = "Nenhum arquivo de cookies configurado.",
                 detail = "A maioria dos vídeos funciona sem cookies. Use-os apenas se precisar acessar mídia restrita à sua conta.",
             )
         } else {
-            CookieDiagnostics.check(file.readText(), label)
+            val file = cookieProfilesStore.fileFor(global.id)
+            if (file == null) {
+                CookieCheckUi(
+                    ok = false,
+                    message = "O arquivo de cookies global não foi encontrado.",
+                    detail = "Escolha um arquivo de cookies novamente.",
+                )
+            } else {
+                CookieDiagnostics.check(file.readText(), label)
+            }
         }
         updateSettings {
             it.copy(
-                cookieFileName = cookieStore.label.takeIf(String::isNotBlank),
+                cookieFileName = cookieProfilesStore.globalProfile?.label?.takeIf(String::isNotBlank),
                 cookie = check,
+                cookieSubProfiles = cookieSubProfilesUi(),
             )
         }
     }
@@ -393,24 +576,77 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
     }
 
     private fun receiveUrl(raw: String) {
-        val url = extractHttpUrl(raw)
-        if (url == null) {
-            showMessage("O conteúdo compartilhado não contém uma URL HTTP ou HTTPS válida.")
-            return
-        }
-        clearAnalysis(cancelJob = true)
-        updateState {
-            it.copy(
-                selectedTab = AppTab.HOME,
-                home = it.home.copy(url = url, urlError = null),
+        val urls = UrlExtraction.extractHttpUrls(raw)
+        when {
+            urls.isEmpty() -> showMessage(
+                "O conteúdo compartilhado não contém uma URL HTTP ou HTTPS válida.",
             )
+            urls.size > 1 -> enqueueUrls(urls.take(MAX_BULK_URLS))
+            else -> {
+                val url = urls.first()
+                clearAnalysis(cancelJob = true)
+                updateState {
+                    it.copy(
+                        selectedTab = AppTab.HOME,
+                        home = it.home.copy(url = url, urlError = null),
+                    )
+                }
+            }
         }
     }
 
-    private fun pasteUrl() {
+    private fun enqueueUrls(urls: List<String>) {
+        val startAction: () -> Unit = {
+            viewModelScope.launch {
+                try {
+                    urls.forEachIndexed { index, url ->
+                        repository.enqueue(
+                            sourceUrl = url,
+                            title = "Link ${index + 1}",
+                            sourceName = null,
+                            thumbnailUrl = null,
+                            options = DownloadOptions(
+                                mediaType = MediaType.VIDEO,
+                                downloadPlaylist = false,
+                            ),
+                        )
+                    }
+                    DownloadService.processQueue(appContext)
+                    updateState { it.copy(selectedTab = AppTab.DOWNLOADS) }
+                    showMessage("${urls.size} links adicionados à fila.")
+                } catch (error: Throwable) {
+                    showMessage(readableError(error, "Não foi possível adicionar os links à fila."))
+                }
+            }
+            Unit
+        }
+        requestStoragePermission?.invoke(startAction) ?: startAction()
+    }
+
+    private fun widgetDownloadFromClipboard() {
+        val urls = UrlExtraction.extractHttpUrls(clipboardText())
+        if (urls.isEmpty()) {
+            updateState { it.copy(selectedTab = AppTab.HOME) }
+            showMessage("A área de transferência não contém um link de mídia.")
+            return
+        }
+        enqueueUrls(urls.take(MAX_BULK_URLS))
+    }
+
+    private fun autoFillFromClipboardIfQuiet() {
+        if (_state.value.home.url.isNotBlank()) return
+        val urls = UrlExtraction.extractHttpUrls(clipboardText())
+        if (urls.size != 1) return
+        updateHome { HomeUiState(url = urls.first(), canPaste = true) }
+    }
+
+    private fun clipboardText(): String {
         val clipboard = appContext.getSystemService(ClipboardManager::class.java)
-        val raw = clipboard?.primaryClip?.getItemAt(0)?.coerceToText(appContext)?.toString().orEmpty()
-        val url = extractHttpUrl(raw)
+        return clipboard?.primaryClip?.getItemAt(0)?.coerceToText(appContext)?.toString().orEmpty()
+    }
+
+    private fun pasteUrl() {
+        val url = UrlExtraction.extractHttpUrl(clipboardText())
         if (url == null) {
             updateHome { it.copy(urlError = "A área de transferência não contém um link válido.") }
         } else {
@@ -514,6 +750,10 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
 
     private fun analyzeUrl() {
         val url = _state.value.home.url.trim()
+        if (SpotifyModels.parseSpotifyResource(url) != null) {
+            analyzeSpotify(url)
+            return
+        }
         if (!isHttpUrl(url)) {
             updateHome { it.copy(urlError = "Informe uma URL HTTP ou HTTPS válida.") }
             return
@@ -553,6 +793,199 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
         }
     }
 
+    private fun analyzeSpotify(url: String) {
+        analysisJob?.cancel()
+        analysisJob = viewModelScope.launch {
+            analysisMutex.withLock {
+                updateHome {
+                    it.copy(
+                        isAnalyzing = true,
+                        urlError = null,
+                        preview = null,
+                        spotify = null,
+                        analysisHint = "Consultando o Spotify…",
+                    )
+                }
+                try {
+                    val media = spotifyClient.analyze(url)
+                    updateHome {
+                        it.copy(
+                            isAnalyzing = false,
+                            spotify = media.toSpotifyUi(),
+                            preview = null,
+                            analysisHint = null,
+                        )
+                    }
+                } catch (_: CancellationException) {
+                    throw CancellationException()
+                } catch (error: Throwable) {
+                    updateHome {
+                        it.copy(
+                            isAnalyzing = false,
+                            spotify = null,
+                            analysisHint = null,
+                            urlError = readableError(
+                                error,
+                                "Não foi possível consultar este link do Spotify.",
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun changeSpotifyClientId(value: String) {
+        preferences.edit().putString(KEY_SPOTIFY_CLIENT_ID, value.trim()).apply()
+        val connected = spotifyClient.isConnected()
+        updateSettings {
+            it.copy(
+                spotifyClientId = value,
+                spotifyClientIdError = null,
+                spotifyConnected = connected,
+                spotifyAccountName = if (connected) spotifyClient.accountName() else null,
+            )
+        }
+    }
+
+    private fun connectSpotify() {
+        val clientId = _state.value.settings.spotifyClientId.trim()
+        if (!SpotifyModels.validClientId(clientId)) {
+            updateSettings {
+                it.copy(
+                    spotifyClientIdError =
+                        "Informe um Client ID válido do Spotify (20 a 64 caracteres).",
+                )
+            }
+            return
+        }
+        val verifier = SpotifyModels.randomVerifier()
+        val state = SpotifyModels.randomState()
+        spotifyVerifier = verifier
+        spotifyState = state
+        updateSettings { it.copy(spotifyClientIdError = null, isSpotifyConnecting = true) }
+        launchIntent(
+            Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse(SpotifyModels.authorizationUrl(clientId, state, SpotifyModels.codeChallenge(verifier))),
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        showMessage("Conclua a autorização no navegador e volte ao app.")
+    }
+
+    private fun disconnectSpotify() {
+        spotifyClient.disconnect()
+        updateSettings {
+            it.copy(
+                spotifyConnected = false,
+                spotifyAccountName = null,
+                isSpotifyConnecting = false,
+            )
+        }
+        showMessage("Conta do Spotify desconectada.")
+    }
+
+    /** Handles the `mediadownloader://spotify/callback` deep link from [MainActivity]. */
+    fun onSpotifyAuthUri(rawUri: String) {
+        val redirect = SpotifyModels.parseRedirect(rawUri) ?: return
+        val verifier = spotifyVerifier
+        val expectedState = spotifyState
+        spotifyVerifier = null
+        spotifyState = null
+        if (verifier == null || expectedState == null) {
+            updateSettings { it.copy(isSpotifyConnecting = false) }
+            showMessage("A autorização do Spotify expirou. Tente conectar novamente.")
+            return
+        }
+        if (redirect.error != null) {
+            updateSettings { it.copy(isSpotifyConnecting = false) }
+            showMessage("A autorização do Spotify foi cancelada.")
+            return
+        }
+        if (redirect.state != expectedState) {
+            updateSettings { it.copy(isSpotifyConnecting = false) }
+            showMessage("A resposta de autorização não pôde ser validada.")
+            return
+        }
+        val code = redirect.code
+        if (code.isNullOrBlank()) {
+            updateSettings { it.copy(isSpotifyConnecting = false) }
+            showMessage("O Spotify não retornou um código de autorização.")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val account = spotifyClient.exchangeCode(code, verifier)
+                updateSettings {
+                    it.copy(
+                        isSpotifyConnecting = false,
+                        spotifyConnected = true,
+                        spotifyAccountName = account,
+                    )
+                }
+                showMessage("Spotify conectado como $account.")
+            } catch (error: Throwable) {
+                updateSettings { it.copy(isSpotifyConnecting = false, spotifyConnected = false) }
+                showMessage(
+                    readableError(error, "Não foi possível concluir a conexão com o Spotify."),
+                )
+            }
+        }
+    }
+
+    private fun downloadSpotifyOnYouTube() {
+        val media = _state.value.home.spotify ?: return
+        val targets = if (media.tracks.isNotEmpty()) {
+            media.tracks
+        } else {
+            listOf(
+                SpotifyTrackUi(
+                    index = 1,
+                    title = media.title,
+                    artist = media.subtitle.orEmpty(),
+                    album = "",
+                    durationText = null,
+                    thumbnailUrl = media.thumbnailUrl,
+                    query = SpotifyModels.youTubeSearchQuery(media.title, media.subtitle),
+                ),
+            )
+        }
+        val startAction: () -> Unit = {
+            viewModelScope.launch {
+                updateHome { it.copy(isSpotifyDownloading = true) }
+                try {
+                    targets.forEach { target ->
+                        repository.enqueue(
+                            sourceUrl = target.query,
+                            title = target.title,
+                            sourceName = SPOTIFY_SOURCE_NAME,
+                            thumbnailUrl = target.thumbnailUrl,
+                            options = DownloadOptions(
+                                mediaType = MediaType.AUDIO,
+                                downloadPlaylist = false,
+                            ),
+                        )
+                    }
+                    DownloadService.processQueue(appContext)
+                    updateState {
+                        it.copy(selectedTab = AppTab.DOWNLOADS, home = HomeUiState())
+                    }
+                    val message = if (targets.size == 1) {
+                        "Buscando a faixa no YouTube e adicionando à fila."
+                    } else {
+                        "${targets.size} faixas serão buscadas no YouTube e adicionadas à fila."
+                    }
+                    showMessage(message)
+                } catch (error: Throwable) {
+                    updateHome { it.copy(isSpotifyDownloading = false) }
+                    showMessage(readableError(error, "Não foi possível iniciar os downloads."))
+                }
+            }
+            Unit
+        }
+        requestStoragePermission?.invoke(startAction) ?: startAction()
+    }
+
     private fun clearAnalysis(cancelJob: Boolean = true) {
         if (cancelJob) analysisJob?.cancel()
         currentAnalysis = null
@@ -569,6 +1002,10 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             speed = home.audioSpeed,
             semitones = home.audioPitchSemitones,
             volumePercent = home.audioVolumePercent,
+            bass = home.audioBass,
+            echo = home.audioEcho,
+            tremolo = home.audioTremolo,
+            normalize = home.audioNormalize,
         ).sanitized()
         val source = PreviewSourceResolver.resolve(analysis.formats)
         val sourceUrl = source?.url ?: analysis.sourceUrl
@@ -587,7 +1024,10 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
                         outputFile = File(appContext.cacheDir, "preview_clip.mp4"),
                         windowSeconds = previewWindowSeconds(includeVideo),
                         includeVideo = includeVideo,
-                        startSeconds = 0f,
+                        startSeconds = home.trimStartSeconds,
+                        trimDurationSeconds = home.trimDurationSeconds,
+                        fadeInSeconds = home.fadeInSeconds,
+                        fadeOutSeconds = home.fadeOutSeconds,
                     )
                 }
                 if (!isActive) {
@@ -656,6 +1096,14 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
                 audioSpeed = 1f,
                 audioPitchSemitones = 0f,
                 audioVolumePercent = 100,
+                audioBass = false,
+                audioEcho = false,
+                audioTremolo = false,
+                audioNormalize = false,
+                trimStartSeconds = 0f,
+                trimDurationSeconds = null,
+                fadeInSeconds = 0f,
+                fadeOutSeconds = 0f,
             )
         }
     }
@@ -678,8 +1126,8 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             val formats = if (kind == MediaKind.VIDEO) preview.videoFormats else preview.audioFormats
             home.copy(
                 selectedKind = kind,
-                selectedQualityId = qualities.recommendedId(),
-                selectedFormatId = formats.recommendedId(),
+                selectedQualityId = preferredQualityId(kind, qualities),
+                selectedFormatId = preferredFormatId(kind, formats),
                 includeSubtitles = home.includeSubtitles && kind == MediaKind.VIDEO,
             )
         }
@@ -687,22 +1135,41 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
 
     private fun startDownload() {
         val home = _state.value.home
+        val preview = home.preview
         val analysis = currentAnalysis ?: run {
             showMessage("Analise o link antes de iniciar o download.")
             return
         }
+        val targets = playlistDownloadTargets(
+            preview = preview ?: run {
+                showMessage("Analise o link antes de iniciar o download.")
+                return
+            },
+            selection = home.playlistSelection,
+            wholePlaylist = home.downloadPlaylist,
+            fallbackUrl = analysis.sourceUrl,
+            fallbackTitle = analysis.title,
+            fallbackThumbnail = analysis.thumbnailUrl,
+        )
+        if (targets.isEmpty()) {
+            showMessage("Selecione pelo menos um item da playlist para baixar.")
+            return
+        }
         val options = home.toDownloadOptions()
+        val wholePlaylist = home.downloadPlaylist && preview.isPlaylist
         val startAction: () -> Unit = {
             viewModelScope.launch {
                 updateHome { it.copy(isStartingDownload = true) }
                 try {
-                    repository.enqueue(
-                        sourceUrl = analysis.sourceUrl,
-                        title = analysis.title,
-                        sourceName = analysis.sourceName,
-                        thumbnailUrl = analysis.thumbnailUrl,
-                        options = options,
-                    )
+                    targets.forEach { target ->
+                        repository.enqueue(
+                            sourceUrl = target.url,
+                            title = target.title,
+                            sourceName = analysis.sourceName,
+                            thumbnailUrl = target.thumbnailUrl,
+                            options = if (wholePlaylist) options else options.copy(downloadPlaylist = false),
+                        )
+                    }
                     DownloadService.processQueue(appContext)
                     updateState {
                         it.copy(
@@ -711,7 +1178,12 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
                         )
                     }
                     currentAnalysis = null
-                    showMessage("Download adicionado à fila.")
+                    val message = if (targets.size == 1) {
+                        "Download adicionado à fila."
+                    } else {
+                        "${targets.size} itens adicionados à fila."
+                    }
+                    showMessage(message)
                 } catch (error: Throwable) {
                     updateHome { it.copy(isStartingDownload = false) }
                     showMessage(readableError(error, "Não foi possível iniciar o download."))
@@ -737,9 +1209,7 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
 
     private fun pasteSiteUrl() {
         if (_state.value.siteFiles.isDownloading) return
-        val clipboard = appContext.getSystemService(ClipboardManager::class.java)
-        val raw = clipboard?.primaryClip?.getItemAt(0)?.coerceToText(appContext)?.toString().orEmpty()
-        val url = extractHttpUrl(raw)
+        val url = UrlExtraction.extractHttpUrl(clipboardText())
         if (url == null) {
             updateSiteFiles { it.copy(urlError = "A área de transferência não contém um link válido.") }
         } else {
@@ -1003,6 +1473,171 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             "${BuildConfig.APPLICATION_ID}.files",
             File(path),
         )
+    }
+
+    private fun setProxy(value: String) {
+        val trimmed = value.trim()
+        val error = if (trimmed.isNotEmpty() && !isPlausibleProxy(trimmed)) {
+            "Use o formato scheme://host:porta (ex.: socks5://10.0.2.2:1080)."
+        } else {
+            null
+        }
+        if (error == null) settingsStore.proxy = trimmed
+        updateSettings { it.copy(proxy = value, proxyError = error) }
+    }
+
+    private fun isPlausibleProxy(value: String): Boolean {
+        val withScheme = Regex("""^[a-zA-Z][a-zA-Z0-9+.-]*://[^:/\s]+(:[0-9]{1,5})?$""")
+        val hostPort = Regex("""^[a-zA-Z0-9._-]+:[0-9]{1,5}$""")
+        return withScheme.matches(value) || hostPort.matches(value)
+    }
+
+    private fun setRateLimitText(value: String) {
+        val digits = value.filter(Char::isDigit).take(6)
+        val kbps = digits.toIntOrNull() ?: 0
+        settingsStore.rateLimitKbps = kbps
+        updateSettings { it.copy(rateLimitText = digits) }
+    }
+
+    /** Per-item speed cap; overrides the persistent network limit (desktop parity). */
+    private fun setItemRateLimitText(value: String) {
+        val digits = value.filter(Char::isDigit).take(6)
+        updateHome { it.copy(itemRateLimitText = digits) }
+    }
+
+    private fun setFilenameTemplate(value: String) {
+        settingsStore.fileNameTemplate = value
+        updateSettings { it.copy(filenameTemplate = value) }
+    }
+
+    private fun resetFilenameTemplate() {
+        settingsStore.fileNameTemplate = ""
+        updateSettings { it.copy(filenameTemplate = "") }
+        showMessage("Template de nome de arquivo restaurado ao padrão.")
+    }
+
+    private fun setDefaultVideoQuality(id: String) {
+        settingsStore.defaultVideoQuality = id
+        updateSettings { it.copy(defaultVideoQualityId = id) }
+    }
+
+    private fun setDefaultVideoFormat(id: String) {
+        settingsStore.defaultVideoFormat = id
+        updateSettings { it.copy(defaultVideoFormatId = id) }
+    }
+
+    private fun setDefaultAudioBitrate(value: Int) {
+        settingsStore.defaultAudioBitrate = value
+        updateSettings { it.copy(defaultAudioBitrate = value) }
+    }
+
+    private fun setDefaultAudioFormat(id: String) {
+        settingsStore.defaultAudioFormat = id
+        updateSettings { it.copy(defaultAudioFormatId = id) }
+    }
+
+    private fun preferredQualityId(kind: MediaKind, qualities: List<ChoiceUi>): String? =
+        resolveChoiceId(
+            qualities.map(ChoiceUi::id),
+            if (kind == MediaKind.VIDEO) settingsStore.defaultVideoQuality
+            else settingsStore.defaultAudioBitrate.toString(),
+            qualities.recommendedId(),
+        )
+
+    private fun preferredFormatId(kind: MediaKind, formats: List<ChoiceUi>): String? =
+        resolveChoiceId(
+            formats.map(ChoiceUi::id),
+            if (kind == MediaKind.VIDEO) settingsStore.defaultVideoFormat
+            else settingsStore.defaultAudioFormat,
+            formats.recommendedId(),
+        )
+
+    private fun exportHistory() {
+        val history = repository.history.value
+        if (history.isEmpty()) {
+            showMessage("O histórico está vazio; nada para exportar.")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val csv = withContext(Dispatchers.IO) {
+                    val rows = history.map { item ->
+                        HistoryCsvRow(
+                            id = item.id,
+                            title = item.title,
+                            fileName = item.fileName,
+                            sizeBytes = item.sizeBytes,
+                            completedAtIso = java.time.Instant
+                                .ofEpochMilli(item.completedAtEpochMs)
+                                .toString(),
+                            sourceUrl = item.sourceUrl,
+                            mimeType = item.mimeType,
+                        )
+                    }
+                    historyToCsv(rows)
+                }
+                val file = withContext(Dispatchers.IO) {
+                    val dir = File(appContext.cacheDir, "shared")
+                    dir.mkdirs()
+                    File(dir, "media_downloader_history.csv")
+                        .also { it.writeText(csv) }
+                }
+                val uri = FileProvider.getUriForFile(
+                    appContext,
+                    "${BuildConfig.APPLICATION_ID}.files",
+                    file,
+                )
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/csv"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    clipData = ClipData.newUri(appContext.contentResolver, file.name, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                launchIntent(
+                    Intent.createChooser(intent, "Exportar histórico")
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            } catch (error: Throwable) {
+                showMessage(readableError(error, "Não foi possível exportar o histórico."))
+            }
+        }
+    }
+
+    private fun shareDiagnostics() {
+        viewModelScope.launch {
+            val settings = _state.value.settings
+            val cookieSummary = when {
+                settings.cookieFileName != null ->
+                    "${settings.cookieFileName} (${settings.cookie?.cookieCount ?: 0} cookies, sessão: ${settings.cookie?.loggedIn == true})"
+                else -> "nenhum"
+            }
+            val diag = buildString {
+                appendLine("Media Downloader Android — Diagnóstico")
+                appendLine("Versão do app: ${settings.appVersion}")
+                appendLine("Versão do yt-dlp: ${settings.ytDlpVersion ?: "desconhecida"}")
+                appendLine("Tema: ${settings.theme.label}")
+                appendLine("Atualização automática do yt-dlp: ${if (settings.autoUpdateYtDlp) "sim" else "não"}")
+                appendLine("Proxy configurado: ${if (settings.proxy.isNotBlank()) "sim" else "não"}")
+                appendLine("Limite de velocidade: ${if (settings.rateLimitText.toIntOrNull()?.takeIf { it > 0 } != null) "${settings.rateLimitText} KiB/s" else "sem limite"}")
+                appendLine("Template de arquivo: ${settings.filenameTemplate.ifBlank { "padrão" }}")
+                appendLine("Padrão vídeo: ${settings.defaultVideoQualityId} / ${settings.defaultVideoFormatId}")
+                appendLine("Padrão áudio: ${settings.defaultAudioBitrate} kbps / ${settings.defaultAudioFormatId}")
+                appendLine("Cookies global: $cookieSummary")
+                appendLine("Perfis de cookies por site: ${settings.cookieSubProfiles.size}")
+                appendLine("Pasta de vídeos customizada: ${settings.storageLocations.firstOrNull()?.isCustom == true}")
+                appendLine("Spotify conectado: ${if (settings.spotifyConnected) "sim" else "não"}")
+            }
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_SUBJECT, "Diagnóstico Media Downloader")
+                putExtra(Intent.EXTRA_TEXT, diag)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            launchIntent(
+                Intent.createChooser(intent, "Compartilhar diagnóstico")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
     }
 
     private fun saveTheme(theme: ThemePreference) {
@@ -1307,6 +1942,9 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
         ThemePreference.valueOf(preferences.getString(KEY_THEME, ThemePreference.SYSTEM.name).orEmpty())
     }.getOrDefault(ThemePreference.SYSTEM)
 
+    private fun savedSpotifyClientId(): String =
+        preferences.getString(KEY_SPOTIFY_CLIENT_ID, "").orEmpty()
+
     @Suppress("DEPRECATION")
     private fun appVersion(): String = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         appContext.packageManager.getPackageInfo(
@@ -1316,6 +1954,39 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
     } else {
         appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionName.orEmpty()
     }
+
+    private fun SpotifyMedia.toSpotifyUi(): SpotifyMediaUi = SpotifyMediaUi(
+        title = title,
+        subtitle = subtitle,
+        thumbnailUrl = thumbnailUrl,
+        resourceLabel = when {
+            isPlaylist -> "Playlist"
+            resourceKind == "album" -> "Álbum"
+            resourceKind == "artist" -> "Artista"
+            resourceKind == "show" -> "Podcast"
+            resourceKind == "episode" -> "Episódio"
+            resourceKind == "audiobook" -> "Audiolivro"
+            resourceKind == "track" -> "Faixa"
+            else -> "Spotify"
+        },
+        webpageUrl = webpageUrl,
+        isPlaylist = isPlaylist,
+        requiresAuth = requiresAuth,
+        authenticated = authenticated,
+        notice = notice,
+        itemCount = itemCount,
+        tracks = tracks.map(::toSpotifyTrackUi),
+    )
+
+    private fun toSpotifyTrackUi(track: SpotifyTrack): SpotifyTrackUi = SpotifyTrackUi(
+        index = track.index,
+        title = track.title,
+        artist = track.artist,
+        album = track.album,
+        durationText = track.durationSeconds?.let(::formatDuration),
+        thumbnailUrl = track.thumbnailUrl,
+        query = SpotifyModels.youTubeSearchQuery(track.title, track.artist),
+    )
 
     private fun MediaAnalysis.toPreviewUi(): MediaPreviewUi {
         val videoFormats = formats.filter(MediaFormat::hasVideo)
@@ -1327,9 +1998,19 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             sourceName = sourceName ?: Uri.parse(sourceUrl).host.orEmpty().ifBlank { "Origem da mídia" },
             sourceUrl = sourceUrl,
             durationText = durationSeconds?.let(::formatDuration),
+            durationSeconds = durationSeconds?.toFloat(),
             thumbnailUrl = thumbnailUrl,
             isPlaylist = isPlaylist,
             playlistItemCount = playlistItemCount,
+            playlistItems = playlistItems.map { item ->
+                PlaylistItemUi(
+                    index = item.index,
+                    id = item.id,
+                    title = item.title,
+                    url = item.url,
+                    thumbnailUrl = item.thumbnailUrl,
+                )
+            },
             supportsVideo = videoFormats.isNotEmpty() || isPlaylist,
             supportsAudio = audioOnlyFormats.isNotEmpty() || formats.any(MediaFormat::hasAudio) || isPlaylist,
             supportsSubtitles = supportsSubtitles,
@@ -1366,9 +2047,14 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
             isAnalyzing = false,
             preview = preview,
             selectedKind = kind,
-            selectedQualityId = qualities.recommendedId(),
-            selectedFormatId = formats.recommendedId(),
+            selectedQualityId = preferredQualityId(kind, qualities),
+            selectedFormatId = preferredFormatId(kind, formats),
             downloadPlaylist = preview.isPlaylist,
+            playlistSelection = if (preview.isPlaylist) {
+                preview.playlistItems.mapTo(mutableSetOf(), PlaylistItemUi::index)
+            } else {
+                emptySet()
+            },
             includeSubtitles = false,
             analysisHint = null,
         )
@@ -1380,6 +2066,7 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
         return if (selectedKind == MediaKind.AUDIO) {
             DownloadOptions(
                 mediaType = MediaType.AUDIO,
+                rateLimitKbps = itemRateLimitText.toIntOrNull() ?: 0,
                 maxVideoHeight = null,
                 audioFormat = AudioFormat.entries.firstOrNull { it.extension == format } ?: AudioFormat.MP3,
                 audioBitrateKbps = quality.toIntOrNull()?.coerceIn(32, 320) ?: 192,
@@ -1387,10 +2074,20 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
                 audioSpeed = audioSpeed,
                 audioPitchSemitones = audioPitchSemitones,
                 audioVolumePercent = audioVolumePercent,
+                audioBass = audioBass,
+                audioEcho = audioEcho,
+                audioTremolo = audioTremolo,
+                audioNormalize = audioNormalize,
+                trimStartSeconds = trimStartSeconds,
+                trimDurationSeconds = trimDurationSeconds,
+                fadeInSeconds = fadeInSeconds,
+                fadeOutSeconds = fadeOutSeconds,
             )
         } else {
             DownloadOptions(
                 mediaType = MediaType.VIDEO,
+                editorCompatible = editorCompatible,
+                rateLimitKbps = itemRateLimitText.toIntOrNull() ?: 0,
                 maxVideoHeight = quality.removePrefix("height:").toIntOrNull(),
                 videoContainer = VideoContainer.entries.firstOrNull { it.extension == format } ?: VideoContainer.MP4,
                 downloadPlaylist = downloadPlaylist,
@@ -1398,6 +2095,14 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
                 audioSpeed = audioSpeed,
                 audioPitchSemitones = audioPitchSemitones,
                 audioVolumePercent = audioVolumePercent,
+                audioBass = audioBass,
+                audioEcho = audioEcho,
+                audioTremolo = audioTremolo,
+                audioNormalize = audioNormalize,
+                trimStartSeconds = trimStartSeconds,
+                trimDurationSeconds = trimDurationSeconds,
+                fadeInSeconds = fadeInSeconds,
+                fadeOutSeconds = fadeOutSeconds,
             )
         }
     }
@@ -1458,22 +2163,22 @@ class MediaDownloaderViewModel(application: Application) : AndroidViewModel(appl
         private const val PREFERENCES_NAME = "mobile_settings"
         private const val KEY_THEME = "theme"
         private const val KEY_AUTO_UPDATE = "auto_update_ytdlp"
+        private const val KEY_SPOTIFY_CLIENT_ID = "spotify_client_id"
+        private const val SPOTIFY_SOURCE_NAME = "YouTube (via Spotify)"
         private const val QR_CODE_MIME_TYPE = "image/png"
         private const val PREVIEW_WINDOW_SECONDS = 30f
         private const val PREVIEW_VIDEO_WINDOW_SECONDS = 12f
+        private const val MAX_FADE_SECONDS = 30f
+        private const val WIDGET_ACTION_DOWNLOAD = "com.mediadownloader.mobile.action.WIDGET_DOWNLOAD"
+        private const val CREATE_SITE_PROFILE_ID = "__create__"
+        private const val MAX_BULK_URLS = 10
 
         private fun List<ChoiceUi>.recommendedId(): String? =
             firstOrNull(ChoiceUi::recommended)?.id ?: firstOrNull()?.id
 
-        private fun isHttpUrl(value: String): Boolean = runCatching {
-            val uri = Uri.parse(value.trim())
-            (uri.scheme.equals("http", true) || uri.scheme.equals("https", true)) && !uri.host.isNullOrBlank()
-        }.getOrDefault(false)
+        private fun isHttpUrl(value: String): Boolean = UrlExtraction.isValidHttpUrl(value)
 
-        private fun extractHttpUrl(value: String): String? = value
-            .split(Regex("\\s+"))
-            .map { it.trim().trimEnd('.', ',', ';', ')', ']', '}') }
-            .firstOrNull(::isHttpUrl)
+        private fun extractHttpUrl(value: String): String? = UrlExtraction.extractHttpUrl(value)
 
         private fun formatDuration(seconds: Long): String {
             val hours = seconds / 3600

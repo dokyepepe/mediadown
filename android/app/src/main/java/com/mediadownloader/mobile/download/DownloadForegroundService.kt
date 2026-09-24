@@ -13,6 +13,7 @@ import com.mediadownloader.mobile.data.DownloadItem
 import com.mediadownloader.mobile.data.DownloadRepository
 import com.mediadownloader.mobile.data.HistoryItem
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,6 +29,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class DownloadService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val workSignals = Channel<Unit>(Channel.CONFLATED)
+    private val recoveryGate = CompletableDeferred<Unit>()
     private val workerStarted = AtomicBoolean(false)
     private lateinit var repository: DownloadRepository
     private lateinit var engine: AndroidDownloadEngine
@@ -51,7 +53,8 @@ class DownloadService : Service() {
         ensureForeground("Preparando a fila", indeterminate = true)
         startWorker()
         serviceScope.launch {
-            repository.recoverInterrupted()
+            runCatching { repository.recoverInterrupted() }
+            recoveryGate.complete(Unit)
             workSignals.trySend(Unit)
         }
     }
@@ -90,6 +93,7 @@ class DownloadService : Service() {
     private fun startWorker() {
         if (!workerStarted.compareAndSet(false, true)) return
         serviceScope.launch {
+            recoveryGate.await()
             for (ignored in workSignals) {
                 drainQueue()
             }

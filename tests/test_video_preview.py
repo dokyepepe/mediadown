@@ -90,6 +90,46 @@ def test_apply_values_preset_reuses_preset_slot(qtbot) -> None:
     assert "personalizado" not in dialog.volume_combo.currentText().lower()
 
 
+def test_apply_values_toggles_flags_into_controller(qtbot) -> None:
+    controller = AudioEffectsController()
+    dialog = _make_dialog(qtbot, audio_effects=controller)
+    dialog._source_url = "https://example.com/audio.mp3"
+    dialog.apply_values(1.0, 1.0, 1.0, bass=True, echo=True, tremolo=True, normalize=True)
+    effects = controller.effects
+    assert effects.bass is True
+    assert effects.echo is True
+    assert effects.tremolo is True
+    assert effects.normalize is True
+
+
+def test_apply_values_toggles_update_checkboxes(qtbot) -> None:
+    dialog = _make_dialog(qtbot)
+    dialog.apply_values(1.0, 1.0, 1.0, bass=True, normalize=True)
+    assert dialog.bass_box.isChecked() is True
+    assert dialog.normalize_box.isChecked() is True
+    assert dialog.echo_box.isChecked() is False
+    assert dialog.tremolo_box.isChecked() is False
+
+
+def test_current_effects_carries_toggle_flags(qtbot) -> None:
+    dialog = _make_dialog(qtbot)
+    dialog.apply_values(1.0, 1.0, 1.0, bass=True, echo=True)
+    effects = dialog._current_effects()
+    assert effects.bass is True
+    assert effects.echo is True
+    assert effects.tremolo is False
+    assert effects.filter_chain() == "bass=g=6:f=100,aecho=0.7:0.7:300:0.3"
+
+
+def test_toggle_only_chain_is_not_identity(qtbot) -> None:
+    controller = AudioEffectsController()
+    dialog = _make_dialog(qtbot, audio_effects=controller)
+    dialog._source_url = "https://example.com/audio.mp3"
+    dialog.apply_values(1.0, 1.0, 1.0, tremolo=True)
+    assert controller.effects.is_identity is False
+    assert controller.effects.filter_chain() == "tremolo=f=5:d=0.25"
+
+
 def test_identity_resets_controller_chain(qtbot) -> None:
     controller = AudioEffectsController()
     dialog = _make_dialog(qtbot, audio_effects=controller)

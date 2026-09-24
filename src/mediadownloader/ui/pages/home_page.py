@@ -24,6 +24,7 @@ from mediadownloader.core.extractor import MediaExtractor
 from mediadownloader.core.workers import AnalyzeWorker, PreviewWorker
 from mediadownloader.models import DownloadOptions, MediaInfo, MediaType, PreviewSource
 from mediadownloader.services import SettingsService
+from mediadownloader.utils.cookie_profiles import resolve_cookies
 from mediadownloader.utils.errors import FriendlyError
 from mediadownloader.utils.validators import is_valid_url, validate_url
 
@@ -467,10 +468,15 @@ class HomePage(QWidget):
         if self.audio_speed.currentData() is None or self.audio_pitch.currentData() is None \
                 or self.audio_volume.currentData() is None:
             return
+        current = self.audio_effects.effects
         self.audio_effects.set_effects(AudioEffects(
             speed=combo_effect_value(self.audio_speed),
             pitch=combo_effect_value(self.audio_pitch),
             volume=combo_effect_value(self.audio_volume),
+            bass=current.bass,
+            echo=current.echo,
+            tremolo=current.tremolo,
+            normalize=current.normalize,
         ))
 
     def _refresh_audio_combos(self, *_: object) -> None:
@@ -509,13 +515,13 @@ class HomePage(QWidget):
         self.result.setEnabled(False)
         self._show_notice("Analisando link…")
         self.analysis_changed.emit(True)
-        cookie_source = self.settings.get("cookies.source", "none")
+        cookies_file, cookies_browser = self._cookie_source_for(url)
         worker = AnalyzeWorker(
             self.engine,
-            self.url_input.text().strip(),
-            self.settings.get("network.proxy_url", "") if self.settings.get("network.proxy_type") != "none" else "",
-            self.settings.get("cookies.file", "") if cookie_source == "file" else "",
-            self.settings.get("cookies.browser", "") if cookie_source == "browser" else "",
+            url,
+            self._proxy_value(),
+            cookies_file,
+            cookies_browser,
         )
         worker.signals.completed.connect(self._analysis_complete)
         worker.signals.failed.connect(self._analysis_failed)
@@ -695,15 +701,13 @@ class HomePage(QWidget):
             url = self.media.url
         self.preview_button.setEnabled(False)
         self.preview_button.setText("PREPARANDO…")
+        cookies_file, cookies_browser = self._cookie_source_for(url)
         worker = PreviewWorker(
             self.engine.download_engine,
             url,
-            self.settings.get("network.proxy_url", "")
-            if self.settings.get("network.proxy_type") != "none" else "",
-            self.settings.get("cookies.file", "")
-            if self.settings.get("cookies.source") == "file" else "",
-            self.settings.get("cookies.browser", "")
-            if self.settings.get("cookies.source") == "browser" else "",
+            self._proxy_value(),
+            cookies_file,
+            cookies_browser,
         )
         worker.signals.completed.connect(
             lambda source: self._on_preview_ready(source, title)
@@ -723,6 +727,10 @@ class HomePage(QWidget):
             speed=self.audio_effects.effects.speed,
             pitch=self.audio_effects.effects.pitch,
             volume=self.audio_effects.effects.volume,
+            bass=self.audio_effects.effects.bass,
+            echo=self.audio_effects.effects.echo,
+            tremolo=self.audio_effects.effects.tremolo,
+            normalize=self.audio_effects.effects.normalize,
             parent=self,
         )
         dialog.accepted.connect(lambda: self._update_preview_enabled())
@@ -735,10 +743,15 @@ class HomePage(QWidget):
 
     def _connect_preview_sync(self, dialog: VideoPreviewDialog) -> None:
         def update() -> None:
+            effects = self.audio_effects.effects
             dialog.apply_values(
-                self.audio_effects.effects.speed,
-                self.audio_effects.effects.pitch,
-                self.audio_effects.effects.volume,
+                effects.speed,
+                effects.pitch,
+                effects.volume,
+                bass=effects.bass,
+                echo=effects.echo,
+                tremolo=effects.tremolo,
+                normalize=effects.normalize,
             )
 
         self._preview_sync_connections[dialog] = [
@@ -842,6 +855,22 @@ class HomePage(QWidget):
             if not self.audio_button.isChecked():
                 self.settings.set("general.download_dir", directory)
 
+    def _proxy_value(self) -> str:
+        return (
+            self.settings.get("network.proxy_url", "")
+            if self.settings.get("network.proxy_type", "none") != "none"
+            else ""
+        )
+
+    def _cookie_source_for(self, url: str) -> tuple[str, str]:
+        return resolve_cookies(
+            self.settings.get("cookies.source", "none"),
+            self.settings.get("cookies.file", ""),
+            self.settings.get("cookies.browser", ""),
+            self.settings.get("cookies.profiles", []),
+            url,
+        )
+
     def queue_download(self, entries_override: list | None = None) -> None:
         if not self.media:
             return
@@ -872,6 +901,7 @@ class HomePage(QWidget):
                 return
         media_type = MediaType.AUDIO if self.audio_button.isChecked() else MediaType.VIDEO
         video_quality = self.video_quality.currentData() or "auto"
+        resolved = self._cookie_source_for(self.media.url)
         options = DownloadOptions(
             media_type=media_type,
             video_format=self.video_format.currentText().lower().replace("automático", "auto"),
@@ -881,6 +911,10 @@ class HomePage(QWidget):
             audio_speed=self.audio_effects.effects.speed,
             audio_pitch=self.audio_effects.effects.pitch,
             audio_volume=self.audio_effects.effects.volume,
+            audio_bass=self.audio_effects.effects.bass,
+            audio_echo=self.audio_effects.effects.echo,
+            audio_tremolo=self.audio_effects.effects.tremolo,
+            audio_normalize=self.audio_effects.effects.normalize,
             embed_thumbnail=self.embed_thumbnail.isChecked(),
             add_metadata=self.add_metadata.isChecked(),
             subtitle_mode=str(self.subtitle_mode.currentData()),
@@ -889,9 +923,10 @@ class HomePage(QWidget):
             filename_template=self.settings.get("filenames.template", "%(title)s.%(ext)s"),
             create_playlist_folder=self.playlist_folder.isChecked(),
             duplicate_policy=self.settings.get("downloads.duplicate_policy", "rename"),
-            proxy=self.settings.get("network.proxy_url", "") if self.settings.get("network.proxy_type") != "none" else "",
-            cookies_file=self.settings.get("cookies.file", "") if self.settings.get("cookies.source") == "file" else "",
-            cookies_browser=self.settings.get("cookies.browser", "") if self.settings.get("cookies.source") == "browser" else "",
+            proxy=self._proxy_value(),
+            cookies_file=resolved[0],
+            cookies_browser=resolved[1],
+            rate_limit_kbps=int(self.settings.get("network.rate_limit_kbps", 0)),
         )
         self.download_requested.emit(self.media, options, entries)
         amount = len(entries) if entries else 1

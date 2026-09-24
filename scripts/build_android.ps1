@@ -13,7 +13,7 @@ $gradleWrapper = Join-Path $androidRoot "gradlew.bat"
 $sdkRoot = Join-Path $repoRoot ".android-sdk"
 $adb = Join-Path $sdkRoot "platform-tools\adb.exe"
 $repoJdk = Get-ChildItem -LiteralPath (Join-Path $repoRoot ".android-jdk") -Directory -ErrorAction SilentlyContinue |
-    Where-Object { Join-Path $_.FullName "bin\java.exe" | Test-Path -LiteralPath } |
+    Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "bin\java.exe") } |
     Select-Object -First 1
 $defaultJavaHome = if ($repoJdk) { $repoJdk.FullName } else { "C:\Program Files\Java\jdk-17" }
 $resolvedJavaHome = if ($JavaHome) { $JavaHome } else { $defaultJavaHome }
