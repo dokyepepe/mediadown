@@ -24,9 +24,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Autorenew
 import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.BrightnessAuto
+import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Cookie
@@ -40,13 +42,22 @@ import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PrivacyTip
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.SettingsBackupRestore
+import androidx.compose.material.icons.rounded.SettingsPower
 import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Security
@@ -54,6 +65,9 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Vibration
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -85,6 +99,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mediadownloader.mobile.R
+import com.mediadownloader.mobile.data.StorageCategory
 import com.mediadownloader.mobile.support.SupportConfig
 
 @Composable
@@ -92,6 +108,7 @@ fun SettingsScreen(
     state: SettingsUiState,
     onAction: (MobileUiAction) -> Unit,
     modifier: Modifier = Modifier,
+    onImportSettings: () -> Unit = {},
 ) {
     if (state.showYtDlpRollbackConfirmation) {
         YtDlpRollbackConfirmationDialog(state = state, onAction = onAction)
@@ -104,9 +121,9 @@ fun SettingsScreen(
         ) {
             item {
                 ScreenHeading(
-                    eyebrow = "Do seu jeito",
-                    title = "Ajustes",
-                    supportingText = "Controle aparência, armazenamento e compatibilidade em um só lugar.",
+                    eyebrow = stringResource(R.string.settings_eyebrow),
+                    title = stringResource(R.string.settings_title),
+                    supportingText = stringResource(R.string.settings_subtitle),
                     icon = Icons.Rounded.Settings,
                 )
             }
@@ -132,7 +149,19 @@ fun SettingsScreen(
             }
 
             item {
+                DownloadsCard(state = state, onAction = onAction)
+            }
+
+            item {
+                StatsCard(state = state, onAction = onAction)
+            }
+
+            item {
                 CookiesCard(state = state, onAction = onAction)
+            }
+
+            item {
+                SiteCompatibilityCard(state = state, onAction = onAction)
             }
 
             item {
@@ -144,7 +173,7 @@ fun SettingsScreen(
             }
 
             item {
-                AppInfoCard(state = state, onAction = onAction)
+                AppInfoCard(state = state, onAction = onAction, onImportSettings = onImportSettings)
             }
         }
     }
@@ -158,8 +187,8 @@ private fun AppearanceCard(
     SectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             SectionTitle(
-                title = "Aparência",
-                supportingText = "O modo Sistema acompanha automaticamente o seu aparelho.",
+                title = stringResource(R.string.settings_appearance),
+                supportingText = stringResource(R.string.settings_appearance_support),
                 icon = Icons.Rounded.Palette,
             )
             Row(
@@ -229,7 +258,7 @@ private fun ThemeOption(
                 modifier = Modifier.size(24.dp),
             )
             Text(
-                text = theme.label,
+                text = stringResource(theme.labelRes),
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -251,11 +280,16 @@ private fun StorageCard(
     SectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(15.dp)) {
             SectionTitle(
-                title = "Armazenamento",
-                supportingText = "Escolha uma pasta independente para cada tipo de arquivo.",
+                title = stringResource(R.string.settings_storage),
+                supportingText = stringResource(R.string.settings_storage_support),
                 icon = Icons.Rounded.Folder,
             )
             state.storageLocations.forEach { location ->
+                val categoryRes = when (location.category) {
+                    StorageCategory.VIDEO -> R.string.settings_category_videos
+                    StorageCategory.AUDIO -> R.string.settings_category_audio
+                    StorageCategory.SITE_FILES -> R.string.settings_category_site_files
+                }
                 Surface(
                     shape = MaterialTheme.shapes.medium,
                     color = MaterialTheme.colorScheme.surfaceContainer,
@@ -289,7 +323,7 @@ private fun StorageCard(
                                 verticalArrangement = Arrangement.spacedBy(2.dp),
                             ) {
                                 Text(
-                                    text = location.category.label,
+                                    text = stringResource(categoryRes),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -312,7 +346,15 @@ private fun StorageCard(
                                 },
                                 modifier = Modifier.weight(1f),
                             ) {
-                                Text(if (location.isCustom) "Alterar pasta" else "Escolher pasta")
+                                Text(
+                                    stringResource(
+                                        if (location.isCustom) {
+                                            R.string.settings_storage_change_folder
+                                        } else {
+                                            R.string.settings_storage_choose_folder
+                                        },
+                                    ),
+                                )
                             }
                             if (location.isCustom) {
                                 OutlinedButton(
@@ -320,7 +362,7 @@ private fun StorageCard(
                                         onAction(MobileUiAction.ResetDownloadLocation(location.category))
                                     },
                                 ) {
-                                    Text("Usar padrão")
+                                    Text(stringResource(R.string.settings_storage_use_default))
                                 }
                             }
                         }
@@ -328,8 +370,7 @@ private fun StorageCard(
                 }
             }
             Text(
-                text = "Sem uma pasta personalizada, os arquivos continuam em Downloads/MediaDownloader. " +
-                    "Limpar o histórico nunca apaga os arquivos salvos.",
+                text = stringResource(R.string.settings_storage_note),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -345,20 +386,20 @@ private fun NetworkCard(
     SectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             SectionTitle(
-                title = "Rede e velocidade",
-                supportingText = "Um proxy e um limite de velocidade valem para todos os downloads.",
+                title = stringResource(R.string.settings_network),
+                supportingText = stringResource(R.string.settings_network_support),
                 icon = Icons.Rounded.Public,
             )
             OutlinedTextField(
                 value = state.proxy,
                 onValueChange = { onAction(MobileUiAction.SetProxy(it)) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Proxy (opcional)") },
+                label = { Text(stringResource(R.string.settings_proxy_label)) },
                 placeholder = { Text("socks5://127.0.0.1:1080") },
                 supportingText = {
                     Text(
                         state.proxyError
-                            ?: "Sem proxy, os downloads usam sua conexão direta.",
+                            ?: stringResource(R.string.settings_proxy_support),
                     )
                 },
                 isError = state.proxyError != null,
@@ -369,10 +410,10 @@ private fun NetworkCard(
                 value = state.rateLimitText,
                 onValueChange = { onAction(MobileUiAction.SetRateLimitText(it)) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Limite de velocidade (KiB/s)") },
-                placeholder = { Text("0 ou vazio = sem limite") },
+                label = { Text(stringResource(R.string.settings_rate_limit_label)) },
+                placeholder = { Text(stringResource(R.string.settings_rate_limit_placeholder)) },
                 supportingText = {
-                    Text("Ex.: 1024 = cerca de 1 MiB/s. Aplicado a cada download.")
+                    Text(stringResource(R.string.settings_rate_limit_support))
                 },
                 isError = false,
                 singleLine = true,
@@ -391,22 +432,22 @@ private fun FilesCard(
     SectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             SectionTitle(
-                title = "Nome dos arquivos",
-                supportingText = "Template yt-dlp usado ao salvar. O nome final ainda tem o limite de 180 caracteres.",
+                title = stringResource(R.string.settings_filename_template),
+                supportingText = stringResource(R.string.settings_filename_template_support),
                 icon = Icons.Rounded.Description,
             )
             OutlinedTextField(
                 value = state.filenameTemplate,
                 onValueChange = { onAction(MobileUiAction.SetFilenameTemplate(it)) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Template (opcional)") },
+                label = { Text(stringResource(R.string.settings_template_label)) },
                 placeholder = { Text("%(title).180B [%(id)s].%(ext)s") },
                 supportingText = {
                     Text(
                         if (state.filenameTemplate.isBlank()) {
-                            "Vazio usa o padrão %(title).180B [%(id)s].%(ext)s."
+                            stringResource(R.string.settings_template_support_empty)
                         } else {
-                            "Você pode usar %(title)s, %(uploader)s, %(id)s, %(ext)s e pastas como Música/…"
+                            stringResource(R.string.settings_template_support_hint)
                         },
                     )
                 },
@@ -424,7 +465,10 @@ private fun FilesCard(
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
                 )
-                Text("Restaurar padrão", modifier = Modifier.padding(start = 9.dp))
+                Text(
+                    text = stringResource(R.string.action_restore_default),
+                    modifier = Modifier.padding(start = 9.dp),
+                )
             }
         }
     }
@@ -439,35 +483,278 @@ private fun DefaultsCard(
     SectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             SectionTitle(
-                title = "Padrões por tipo de mídia",
-                supportingText = "Valores aplicados assim que você analisa um link. Você ainda pode trocar em cada download.",
+                title = stringResource(R.string.settings_media_defaults),
+                supportingText = stringResource(R.string.settings_media_defaults_support),
                 icon = Icons.Rounded.Tune,
             )
 
             ChoiceChips(
-                label = "Vídeo — qualidade",
-                choices = VIDEO_QUALITY_CHOICES,
+                label = stringResource(R.string.settings_default_video_quality),
+                choices = videoQualityChoices(),
                 selectedId = state.defaultVideoQualityId,
                 onSelect = { onAction(MobileUiAction.SetDefaultVideoQuality(it)) },
             )
             ChoiceChips(
-                label = "Vídeo — formato",
+                label = stringResource(R.string.settings_default_video_format),
                 choices = VIDEO_FORMAT_CHOICES,
                 selectedId = state.defaultVideoFormatId,
                 onSelect = { onAction(MobileUiAction.SetDefaultVideoFormat(it)) },
             )
             ChoiceChips(
-                label = "Áudio — qualidade",
+                label = stringResource(R.string.settings_default_audio_quality),
                 choices = AUDIO_QUALITY_CHOICES,
                 selectedId = state.defaultAudioBitrate.toString(),
                 onSelect = { onAction(MobileUiAction.SetDefaultAudioBitrate(it.toInt())) },
             )
             ChoiceChips(
-                label = "Áudio — formato",
+                label = stringResource(R.string.settings_default_audio_format),
                 choices = AUDIO_FORMAT_CHOICES,
                 selectedId = state.defaultAudioFormatId,
                 onSelect = { onAction(MobileUiAction.SetDefaultAudioFormat(it)) },
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DownloadsCard(
+    state: SettingsUiState,
+    onAction: (MobileUiAction) -> Unit,
+) {
+    SectionCard {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            SectionTitle(
+                title = stringResource(R.string.settings_downloads),
+                supportingText = stringResource(R.string.settings_downloads_support),
+                icon = Icons.Rounded.RocketLaunch,
+            )
+            ChoiceChips(
+                label = stringResource(R.string.settings_parallel_downloads),
+                choices = parallelDownloadChoices(),
+                selectedId = state.parallelDownloads.toString(),
+                onSelect = { onAction(MobileUiAction.SetParallelDownloads(it.toInt())) },
+            )
+            SettingsToggleRow(
+                title = stringResource(R.string.settings_wifi_only),
+                subtitle = stringResource(R.string.settings_wifi_only_support),
+                icon = Icons.Rounded.Wifi,
+                checked = state.wifiOnly,
+                onToggle = { onAction(MobileUiAction.SetWifiOnly(it)) },
+            )
+            SettingsToggleRow(
+                title = stringResource(R.string.settings_schedule_window),
+                subtitle = stringResource(R.string.settings_schedule_window_support),
+                icon = Icons.Rounded.Schedule,
+                checked = state.downloadWindowEnabled,
+                onToggle = { onAction(MobileUiAction.SetDownloadWindowEnabled(it)) },
+            )
+            if (state.downloadWindowEnabled) {
+                OutlinedTextField(
+                    value = state.downloadWindowStartMin.toString(),
+                    onValueChange = { raw ->
+                        raw.filter(Char::isDigit).toIntOrNull()?.let {
+                            onAction(MobileUiAction.SetDownloadWindowStartMin(it))
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.settings_window_start_label)) },
+                    supportingText = { Text(stringResource(R.string.settings_window_start_hint)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = MaterialTheme.shapes.medium,
+                )
+                OutlinedTextField(
+                    value = state.downloadWindowEndMin.toString(),
+                    onValueChange = { raw ->
+                        raw.filter(Char::isDigit).toIntOrNull()?.let {
+                            onAction(MobileUiAction.SetDownloadWindowEndMin(it))
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.settings_window_end_label)) },
+                    supportingText = { Text(stringResource(R.string.settings_window_end_hint)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = MaterialTheme.shapes.medium,
+                )
+            }
+            SettingsToggleRow(
+                title = stringResource(R.string.settings_keep_awake),
+                subtitle = stringResource(R.string.settings_keep_awake_support),
+                icon = Icons.Rounded.SettingsPower,
+                checked = state.keepAwakeDuringDownloads,
+                onToggle = { onAction(MobileUiAction.SetKeepAwakeDuringDownloads(it)) },
+            )
+            SectionTitle(
+                title = stringResource(R.string.settings_on_complete),
+                supportingText = stringResource(R.string.settings_on_complete_support),
+                icon = Icons.Rounded.Notifications,
+            )
+            SettingsToggleRow(
+                title = stringResource(R.string.settings_completion_sound),
+                subtitle = stringResource(R.string.settings_completion_sound_support),
+                icon = Icons.AutoMirrored.Rounded.VolumeUp,
+                checked = state.completionSound,
+                onToggle = { onAction(MobileUiAction.SetCompletionSound(it)) },
+            )
+            SettingsToggleRow(
+                title = stringResource(R.string.settings_completion_vibrate),
+                subtitle = stringResource(R.string.settings_completion_vibrate_support),
+                icon = Icons.Rounded.Vibration,
+                checked = state.completionVibrate,
+                onToggle = { onAction(MobileUiAction.SetCompletionVibrate(it)) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatsCard(
+    state: SettingsUiState,
+    onAction: (MobileUiAction) -> Unit,
+) {
+    SectionCard {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            SectionTitle(
+                title = stringResource(R.string.settings_stats),
+                supportingText = stringResource(R.string.settings_stats_support),
+                icon = Icons.Rounded.Insights,
+            )
+            StatRow(
+                label = stringResource(R.string.settings_stats_completed),
+                value = state.statsCompletedCount.toString(),
+            )
+            StatRow(
+                label = stringResource(R.string.settings_stats_downloaded),
+                value = StatFormatting.bytes(state.statsDownloadedBytes),
+            )
+            StatRow(
+                label = stringResource(R.string.settings_stats_temp),
+                value = StatFormatting.bytes(state.statsTempBytes),
+            )
+            StatRow(
+                label = stringResource(R.string.settings_stats_free),
+                value = StatFormatting.bytes(state.statsFreeBytes),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(
+                    onClick = { onAction(MobileUiAction.RefreshStats) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 50.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_stats_refresh),
+                        modifier = Modifier.padding(start = 9.dp),
+                    )
+                }
+                OutlinedButton(
+                    onClick = { onAction(MobileUiAction.RemoveTemporaryFiles) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 50.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.CleaningServices,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_stats_clean),
+                        modifier = Modifier.padding(start = 9.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+private object StatFormatting {
+    fun bytes(value: Long): String {
+        if (value <= 0) return "0 B"
+        val units = arrayOf("B", "KiB", "MiB", "GiB", "TiB")
+        var amount = value.toDouble()
+        var unit = 0
+        while (amount >= 1024 && unit < units.size - 1) {
+            amount /= 1024
+            unit += 1
+        }
+        return "%.1f %s".format(amount, units[unit])
+    }
+}
+
+@Composable
+private fun SettingsToggleRow(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    checked: Boolean,
+    onToggle: (Boolean) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.toggleable(
+            value = checked,
+            role = Role.Switch,
+            onValueChange = onToggle,
+        ),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(23.dp),
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = checked, onCheckedChange = null)
         }
     }
 }
@@ -510,8 +797,8 @@ private fun CookiesCard(
     SectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             SectionTitle(
-                title = "Cookies",
-                supportingText = "Acesse vídeos restritos à sua conta exportando seus cookies.",
+                title = stringResource(R.string.settings_cookies),
+                supportingText = stringResource(R.string.settings_cookies_support),
                 icon = Icons.Rounded.Cookie,
             )
 
@@ -568,7 +855,7 @@ private fun CookiesCard(
                 }
             } else {
                 InfoBanner(
-                    text = "Nenhum arquivo de cookies configurado.",
+                    text = stringResource(R.string.settings_cookies_none),
                     icon = Icons.Rounded.ErrorOutline,
                 )
             }
@@ -586,11 +873,13 @@ private fun CookiesCard(
                         modifier = Modifier.size(20.dp),
                     )
                     Text(
-                        if (state.cookieFileName == null) {
-                            "Escolher arquivo cookies.txt"
-                        } else {
-                            "Trocar arquivo cookies.txt"
-                        },
+                        stringResource(
+                            if (state.cookieFileName == null) {
+                                R.string.settings_cookies_choose_file
+                            } else {
+                                R.string.settings_cookies_replace_file
+                            },
+                        ),
                         modifier = Modifier.padding(start = 9.dp),
                     )
                 }
@@ -606,7 +895,10 @@ private fun CookiesCard(
                             contentDescription = null,
                             modifier = Modifier.size(20.dp),
                         )
-                        Text("Remover cookies", modifier = Modifier.padding(start = 9.dp))
+                        Text(
+                            text = stringResource(R.string.settings_cookies_remove),
+                            modifier = Modifier.padding(start = 9.dp),
+                        )
                     }
                 }
             }
@@ -616,20 +908,20 @@ private fun CookiesCard(
             )
 
             SectionTitle(
-                title = "Cookies por site",
-                supportingText = "Use arquivos diferentes para sites específicos, quando necessário.",
+                title = stringResource(R.string.settings_cookies_by_site),
+                supportingText = stringResource(R.string.settings_cookies_by_site_support),
                 icon = Icons.Rounded.Language,
             )
             OutlinedTextField(
                 value = state.siteCookieHosts,
                 onValueChange = { onAction(MobileUiAction.SiteCookieHostsChanged(it)) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Sites (separados por vírgula)") },
+                label = { Text(stringResource(R.string.settings_sites_label)) },
                 placeholder = { Text("youtube.com, instagram.com") },
                 supportingText = {
                     Text(
                         state.siteCookieHostsError
-                            ?: "O perfil é aplicado automaticamente a este domínio e subdomínios.",
+                            ?: stringResource(R.string.settings_sites_support),
                     )
                 },
                 isError = state.siteCookieHostsError != null,
@@ -647,7 +939,10 @@ private fun CookiesCard(
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
                 )
-                Text("Escolher cookies para estes sites", modifier = Modifier.padding(start = 9.dp))
+                Text(
+                    text = stringResource(R.string.settings_sites_choose_file),
+                    modifier = Modifier.padding(start = 9.dp),
+                )
             }
 
             state.cookieSubProfiles.forEach { profile ->
@@ -688,7 +983,7 @@ private fun CookiesCard(
                             )
                             Text(
                                 text = profile.cookie?.message
-                                    ?: "Diagnóstico indisponível para este perfil.",
+                                    ?: stringResource(R.string.settings_profile_no_diagnostic),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (profile.cookie?.ok == true) {
                                     MaterialTheme.colorScheme.tertiary
@@ -698,18 +993,32 @@ private fun CookiesCard(
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
+                            OutlinedTextField(
+                                value = profile.impersonate,
+                                onValueChange = {
+                                    onAction(MobileUiAction.SetCookieProfileImpersonate(profile.id, it))
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(stringResource(R.string.settings_impersonate_label)) },
+                                placeholder = { Text("chrome, safari, edge…") },
+                                supportingText = {
+                                    Text(stringResource(R.string.settings_impersonate_support))
+                                },
+                                singleLine = true,
+                                shape = MaterialTheme.shapes.small,
+                            )
                         }
                         TextButton(
                             onClick = { onAction(MobileUiAction.ReplaceSiteCookieFile(profile.id)) },
                         ) {
-                            Text("Trocar")
+                            Text(stringResource(R.string.settings_profile_replace))
                         }
                         IconButton(
                             onClick = { onAction(MobileUiAction.RemoveCookieProfile(profile.id)) },
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Delete,
-                                contentDescription = "Remover perfil de cookies",
+                                contentDescription = stringResource(R.string.settings_profile_remove_cd),
                                 tint = MaterialTheme.colorScheme.error,
                             )
                         }
@@ -718,11 +1027,125 @@ private fun CookiesCard(
             }
 
             Text(
-                text = "O app nunca lê cookies do navegador nem envia dados para fora;" +
-                    " o arquivo fica apenas neste aparelho e passa só para o yt-dlp.",
+                text = stringResource(R.string.settings_cookies_privacy_note),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+/**
+ * Sites listed so the user knows what to expect before pasting a link. The engine runs
+ * yt-dlp, so support depends on the bundled version; only the cookie hint differs.
+ */
+enum class SiteCompatibility(
+    val id: String,
+    val labelRes: Int,
+    val supportedRes: Int,
+    val unsupportedRes: Int,
+) {
+    YOUTUBE(
+        id = "youtube",
+        labelRes = R.string.settings_compat_youtube,
+        supportedRes = R.string.settings_compat_youtube_ok,
+        unsupportedRes = R.string.settings_compat_generic_issue,
+    ),
+    TIKTOK(
+        id = "tiktok",
+        labelRes = R.string.settings_compat_tiktok,
+        supportedRes = R.string.settings_compat_tiktok_ok,
+        unsupportedRes = R.string.settings_compat_generic_issue,
+    ),
+    INSTAGRAM(
+        id = "instagram",
+        labelRes = R.string.settings_compat_instagram,
+        supportedRes = R.string.settings_compat_instagram_ok,
+        unsupportedRes = R.string.settings_compat_instagram_issue,
+    ),
+    FACEBOOK(
+        id = "facebook",
+        labelRes = R.string.settings_compat_facebook,
+        supportedRes = R.string.settings_compat_generic_ok,
+        unsupportedRes = R.string.settings_compat_generic_issue,
+    ),
+    X(
+        id = "x",
+        labelRes = R.string.settings_compat_x,
+        supportedRes = R.string.settings_compat_generic_ok,
+        unsupportedRes = R.string.settings_compat_x_issue,
+    ),
+    SOUNDCLOUD(
+        id = "soundcloud",
+        labelRes = R.string.settings_compat_soundcloud,
+        supportedRes = R.string.settings_compat_soundcloud_ok,
+        unsupportedRes = R.string.settings_compat_generic_issue,
+    ),
+}
+
+@Composable
+private fun SiteCompatibilityCard(
+    state: SettingsUiState,
+    onAction: (MobileUiAction) -> Unit,
+) {
+    SectionCard {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            SectionTitle(
+                title = stringResource(R.string.settings_compat_title),
+                supportingText = stringResource(R.string.settings_compat_support),
+                icon = Icons.Rounded.Language,
+            )
+            SiteCompatibility.entries.forEach { site ->
+                val supported = state.compatSupportedSites.contains(site.id)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Icon(
+                        imageVector = if (supported) {
+                            Icons.Rounded.CheckCircle
+                        } else {
+                            Icons.Rounded.RemoveCircleOutline
+                        },
+                        contentDescription = null,
+                        tint = if (supported) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = stringResource(site.labelRes),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = stringResource(
+                                if (supported) site.supportedRes else site.unsupportedRes,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            Text(
+                text = stringResource(R.string.settings_compat_cookies_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = { onAction(MobileUiAction.Navigate(AppTab.SETTINGS)) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.settings_compat_configure_cookies))
+            }
         }
     }
 }
@@ -737,7 +1160,7 @@ private fun SpotifyCard(
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             SectionTitle(
                 title = "Spotify",
-                supportingText = "Leia playlists e metadados oficiais. O áudio protegido nunca é baixado.",
+                supportingText = stringResource(R.string.settings_spotify_support),
                 icon = Icons.Rounded.MusicNote,
             )
 
@@ -775,16 +1198,16 @@ private fun SpotifyCard(
                     ) {
                         Text(
                             text = if (state.spotifyConnected) {
-                                "Conta conectada"
+                                stringResource(R.string.settings_spotify_connected)
                             } else {
-                                "Não conectado"
+                                stringResource(R.string.settings_spotify_not_connected)
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                         )
                         Text(
                             text = state.spotifyAccountName
-                                ?: "Informe o Client ID do seu aplicativo Spotify para conectar.",
+                                ?: stringResource(R.string.settings_spotify_account_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -796,12 +1219,11 @@ private fun SpotifyCard(
                 value = state.spotifyClientId,
                 onValueChange = { onAction(MobileUiAction.SetSpotifyClientId(it)) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Client ID do Spotify") },
+                label = { Text(stringResource(R.string.settings_spotify_client_id_label)) },
                 supportingText = {
                     Text(
                         state.spotifyClientIdError
-                            ?: "Crie um aplicativo em developer.spotify.com e use o redirecionamento " +
-                            "mediadownloader://spotify/callback.",
+                            ?: stringResource(R.string.settings_spotify_client_id_support),
                     )
                 },
                 isError = state.spotifyClientIdError != null,
@@ -824,14 +1246,20 @@ private fun SpotifyCard(
                             strokeWidth = 2.dp,
                             color = MaterialTheme.colorScheme.onPrimary,
                         )
-                        Text("Aguardando autorização…", modifier = Modifier.padding(start = 9.dp))
+                        Text(
+                            text = stringResource(R.string.settings_spotify_waiting),
+                            modifier = Modifier.padding(start = 9.dp),
+                        )
                     } else {
                         Icon(
                             imageVector = Icons.Rounded.MusicNote,
                             contentDescription = null,
                             modifier = Modifier.size(20.dp),
                         )
-                        Text("Conectar Spotify", modifier = Modifier.padding(start = 9.dp))
+                        Text(
+                            text = stringResource(R.string.settings_spotify_connect),
+                            modifier = Modifier.padding(start = 9.dp),
+                        )
                     }
                 }
                 if (state.spotifyConnected) {
@@ -847,14 +1275,16 @@ private fun SpotifyCard(
                             contentDescription = null,
                             modifier = Modifier.size(20.dp),
                         )
-                        Text("Desconectar", modifier = Modifier.padding(start = 9.dp))
+                        Text(
+                            text = stringResource(R.string.settings_spotify_disconnect),
+                            modifier = Modifier.padding(start = 9.dp),
+                        )
                     }
                 }
             }
 
             Text(
-                text = "A sessão fica criptografada neste aparelho. O Media Downloader usa somente " +
-                    "metadados públicos; nada do Spotify é enviado para terceiros.",
+                text = stringResource(R.string.settings_spotify_note),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -872,8 +1302,8 @@ private fun YtDlpUpdateCard(
     SectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             SectionTitle(
-                title = "Compatibilidade com sites",
-                supportingText = "O yt-dlp recebe correções frequentes para acompanhar mudanças nas plataformas.",
+                title = stringResource(R.string.settings_site_compat),
+                supportingText = stringResource(R.string.settings_site_compat_support),
                 icon = Icons.Rounded.Language,
             )
 
@@ -882,13 +1312,14 @@ private fun YtDlpUpdateCard(
                 horizontalArrangement = Arrangement.spacedBy(9.dp),
             ) {
                 VersionTile(
-                    label = "Versão atual",
-                    value = state.ytDlpVersion ?: "Não identificada",
+                    label = stringResource(R.string.settings_ytdlp_current_version),
+                    value = state.ytDlpVersion
+                        ?: stringResource(R.string.settings_ytdlp_version_unknown),
                     modifier = Modifier.weight(1f),
                 )
                 state.availableYtDlpVersion?.let { version ->
                     VersionTile(
-                        label = "Disponível",
+                        label = stringResource(R.string.settings_ytdlp_available_version),
                         value = version,
                         highlighted = true,
                         modifier = Modifier.weight(1f),
@@ -897,7 +1328,10 @@ private fun YtDlpUpdateCard(
             }
 
             state.previousYtDlpVersion?.let { version ->
-                LabelValueRow(label = "Versão anterior", value = version)
+                LabelValueRow(
+                    label = stringResource(R.string.settings_ytdlp_previous_version),
+                    value = version,
+                )
             }
 
             Surface(
@@ -928,12 +1362,12 @@ private fun YtDlpUpdateCard(
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         Text(
-                            text = "Verificar automaticamente",
+                            text = stringResource(R.string.settings_ytdlp_auto_check),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            text = "No máximo uma vez por dia; você decide quando instalar",
+                            text = stringResource(R.string.settings_ytdlp_auto_check_support),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -961,7 +1395,10 @@ private fun YtDlpUpdateCard(
                         contentDescription = null,
                         modifier = Modifier.size(20.dp),
                     )
-                    Text("Verificar atualização", modifier = Modifier.padding(start = 9.dp))
+                    Text(
+                        text = stringResource(R.string.settings_ytdlp_check_update),
+                        modifier = Modifier.padding(start = 9.dp),
+                    )
                 }
                 if (state.canInstallYtDlpUpdate) {
                     Button(
@@ -976,7 +1413,10 @@ private fun YtDlpUpdateCard(
                             contentDescription = null,
                             modifier = Modifier.size(20.dp),
                         )
-                        Text("Atualizar agora", modifier = Modifier.padding(start = 9.dp))
+                        Text(
+                            text = stringResource(R.string.settings_ytdlp_update_now),
+                            modifier = Modifier.padding(start = 9.dp),
+                        )
                     }
                 }
                 if (state.canRollbackYtDlp) {
@@ -992,7 +1432,10 @@ private fun YtDlpUpdateCard(
                             contentDescription = null,
                             modifier = Modifier.size(20.dp),
                         )
-                        Text("Restaurar versão anterior", modifier = Modifier.padding(start = 9.dp))
+                        Text(
+                            text = stringResource(R.string.settings_ytdlp_restore_previous),
+                            modifier = Modifier.padding(start = 9.dp),
+                        )
                     }
                 }
             }
@@ -1046,26 +1489,27 @@ private fun VersionTile(
 @Composable
 private fun UpdateStatus(state: SettingsUiState) {
     val title = when (state.updateState) {
-        YtDlpUpdateState.IDLE -> "Pronto para verificar"
-        YtDlpUpdateState.CHECKING -> "Verificando compatibilidade"
-        YtDlpUpdateState.AVAILABLE -> "Atualização disponível"
-        YtDlpUpdateState.UPDATING -> "Instalando atualização"
-        YtDlpUpdateState.ROLLING_BACK -> "Restaurando versão"
-        YtDlpUpdateState.UP_TO_DATE -> "Tudo atualizado"
-        YtDlpUpdateState.ROLLED_BACK -> "Versão restaurada"
-        YtDlpUpdateState.REJECTED -> "Versão ignorada"
-        YtDlpUpdateState.FAILED -> "Não foi possível verificar"
+        YtDlpUpdateState.IDLE -> stringResource(R.string.settings_ytdlp_state_idle)
+        YtDlpUpdateState.CHECKING -> stringResource(R.string.settings_ytdlp_state_checking)
+        YtDlpUpdateState.AVAILABLE -> stringResource(R.string.settings_ytdlp_state_available)
+        YtDlpUpdateState.UPDATING -> stringResource(R.string.settings_ytdlp_state_updating)
+        YtDlpUpdateState.ROLLING_BACK -> stringResource(R.string.settings_ytdlp_state_rolling_back)
+        YtDlpUpdateState.UP_TO_DATE -> stringResource(R.string.settings_ytdlp_state_up_to_date)
+        YtDlpUpdateState.ROLLED_BACK -> stringResource(R.string.settings_ytdlp_state_rolled_back)
+        YtDlpUpdateState.REJECTED -> stringResource(R.string.settings_ytdlp_state_rejected)
+        YtDlpUpdateState.FAILED -> stringResource(R.string.settings_ytdlp_state_failed)
     }
     val detail = state.updateDetail ?: when (state.updateState) {
-        YtDlpUpdateState.IDLE -> "Ainda não verificado nesta sessão."
-        YtDlpUpdateState.CHECKING -> "Procurando uma versão mais recente…"
-        YtDlpUpdateState.AVAILABLE -> "Uma versão mais recente está pronta para instalar."
-        YtDlpUpdateState.UPDATING -> "Aguarde enquanto os componentes são atualizados…"
-        YtDlpUpdateState.ROLLING_BACK -> "Aguarde enquanto a versão anterior é restaurada…"
-        YtDlpUpdateState.UP_TO_DATE -> "Você já está usando a versão mais recente."
-        YtDlpUpdateState.ROLLED_BACK -> "A versão anterior está ativa."
-        YtDlpUpdateState.REJECTED -> "A versão problemática foi ignorada."
-        YtDlpUpdateState.FAILED -> "Tente novamente quando sua conexão estiver estável."
+        YtDlpUpdateState.IDLE -> stringResource(R.string.settings_ytdlp_state_idle_detail)
+        YtDlpUpdateState.CHECKING -> stringResource(R.string.settings_ytdlp_state_checking_detail)
+        YtDlpUpdateState.AVAILABLE -> stringResource(R.string.settings_ytdlp_state_available_detail)
+        YtDlpUpdateState.UPDATING -> stringResource(R.string.settings_ytdlp_state_updating_detail)
+        YtDlpUpdateState.ROLLING_BACK ->
+            stringResource(R.string.settings_ytdlp_state_rolling_back_detail)
+        YtDlpUpdateState.UP_TO_DATE -> stringResource(R.string.settings_ytdlp_state_up_to_date_detail)
+        YtDlpUpdateState.ROLLED_BACK -> stringResource(R.string.settings_ytdlp_state_rolled_back_detail)
+        YtDlpUpdateState.REJECTED -> stringResource(R.string.settings_ytdlp_state_rejected_detail)
+        YtDlpUpdateState.FAILED -> stringResource(R.string.settings_ytdlp_state_failed_detail)
     }
     val isBusy = state.isYtDlpOperationBusy
     val container = when (state.updateState) {
@@ -1138,21 +1582,31 @@ private fun YtDlpRollbackConfirmationDialog(
         icon = {
             Icon(imageVector = Icons.Rounded.Restore, contentDescription = null)
         },
-        title = { Text("Restaurar versão anterior?", fontWeight = FontWeight.Bold) },
+        title = {
+            Text(
+                text = stringResource(R.string.settings_ytdlp_restore_title),
+                fontWeight = FontWeight.Bold,
+            )
+        },
         text = {
             Text(
-                "A versão ${state.previousYtDlpVersion ?: "anterior"} substituirá a " +
-                    "${state.ytDlpVersion ?: "atual"}. Downloads em andamento terminarão antes da troca.",
+                stringResource(
+                    R.string.settings_ytdlp_restore_message,
+                    state.previousYtDlpVersion
+                        ?: stringResource(R.string.settings_ytdlp_word_previous),
+                    state.ytDlpVersion
+                        ?: stringResource(R.string.settings_ytdlp_word_current),
+                ),
             )
         },
         confirmButton = {
             Button(onClick = { onAction(MobileUiAction.ConfirmYtDlpRollback) }) {
-                Text("Restaurar")
+                Text(stringResource(R.string.settings_restore))
             }
         },
         dismissButton = {
             TextButton(onClick = { onAction(MobileUiAction.DismissYtDlpRollback) }) {
-                Text("Cancelar")
+                Text(stringResource(R.string.action_cancel))
             }
         },
     )
@@ -1162,12 +1616,13 @@ private fun YtDlpRollbackConfirmationDialog(
 private fun AppInfoCard(
     state: SettingsUiState,
     onAction: (MobileUiAction) -> Unit,
+    onImportSettings: () -> Unit,
 ) {
     SectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SectionTitle(
-                title = "Sobre e legal",
-                supportingText = "Transparência para baixar apenas o que você tem permissão para salvar.",
+                title = stringResource(R.string.settings_about),
+                supportingText = stringResource(R.string.settings_about_support),
                 icon = Icons.Rounded.Info,
             )
 
@@ -1195,12 +1650,12 @@ private fun AppInfoCard(
                             fontWeight = FontWeight.Bold,
                         )
                         Text(
-                            text = "Versão ${state.appVersion}",
+                            text = stringResource(R.string.settings_version_format, state.appVersion),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.76f),
                         )
                         Text(
-                            text = "© 2026 Pietro Ferreira • Licença MIT",
+                            text = stringResource(R.string.settings_copyright),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.76f),
                         )
@@ -1219,7 +1674,72 @@ private fun AppInfoCard(
                     contentDescription = null,
                     modifier = Modifier.size(21.dp),
                 )
-                Text("Compartilhar diagnóstico", modifier = Modifier.padding(start = 9.dp))
+                Text(
+                    text = stringResource(R.string.settings_share_diagnostics),
+                    modifier = Modifier.padding(start = 9.dp),
+                )
+            }
+
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceContainer,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.settings_backup_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_backup_export_support),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_backup_restore_support),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedButton(
+                            onClick = { onAction(MobileUiAction.ExportSettings) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 50.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Backup,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Text(
+                                text = stringResource(R.string.settings_backup_export),
+                                modifier = Modifier.padding(start = 9.dp),
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = onImportSettings,
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 50.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.SettingsBackupRestore,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Text(
+                                text = stringResource(R.string.settings_backup_restore),
+                                modifier = Modifier.padding(start = 9.dp),
+                            )
+                        }
+                    }
+                }
             }
 
             Surface(
@@ -1235,10 +1755,8 @@ private fun AppInfoCard(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     SectionTitle(
-                        title = "Apoie o projeto",
-                        supportingText =
-                            "O Media Downloader é gratuito e de código aberto. " +
-                                "Se ele foi útil, você pode apoiar voluntariamente por Pix.",
+                        title = stringResource(R.string.settings_support_title),
+                        supportingText = stringResource(R.string.settings_support_description),
                         icon = Icons.Rounded.Favorite,
                     )
                     val pixQrCode = remember { createQrCode(SupportConfig.PIX_PAYLOAD) }
@@ -1253,18 +1771,18 @@ private fun AppInfoCard(
                         ) {
                             Image(
                                 bitmap = pixQrCode,
-                                contentDescription = "QR Code Pix para apoiar o projeto",
+                                contentDescription = stringResource(R.string.settings_pix_qr_cd),
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
                     }
                     Text(
-                        text = "Escaneie com o app do seu banco",
+                        text = stringResource(R.string.settings_pix_scan_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        text = "CHAVE PIX",
+                        text = stringResource(R.string.settings_pix_key_label),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold,
@@ -1283,7 +1801,10 @@ private fun AppInfoCard(
                             .heightIn(min = 52.dp),
                     ) {
                         Icon(Icons.Rounded.ContentCopy, contentDescription = null)
-                        Text("  Copiar Pix Copia e Cola")
+                        Text(
+                            text = stringResource(R.string.settings_pix_copy_payload),
+                            modifier = Modifier.padding(start = 9.dp),
+                        )
                     }
                     OutlinedButton(
                         onClick = { onAction(MobileUiAction.CopySupportPixKey) },
@@ -1292,15 +1813,18 @@ private fun AppInfoCard(
                             .heightIn(min = 52.dp),
                     ) {
                         Icon(Icons.Rounded.ContentCopy, contentDescription = null)
-                        Text("  Copiar chave Pix")
+                        Text(
+                            text = stringResource(R.string.settings_pix_copy_key),
+                            modifier = Modifier.padding(start = 9.dp),
+                        )
                     }
                     Text(
-                        text = "Antes de confirmar, confira no aplicativo do banco os dados do recebedor.",
+                        text = stringResource(R.string.settings_pix_warning),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
                     Text(
-                        text = "O uso do aplicativo continua gratuito, independentemente de contribuição.",
+                        text = stringResource(R.string.settings_pix_free_note),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1308,7 +1832,7 @@ private fun AppInfoCard(
             }
 
             LegalButton(
-                label = "Uso responsável",
+                label = stringResource(R.string.legal_responsible_use_title),
                 icon = Icons.Rounded.Security,
                 onClick = {
                     onAction(MobileUiAction.OpenLegalDocument(LegalDocument.RESPONSIBLE_USE))
@@ -1316,13 +1840,13 @@ private fun AppInfoCard(
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             LegalButton(
-                label = "Privacidade",
+                label = stringResource(R.string.legal_privacy_title),
                 icon = Icons.Rounded.PrivacyTip,
                 onClick = { onAction(MobileUiAction.OpenLegalDocument(LegalDocument.PRIVACY)) },
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             LegalButton(
-                label = "Licença do Media Downloader (MIT)",
+                label = stringResource(R.string.settings_license_mit),
                 icon = Icons.Rounded.Info,
                 onClick = {
                     onAction(MobileUiAction.OpenLegalDocument(LegalDocument.APPLICATION_LICENSE))
@@ -1330,7 +1854,7 @@ private fun AppInfoCard(
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             LegalButton(
-                label = "Licenças dos componentes de terceiros",
+                label = stringResource(R.string.settings_license_third_party),
                 icon = Icons.Rounded.Code,
                 onClick = {
                     onAction(MobileUiAction.OpenLegalDocument(LegalDocument.OPEN_SOURCE_LICENSES))
@@ -1378,6 +1902,7 @@ private val ThemePreference.icon: ImageVector
         ThemePreference.SYSTEM -> Icons.Rounded.BrightnessAuto
         ThemePreference.LIGHT -> Icons.Rounded.LightMode
         ThemePreference.DARK -> Icons.Rounded.DarkMode
+        ThemePreference.AMOLED -> Icons.Rounded.DarkMode
     }
 
 private val YtDlpUpdateState.icon: ImageVector
@@ -1393,8 +1918,9 @@ private val YtDlpUpdateState.icon: ImageVector
         YtDlpUpdateState.FAILED -> Icons.Rounded.ErrorOutline
     }
 
-private val VIDEO_QUALITY_CHOICES = listOf(
-    "best" to "Melhor",
+@Composable
+private fun videoQualityChoices(): List<Pair<String, String>> = listOf(
+    "best" to stringResource(R.string.settings_quality_best),
     "2160" to "2160p",
     "1440" to "1440p",
     "1080" to "1080p",
@@ -1403,6 +1929,16 @@ private val VIDEO_QUALITY_CHOICES = listOf(
     "360" to "360p",
     "240" to "240p",
 )
+
+@Composable
+private fun parallelDownloadChoices(): List<Pair<String, String>> =
+    listOf(1, 2, 3).map { count ->
+        count.toString() to pluralStringResource(
+            R.plurals.settings_parallel_downloads_count,
+            count,
+            count,
+        )
+    }
 
 private val VIDEO_FORMAT_CHOICES = listOf(
     "mp4" to "MP4",

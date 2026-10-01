@@ -115,6 +115,21 @@ class MobileUiStateTest {
     }
 
     @Test
+    fun embedMetadataHidesItselfForWavAudio() {
+        assertTrue(HomeUiState().embedMetadataSupported)
+        assertTrue(
+            HomeUiState(selectedKind = MediaKind.AUDIO, selectedFormatId = "mp3")
+                .embedMetadataSupported,
+        )
+        assertFalse(
+            HomeUiState(selectedKind = MediaKind.AUDIO, selectedFormatId = "wav")
+                .embedMetadataSupported,
+        )
+        // Video containers always accept tags, even though the cover only applies to audio.
+        assertTrue(HomeUiState(selectedKind = MediaKind.VIDEO, selectedFormatId = "mp4").embedMetadataSupported)
+    }
+
+    @Test
     fun audioTrimDefaultReflectsTrimAndFadeValues() {
         assertTrue(HomeUiState().audioTrimDefault)
         assertFalse(HomeUiState(trimStartSeconds = 5f).audioTrimDefault)

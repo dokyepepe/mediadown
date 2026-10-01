@@ -1,6 +1,7 @@
 package com.mediadownloader.mobile.data
 
 import android.content.Context
+import androidx.core.content.edit
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
@@ -21,11 +22,11 @@ class StorageLocationStore(context: Context) {
         ?.takeIf(String::isNotBlank)
 
     fun set(category: StorageCategory, uri: String) {
-        preferences.edit().putString(category.preferenceKey, uri).apply()
+        preferences.edit { putString(category.preferenceKey, uri) }
     }
 
     fun reset(category: StorageCategory) {
-        preferences.edit().remove(category.preferenceKey).apply()
+        preferences.edit { remove(category.preferenceKey) }
     }
 
     fun label(category: StorageCategory): String = uri(category)?.let(::treeLocationLabel)

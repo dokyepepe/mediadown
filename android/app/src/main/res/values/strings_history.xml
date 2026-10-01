@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="history_clear_button">Clear history</string>
+    <string name="history_selection_select_all">Select all</string>
+    <string name="history_selection_clear_all">Clear selection</string>
+    <string name="history_selection_delete">Delete selected</string>
+    <string name="history_selection_close">Leave selection</string>
+    <plurals name="history_delete_selection_title">
+        <item quantity="one">Remove %1$d item?</item>
+        <item quantity="other">Remove %1$d items?</item>
+    </plurals>
+    <string name="history_delete_selection_message">The files stay in your storage. Only the app history is cleared.</string>
+    <string name="history_delete_selection_confirm">Remove</string>
+    <plurals name="history_selected_count">
+        <item quantity="one">%1$d selected</item>
+        <item quantity="other">%1$d selected</item>
+    </plurals>
+    <string name="history_clear_confirm">Clear</string>
+    <string name="history_clear_message">The records will be removed, but the downloaded files will stay on the device.</string>
+    <string name="history_clear_title">Clear history?</string>
+    <string name="history_empty_supporting">When a download finishes, the file is organized here.</string>
+    <string name="history_empty_title">Your library is ready</string>
+    <string name="history_export">Export history (CSV)</string>
+    <string name="history_heading_eyebrow">Your library</string>
+    <string name="history_heading_supporting">Find, open and share everything you have already finished.</string>
+    <string name="history_heading_title">History</string>
+    <plurals name="history_items_found">
+        <item quantity="one">%1$d file found on this device.</item>
+        <item quantity="other">%1$d files found on this device.</item>
+    </plurals>
+    <string name="history_no_results_query">No record matches &quot;%1$s&quot;.</string>
+    <string name="history_no_results_title">Nothing found</string>
+    <string name="history_redownload">Download again</string>
+    <string name="history_rename_action">Rename</string>
+    <string name="history_rename_dialog">Rename file</string>
+    <string name="history_rename_hint">File name</string>
+    <string name="history_search_clear">Clear search</string>
+    <string name="history_search_placeholder">Search in history</string>
+</resources>

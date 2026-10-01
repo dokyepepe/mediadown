@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Media Downloader</string>
+    <string name="download_channel_name">Downloads</string>
+    <string name="download_channel_description">Progresso dos downloads de mídia</string>
+    <string name="quick_download_widget_description">Baixa rapidamente o link da área de transferência</string>
+    <string name="quick_download_widget_subtitle">Baixe o link que está na área de transferência</string>
+    <string name="quick_download_widget_download">Colar e baixar</string>
+    <string name="quick_download_widget_open">Abrir</string>
+    <string name="quick_download_widget_status_idle">Cole um link e toque em Colar e baixar</string>
+    <string name="quick_download_widget_status_downloading">Baixando %1$s — %2$d%%</string>
+    <string name="quick_download_widget_status_processing">Processando %1$s</string>
+    <plurals name="quick_download_widget_status_queued">
+        <item quantity="one">%1$d download na fila</item>
+        <item quantity="many">%1$d downloads na fila</item>
+        <item quantity="other">%1$d downloads na fila</item>
+    </plurals>
+    <string name="quick_download_widget_kind_video">Vídeo</string>
+    <string name="quick_download_widget_kind_audio">Áudio</string>
+    <string name="download_list_widget_description">Fila de downloads em tempo real</string>
+    <string name="download_list_widget_subtitle">Fila de downloads</string>
+    <string name="download_list_widget_empty">Nenhum download ativo ou na fila</string>
+    <string name="quick_tile_label">Baixar do clipboard</string>
+</resources>

@@ -1,6 +1,7 @@
 package com.mediadownloader.mobile.data
 
 import android.content.Context
+import androidx.core.content.edit
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -10,6 +11,8 @@ data class CookieProfile(
     val id: String,
     val label: String,
     val hosts: List<String> = emptyList(),
+    /** Optional yt-dlp `--impersonate` target (e.g. "chrome", "safari", "edge"). */
+    val impersonate: String? = null,
 )
 
 /**
@@ -43,7 +46,14 @@ class CookieProfilesStore(context: Context) {
                     val hosts = obj.optJSONArray("hosts")?.let { hostsArray ->
                         buildList { for (j in 0 until hostsArray.length()) add(hostsArray.getString(j)) }
                     }.orEmpty()
-                    add(CookieProfile(obj.getString("id"), obj.getString("label"), hosts))
+                    add(
+                        CookieProfile(
+                            id = obj.getString("id"),
+                            label = obj.getString("label"),
+                            hosts = hosts,
+                            impersonate = obj.optString("impersonate").nullIfBlank(),
+                        ),
+                    )
                 }
             }
         } catch (_: Exception) {
@@ -80,6 +90,11 @@ class CookieProfilesStore(context: Context) {
         upsert(current.copy(hosts = hosts.distinct().map(String::trim).filter(String::isNotBlank)))
     }
 
+    fun updateImpersonate(id: String, impersonate: String?) {
+        val current = list().firstOrNull { it.id == id } ?: return
+        upsert(current.copy(impersonate = impersonate?.trim().nullIfBlank()))
+    }
+
     fun remove(id: String) {
         File(cookiesDir, "$id.txt").delete()
         writeRecords(list().filterNot { it.id == id })
@@ -87,7 +102,7 @@ class CookieProfilesStore(context: Context) {
 
     fun clearAll() {
         cookiesDir.listFiles()?.forEach { it.delete() }
-        preferences.edit().remove(KEY_PROFILES_JSON).apply()
+        preferences.edit { remove(KEY_PROFILES_JSON) }
     }
 
     /** Picks the profile that applies to [url] via [CookieProfileMatcher]. */
@@ -104,10 +119,19 @@ class CookieProfilesStore(context: Context) {
         for (record in records) {
             val hosts = JSONArray()
             record.hosts.forEach { hosts.put(it) }
-            array.put(JSONObject().put("id", record.id).put("label", record.label).put("hosts", hosts))
+            val json = JSONObject()
+                .put("id", record.id)
+                .put("label", record.label)
+                .put("hosts", hosts)
+            if (record.impersonate != null) {
+                json.put("impersonate", record.impersonate)
+            }
+            array.put(json)
         }
-        preferences.edit().putString(KEY_PROFILES_JSON, array.toString()).apply()
+        preferences.edit { putString(KEY_PROFILES_JSON, array.toString()) }
     }
+
+    private fun String?.nullIfBlank(): String? = this?.takeIf(String::isNotBlank)
 
     private fun migrateLegacyGlobalCookie() {
         val legacy = appContext.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
@@ -122,7 +146,7 @@ class CookieProfilesStore(context: Context) {
         }
         writeRecords(listOf(CookieProfile(DEFAULT_ID, legacy.getString(LEGACY_KEY_LABEL, null).orEmpty())))
         legacyFile.delete()
-        legacy.edit().remove(LEGACY_KEY_ENABLED).remove(LEGACY_KEY_LABEL).apply()
+        legacy.edit { remove(LEGACY_KEY_ENABLED); remove(LEGACY_KEY_LABEL) }
     }
 
     companion object {

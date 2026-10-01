@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -35,12 +37,15 @@ import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.HighlightOff
+import androidx.compose.material.icons.automirrored.rounded.Label
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.Search
@@ -51,6 +56,7 @@ import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedFilterChip
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -75,7 +81,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.mediadownloader.mobile.R
+import kotlin.math.abs
 import java.util.Locale
 
 @Composable
@@ -83,8 +93,8 @@ fun HomeScreen(
     state: HomeUiState,
     onAction: (MobileUiAction) -> Unit,
     thumbnail: ThumbnailRenderer,
-    previewPlayer: ExoPlayer? = null,
     modifier: Modifier = Modifier,
+    previewPlayer: ExoPlayer? = null,
 ) {
     ScreenContainer(modifier) {
         LazyColumn(
@@ -94,9 +104,9 @@ fun HomeScreen(
         ) {
             item {
                 ScreenHeading(
-                    eyebrow = "Novo download",
-                    title = "Baixe sua mídia",
-                    supportingText = "Cole um link, confira a prévia e escolha exatamente como salvar.",
+                    eyebrow = stringResource(R.string.home_heading_eyebrow),
+                    title = stringResource(R.string.home_heading_title),
+                    supportingText = stringResource(R.string.home_heading_supporting),
                     icon = Icons.Rounded.CloudDownload,
                 )
             }
@@ -174,7 +184,7 @@ fun HomeScreen(
                                 color = MaterialTheme.colorScheme.onPrimary,
                             )
                             Spacer(Modifier.size(10.dp))
-                            Text("Adicionando à fila…")
+                            Text(stringResource(R.string.home_action_queued))
                         } else {
                             Icon(
                                 imageVector = Icons.Rounded.CloudDownload,
@@ -182,12 +192,17 @@ fun HomeScreen(
                                 modifier = Modifier.size(21.dp),
                             )
                             Spacer(Modifier.size(9.dp))
+                            val selectedItems = state.selectedPlaylistItems.size
                             Text(
                                 when {
-                                    preview.isPlaylist && state.downloadPlaylist -> "Baixar playlist"
-                                    preview.isPlaylist -> "Baixar ${state.selectedPlaylistItems.size} " +
-                                        if (state.selectedPlaylistItems.size == 1) "item" else "itens"
-                                    else -> "Baixar agora"
+                                    preview.isPlaylist && state.downloadPlaylist ->
+                                        stringResource(R.string.home_action_download_playlist)
+                                    preview.isPlaylist -> pluralStringResource(
+                                        R.plurals.home_download_items,
+                                        selectedItems,
+                                        selectedItems,
+                                    )
+                                    else -> stringResource(R.string.home_action_download_now)
                                 },
                             )
                         }
@@ -204,7 +219,7 @@ fun HomeScreen(
             } else {
                 item {
                     InfoBanner(
-                        text = "Seus links e downloads permanecem neste aparelho — sem conta e sem telemetria.",
+                        text = stringResource(R.string.home_privacy_banner),
                         icon = Icons.Rounded.Lock,
                         containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.72f),
                         contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -226,8 +241,8 @@ private fun SpotifyCard(
     SectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             SectionTitle(
-                title = "Spotify",
-                supportingText = "Metadados oficiais. O áudio é buscado no YouTube, nunca no Spotify.",
+                title = stringResource(R.string.home_spotify_title),
+                supportingText = stringResource(R.string.home_spotify_supporting),
                 icon = Icons.Rounded.MusicNote,
             )
 
@@ -262,7 +277,7 @@ private fun SpotifyCard(
                     val count = media.itemCount ?: media.tracks.size.takeIf { it > 0 }
                     if (count != null) {
                         Text(
-                            text = if (count == 1) "1 faixa" else "$count faixas",
+                            text = pluralStringResource(R.plurals.home_spotify_tracks, count, count),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -272,7 +287,7 @@ private fun SpotifyCard(
 
             if (media.requiresAuth && !media.authenticated) {
                 InfoBanner(
-                    text = "Conecte sua conta do Spotify nos Ajustes para ver as faixas desta playlist.",
+                    text = stringResource(R.string.home_spotify_auth_hint),
                     icon = Icons.Rounded.Lock,
                 )
             }
@@ -286,8 +301,13 @@ private fun SpotifyCard(
                         SpotifyTrackRow(track)
                     }
                     if (media.tracks.size > SPOTIFY_TRACK_PREVIEW_LIMIT) {
+                        val hiddenTracks = media.tracks.size - SPOTIFY_TRACK_PREVIEW_LIMIT
                         Text(
-                            text = "+ ${media.tracks.size - SPOTIFY_TRACK_PREVIEW_LIMIT} faixas",
+                            text = pluralStringResource(
+                                R.plurals.home_spotify_more_tracks,
+                                hiddenTracks,
+                                hiddenTracks,
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -310,7 +330,7 @@ private fun SpotifyCard(
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
                     Spacer(Modifier.size(10.dp))
-                    Text("Adicionando à fila…")
+                    Text(stringResource(R.string.home_action_queued))
                 } else {
                     Icon(
                         imageVector = Icons.Rounded.CloudDownload,
@@ -320,17 +340,16 @@ private fun SpotifyCard(
                     Spacer(Modifier.size(9.dp))
                     Text(
                         if (media.tracks.size > 1) {
-                            "Baixar faixas pelo YouTube"
+                            stringResource(R.string.home_spotify_download_tracks)
                         } else {
-                            "Baixar áudio pelo YouTube"
+                            stringResource(R.string.home_spotify_download_audio)
                         },
                     )
                 }
             }
 
             Text(
-                text = "O download do áudio protegido pelo Spotify não é possível; " +
-                    "cada faixa é localizada por uma busca no YouTube.",
+                text = stringResource(R.string.home_spotify_notice),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -392,16 +411,16 @@ private fun UrlInputCard(
     SectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             SectionTitle(
-                title = "Link da mídia",
-                supportingText = "Links recebidos pelo menu Compartilhar aparecem aqui.",
+                title = stringResource(R.string.home_url_title),
+                supportingText = stringResource(R.string.home_url_supporting),
                 icon = Icons.Rounded.Link,
             )
             OutlinedTextField(
                 value = state.url,
                 onValueChange = { onAction(MobileUiAction.UrlChanged(it)) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("URL do vídeo, áudio ou playlist") },
-                placeholder = { Text("https://…") },
+                label = { Text(stringResource(R.string.home_url_label)) },
+                placeholder = { Text("https://â€¦") },
                 leadingIcon = {
                     Icon(imageVector = Icons.Rounded.Link, contentDescription = null)
                 },
@@ -440,7 +459,7 @@ private fun UrlInputCard(
                         modifier = Modifier.size(19.dp),
                     )
                     Spacer(Modifier.size(8.dp))
-                    Text("Colar")
+                    Text(stringResource(R.string.action_paste))
                 }
                 Button(
                     onClick = { onAction(MobileUiAction.AnalyzeUrl) },
@@ -456,7 +475,7 @@ private fun UrlInputCard(
                             color = MaterialTheme.colorScheme.onPrimary,
                         )
                         Spacer(Modifier.size(8.dp))
-                        Text("Analisando…")
+                        Text(stringResource(R.string.home_action_analyzing))
                     } else {
                         Icon(
                             imageVector = Icons.Rounded.Search,
@@ -464,8 +483,42 @@ private fun UrlInputCard(
                             modifier = Modifier.size(20.dp),
                         )
                         Spacer(Modifier.size(8.dp))
-                        Text("Analisar")
+                        Text(stringResource(R.string.home_action_analyze))
                     }
+                }
+            }
+
+            if (state.batchCount > 1) {
+                InfoBanner(
+                    text = pluralStringResource(
+                        R.plurals.home_batch_hint,
+                        state.batchCount,
+                        state.batchCount,
+                    ),
+                    icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Button(
+                    onClick = { onAction(MobileUiAction.EnqueueUrlBatch) },
+                    enabled = state.canEnqueueBatch,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 50.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        pluralStringResource(
+                            R.plurals.home_action_enqueue_batch,
+                            state.batchCount,
+                            state.batchCount,
+                        ),
+                    )
                 }
             }
         }
@@ -513,7 +566,7 @@ private fun PreviewCard(
                         verticalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
                         Text(
-                            text = "PRÉVIA ENCONTRADA",
+                            text = stringResource(R.string.home_preview_found),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
@@ -527,23 +580,24 @@ private fun PreviewCard(
                         )
                     }
                     TextButton(onClick = onClear) {
-                        Text("Trocar")
+                        Text(stringResource(R.string.home_action_switch))
                     }
+                }
+                val playlistMetadata = if (preview.isPlaylist) {
+                    preview.playlistItemCount?.let { count ->
+                        pluralStringResource(R.plurals.home_preview_items, count, count)
+                    } ?: stringResource(R.string.home_preview_playlist)
+                } else {
+                    null
                 }
                 val metadata = buildList {
                     preview.creator?.takeIf { it.isNotBlank() }?.let(::add)
                     preview.durationText?.takeIf { it.isNotBlank() }?.let(::add)
-                    if (preview.isPlaylist) {
-                        add(
-                            preview.playlistItemCount?.let { count ->
-                                "$count ${if (count == 1) "item" else "itens"}"
-                            } ?: "Playlist",
-                        )
-                    }
+                    playlistMetadata?.let(::add)
                 }
                 if (metadata.isNotEmpty()) {
                     Text(
-                        text = metadata.joinToString("  •  "),
+                        text = metadata.joinToString("  â€¢  "),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -562,17 +616,17 @@ private fun AudioEffectsCard(
     SectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
             SectionTitle(
-                title = "Ouça com efeitos",
+                title = stringResource(R.string.home_audio_title),
                 supportingText = if (state.canTogglePreviewVideo) {
-                    "Ajuste tom, velocidade, volume, graves, eco, tremolo e normalização, e toque as prévias antes de baixar."
+                    stringResource(R.string.home_audio_supporting_video)
                 } else {
-                    "Ajuste tom, velocidade, volume, graves, eco, tremolo e normalização, e toque até 30 s antes de baixar."
+                    stringResource(R.string.home_audio_supporting_audio)
                 },
                 icon = Icons.Rounded.Tune,
             )
 
             EffectSlider(
-                title = "Velocidade",
+                title = stringResource(R.string.home_audio_speed),
                 valueText = formatSpeed(state.audioSpeed),
                 value = state.audioSpeed,
                 valueRange = 0.5f..2.0f,
@@ -582,7 +636,7 @@ private fun AudioEffectsCard(
             )
 
             EffectSlider(
-                title = "Tom",
+                title = stringResource(R.string.home_audio_pitch),
                 valueText = formatSemitones(state.audioPitchSemitones),
                 value = state.audioPitchSemitones,
                 valueRange = -12f..12f,
@@ -592,7 +646,7 @@ private fun AudioEffectsCard(
             )
 
             EffectSlider(
-                title = "Volume",
+                title = stringResource(R.string.home_audio_volume),
                 valueText = formatVolume(state.audioVolumePercent),
                 value = state.audioVolumePercent.toFloat(),
                 valueRange = 5f..200f,
@@ -602,8 +656,8 @@ private fun AudioEffectsCard(
             )
 
             EffectToggle(
-                title = "Graves reforçados",
-                supportingText = "+6 dB em 100 Hz",
+                title = stringResource(R.string.home_audio_bass),
+                supportingText = stringResource(R.string.home_audio_bass_supporting),
                 checked = state.audioBass,
                 enabled = !state.audioPreviewActive,
                 icon = Icons.Rounded.GraphicEq,
@@ -611,8 +665,8 @@ private fun AudioEffectsCard(
             )
 
             EffectToggle(
-                title = "Eco",
-                supportingText = "Decaimento suave de 300 ms",
+                title = stringResource(R.string.home_audio_echo),
+                supportingText = stringResource(R.string.home_audio_echo_supporting),
                 checked = state.audioEcho,
                 enabled = !state.audioPreviewActive,
                 icon = Icons.Rounded.Repeat,
@@ -620,8 +674,8 @@ private fun AudioEffectsCard(
             )
 
             EffectToggle(
-                title = "Tremolo",
-                supportingText = "Oscilação de 5 Hz",
+                title = stringResource(R.string.home_audio_tremolo),
+                supportingText = stringResource(R.string.home_audio_tremolo_supporting),
                 checked = state.audioTremolo,
                 enabled = !state.audioPreviewActive,
                 icon = Icons.Rounded.GraphicEq,
@@ -629,8 +683,8 @@ private fun AudioEffectsCard(
             )
 
             EffectToggle(
-                title = "Normalização",
-                supportingText = "Loudness uniforme (EBU R128)",
+                title = stringResource(R.string.home_audio_normalize),
+                supportingText = stringResource(R.string.home_audio_normalize_supporting),
                 checked = state.audioNormalize,
                 enabled = !state.audioPreviewActive,
                 icon = Icons.AutoMirrored.Rounded.VolumeUp,
@@ -661,7 +715,7 @@ private fun AudioEffectsCard(
                             modifier = Modifier.size(18.dp),
                         )
                         Spacer(Modifier.size(6.dp))
-                        Text("Restaurar padrão")
+                        Text(stringResource(R.string.action_restore_default))
                     }
                 }
             }
@@ -680,7 +734,7 @@ private fun AudioEffectsCard(
                             strokeWidth = 2.dp,
                         )
                         Spacer(Modifier.size(8.dp))
-                        Text("Gerando prévia…")
+                        Text(stringResource(R.string.home_audio_rendering_preview))
                     }
                 }
 
@@ -714,7 +768,7 @@ private fun AudioEffectsCard(
                                 modifier = Modifier.size(20.dp),
                             )
                             Spacer(Modifier.size(8.dp))
-                            Text("Parar prévia")
+                            Text(stringResource(R.string.home_audio_stop_preview))
                         }
                     }
                 }
@@ -735,9 +789,9 @@ private fun AudioEffectsCard(
                         Spacer(Modifier.size(8.dp))
                         Text(
                             if (state.canTogglePreviewVideo && state.previewUsesVideo) {
-                                "Pré-visualizar"
+                                stringResource(R.string.home_audio_preview)
                             } else {
-                                "Pré-visualizar áudio"
+                                stringResource(R.string.home_audio_preview_audio)
                             },
                         )
                     }
@@ -769,13 +823,13 @@ private fun TrimAndFadeCard(
     SectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
             SectionTitle(
-                title = "Recorte e fades",
-                supportingText = "Comece a mídia em outro trecho e suavize as bordas do trecho salvo.",
+                title = stringResource(R.string.home_trim_title),
+                supportingText = stringResource(R.string.home_trim_supporting),
                 icon = Icons.Rounded.ContentCut,
             )
 
             EffectSlider(
-                title = "Início do recorte",
+                title = stringResource(R.string.home_trim_start),
                 valueText = formatTrimSeconds(state.trimStartSeconds),
                 value = state.trimStartSeconds.coerceIn(0f, maxSeconds),
                 valueRange = 0f..maxSeconds,
@@ -785,10 +839,10 @@ private fun TrimAndFadeCard(
             )
 
             SwitchOption(
-                title = "Recorte até o fim",
+                title = stringResource(R.string.home_trim_until_end),
                 supportingText = when (state.trimDurationSeconds) {
-                    null -> "O trecho segue até o final da mídia"
-                    else -> "Interrompe o trecho na duração escolhida"
+                    null -> stringResource(R.string.home_trim_until_end_supporting)
+                    else -> stringResource(R.string.home_trim_duration_supporting)
                 },
                 checked = state.trimDurationSeconds == null,
                 icon = Icons.Rounded.HighlightOff,
@@ -807,7 +861,7 @@ private fun TrimAndFadeCard(
 
             state.trimDurationSeconds?.let { duration ->
                 EffectSlider(
-                    title = "Duração do trecho",
+                    title = stringResource(R.string.home_trim_duration),
                     valueText = formatTrimSeconds(duration),
                     value = duration.coerceIn(MIN_SEGMENT_SECONDS, maxSeconds),
                     valueRange = MIN_SEGMENT_SECONDS..maxSeconds,
@@ -818,7 +872,7 @@ private fun TrimAndFadeCard(
             }
 
             EffectSlider(
-                title = "Fade de entrada",
+                title = stringResource(R.string.home_trim_fade_in),
                 valueText = formatTrimSeconds(state.fadeInSeconds),
                 value = state.fadeInSeconds.coerceIn(0f, MAX_FADE_SLIDER_SECONDS),
                 valueRange = 0f..MAX_FADE_SLIDER_SECONDS,
@@ -828,7 +882,7 @@ private fun TrimAndFadeCard(
             )
 
             EffectSlider(
-                title = "Fade de saída",
+                title = stringResource(R.string.home_trim_fade_out),
                 valueText = formatTrimSeconds(state.fadeOutSeconds),
                 value = state.fadeOutSeconds.coerceIn(0f, MAX_FADE_SLIDER_SECONDS),
                 valueRange = 0f..MAX_FADE_SLIDER_SECONDS,
@@ -885,8 +939,8 @@ private fun PlaylistSelectionCard(
     SectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SectionTitle(
-                title = "Itens da playlist",
-                supportingText = "Escolha quais músicas ou vídeos entrarão na fila.",
+                title = stringResource(R.string.home_playlist_title),
+                supportingText = stringResource(R.string.home_playlist_supporting),
                 icon = Icons.AutoMirrored.Rounded.PlaylistPlay,
             )
 
@@ -901,7 +955,7 @@ private fun PlaylistSelectionCard(
                         .weight(1f)
                         .heightIn(min = 44.dp),
                 ) {
-                    Text("Selecionar tudo")
+                    Text(stringResource(R.string.home_playlist_select_all))
                 }
                 FilledTonalButton(
                     onClick = { onAction(MobileUiAction.SelectAllPlaylistItems(false)) },
@@ -910,7 +964,7 @@ private fun PlaylistSelectionCard(
                         .weight(1f)
                         .heightIn(min = 44.dp),
                 ) {
-                    Text("Limpar seleção")
+                    Text(stringResource(R.string.home_playlist_clear_selection))
                 }
             }
 
@@ -982,6 +1036,7 @@ private fun PlaylistSelectionCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DownloadOptionsCard(
     state: HomeUiState,
@@ -1000,13 +1055,16 @@ private fun DownloadOptionsCard(
     SectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
             SectionTitle(
-                title = "Personalize o arquivo",
-                supportingText = "Escolha tipo, qualidade e formato antes de baixar.",
+                title = stringResource(R.string.home_options_title),
+                supportingText = stringResource(R.string.home_options_supporting),
                 icon = Icons.Rounded.Tune,
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text("Tipo de mídia", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    stringResource(R.string.home_options_media_type),
+                    style = MaterialTheme.typography.labelLarge,
+                )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1030,14 +1088,14 @@ private fun DownloadOptionsCard(
             }
 
             ChoiceSelector(
-                title = "Qualidade",
+                title = stringResource(R.string.home_options_quality),
                 choices = qualities,
                 selectedId = state.selectedQualityId,
                 onSelect = { onAction(MobileUiAction.SelectQuality(it)) },
             )
 
             ChoiceSelector(
-                title = "Formato",
+                title = stringResource(R.string.home_options_format),
                 choices = formats,
                 selectedId = state.selectedFormatId,
                 onSelect = { onAction(MobileUiAction.SelectFormat(it)) },
@@ -1045,21 +1103,71 @@ private fun DownloadOptionsCard(
 
             if (preview.supportsSubtitles && state.selectedKind == MediaKind.VIDEO) {
                 SwitchOption(
-                    title = "Incluir legendas",
-                    supportingText = "Quando disponíveis no idioma original",
+                    title = stringResource(R.string.home_options_subtitles),
+                    supportingText = if (state.subtitleLanguages.isEmpty()) {
+                        stringResource(R.string.home_options_subtitles_supporting)
+                    } else {
+                        pluralStringResource(
+                            R.plurals.home_options_subtitles_languages,
+                            state.subtitleLanguages.size,
+                            state.subtitleLanguages.size,
+                        )
+                    },
                     checked = state.includeSubtitles,
                     icon = Icons.Rounded.ClosedCaption,
                     onCheckedChange = { onAction(MobileUiAction.SetIncludeSubtitles(it)) },
                 )
+                if (state.subtitleLanguages.isNotEmpty()) {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        state.subtitleLanguages.forEach { language ->
+                            FilterChip(
+                                selected = language in state.selectedSubtitleLanguages,
+                                onClick = { onAction(MobileUiAction.ToggleSubtitleLanguage(language)) },
+                                label = { Text(language) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.ClosedCaption,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(17.dp),
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
             }
 
             if (state.selectedKind == MediaKind.VIDEO) {
                 SwitchOption(
-                    title = "Compatível com editores",
-                    supportingText = "H.264/AAC .mp4 com moov no início (Premiere, DaVinci, CapCut)",
+                    title = stringResource(R.string.home_options_editor_compatible),
+                    supportingText = stringResource(R.string.home_options_editor_compatible_supporting),
                     checked = state.editorCompatible,
                     icon = Icons.Rounded.Videocam,
                     onCheckedChange = { onAction(MobileUiAction.ToggleEditorCompatibility(it)) },
+                )
+            }
+
+            if (state.embedMetadataSupported) {
+                SwitchOption(
+                    title = stringResource(R.string.home_options_metadata),
+                    supportingText = stringResource(R.string.home_options_metadata_supporting),
+                    checked = state.embedMetadata,
+                    icon = Icons.AutoMirrored.Rounded.Label,
+                    onCheckedChange = { onAction(MobileUiAction.SetEmbedMetadata(it)) },
+                )
+            }
+
+            if (state.selectedKind == MediaKind.AUDIO) {
+                SwitchOption(
+                    title = stringResource(R.string.home_options_thumbnail),
+                    supportingText = stringResource(R.string.home_options_thumbnail_supporting),
+                    checked = state.embedThumbnail,
+                    icon = Icons.Rounded.Image,
+                    onCheckedChange = { onAction(MobileUiAction.SetEmbedThumbnail(it)) },
                 )
             }
 
@@ -1067,10 +1175,10 @@ private fun DownloadOptionsCard(
                 value = state.itemRateLimitText,
                 onValueChange = { onAction(MobileUiAction.SetItemRateLimitText(it)) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Limite de velocidade por item (KiB/s)") },
-                placeholder = { Text("Vazio = sem limite") },
+                label = { Text(stringResource(R.string.home_options_rate_limit_label)) },
+                placeholder = { Text(stringResource(R.string.home_options_rate_limit_placeholder)) },
                 supportingText = {
-                    Text("Aplica-se a este item, os parâmetros em segundo plano ficam intactos.")
+                    Text(stringResource(R.string.home_options_rate_limit_supporting))
                 },
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Number,
@@ -1133,12 +1241,12 @@ private fun MediaKindOption(
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = kind.label,
+                    text = stringResource(kind.labelRes),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = kind.supportingText,
+                    text = stringResource(kind.supportingTextRes),
                     style = MaterialTheme.typography.labelSmall,
                     color = content.copy(alpha = 0.76f),
                 )
@@ -1154,7 +1262,7 @@ private fun PreviewVideoModeSelector(
     onSelect: (Boolean) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-        Text("Conteúdo da prévia", style = MaterialTheme.typography.labelLarge)
+        Text(stringResource(R.string.home_preview_content), style = MaterialTheme.typography.labelLarge)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1162,8 +1270,8 @@ private fun PreviewVideoModeSelector(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             PreviewVideoModeOption(
-                label = "Com vídeo",
-                supportingText = "Trecho curto com imagem",
+                label = stringResource(R.string.home_preview_with_video),
+                supportingText = stringResource(R.string.home_preview_with_video_supporting),
                 icon = Icons.Rounded.Videocam,
                 selected = usesVideo,
                 enabled = enabled,
@@ -1171,8 +1279,8 @@ private fun PreviewVideoModeSelector(
                 modifier = Modifier.weight(1f),
             )
             PreviewVideoModeOption(
-                label = "Somente áudio",
-                supportingText = "Uma captura do som",
+                label = stringResource(R.string.home_preview_audio_only),
+                supportingText = stringResource(R.string.home_preview_audio_only_supporting),
                 icon = Icons.Rounded.Headphones,
                 selected = !usesVideo,
                 enabled = enabled,
@@ -1260,7 +1368,7 @@ private fun ChoiceSelector(
         Text(title, style = MaterialTheme.typography.labelLarge)
         if (choices.isEmpty()) {
             Text(
-                text = "Nenhuma opção disponível.",
+                text = stringResource(R.string.home_options_no_choices),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1284,7 +1392,7 @@ private fun ChoiceSelector(
                         label = {
                             Text(
                                 if (choice.recommended) {
-                                    "${choice.label} · recomendado"
+                                    stringResource(R.string.home_options_recommended, choice.label)
                                 } else {
                                     choice.label
                                 },
@@ -1413,27 +1521,40 @@ private fun SwitchOption(
     }
 }
 
+@Composable
 private fun formatSpeed(value: Float): String {
     val text = String.format(Locale.US, "%.2f", value)
         .trimEnd('0')
         .trimEnd('.')
         .replace('.', ',')
-    return "${text}x"
+    return stringResource(R.string.home_audio_speed_value, text)
 }
 
+@Composable
 private fun formatSemitones(value: Float): String =
     if (value == 0f) {
-        "0 st (normal)"
+        stringResource(R.string.home_audio_pitch_normal)
     } else {
-        String.format(Locale.US, "%+.0f st", value)
+        val signed = String.format(Locale.US, "%+.0f", value)
+        pluralStringResource(
+            R.plurals.home_audio_semitones,
+            abs(value.toInt()),
+            signed,
+        )
     }
 
-private fun formatVolume(percent: Int): String = "$percent%"
+@Composable
+private fun formatVolume(percent: Int): String =
+    stringResource(R.string.home_audio_volume_value, percent)
 
-private fun formatTrimSeconds(value: Float): String = when {
-    value <= 0.05f -> "0 s"
-    value < 10f -> String.format(Locale.US, "%.1f", value).replace('.', ',') + " s"
-    else -> String.format(Locale.US, "%.0f", value).replace('.', ',') + " s"
+@Composable
+private fun formatTrimSeconds(value: Float): String {
+    val seconds = when {
+        value <= 0.05f -> "0"
+        value < 10f -> String.format(Locale.US, "%.1f", value).replace('.', ',')
+        else -> String.format(Locale.US, "%.0f", value).replace('.', ',')
+    }
+    return stringResource(R.string.home_seconds_value, seconds)
 }
 
 private const val MIN_SEGMENT_SECONDS = 1f

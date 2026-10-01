@@ -396,6 +396,29 @@ def build_audio_filters(
     return ",".join(filters)
 
 
+def build_fade_filters(
+    fade_in: float = 0.0,
+    fade_out: float = 0.0,
+    segment_seconds: float = 0.0,
+) -> str | None:
+    """Build the ``-af`` fades for the part of the file that will be kept.
+
+    ``segment_seconds`` is the length of the kept segment *after* any speed
+    change, so the fade-out starts where the user will actually hear silence.
+    Returns ``None`` when no fade applies or the segment is too short for it.
+    """
+    parts: list[str] = []
+    fade_in = max(0.0, float(fade_in or 0.0))
+    fade_out = max(0.0, float(fade_out or 0.0))
+    if fade_in > 0:
+        parts.append(f"afade=t=in:st=0:d={fade_in:g}")
+    if fade_out > 0 and segment_seconds > fade_out:
+        parts.append(
+            f"afade=t=out:st={max(0.0, segment_seconds - fade_out):.3f}:d={fade_out:g}"
+        )
+    return ",".join(parts) if parts else None
+
+
 # ── Shared controller ──────────────────────────────────────────────────────────
 
 def _effects_equal(first: AudioEffects, second: AudioEffects) -> bool:

@@ -19,6 +19,7 @@ import com.mediadownloader.mobile.data.PlaylistEntry
 import com.mediadownloader.mobile.data.StorageCategory
 import com.mediadownloader.mobile.data.VideoContainer
 import com.mediadownloader.mobile.preview.PreviewRenderer
+import com.mediadownloader.mobile.update.YtDlpBundledSeeder
 import com.mediadownloader.mobile.update.YtDlpRuntimeGate
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
@@ -59,6 +60,7 @@ class AndroidDownloadEngine(context: Context) {
     private val effectProcessor = PreviewRenderer(appContext)
     private val initializationMutex = Mutex()
     private val cancelledProcesses = ConcurrentHashMap.newKeySet<String>()
+    private val pausedProcesses = ConcurrentHashMap.newKeySet<String>()
 
     @Volatile
     private var initialized = false
@@ -91,8 +93,10 @@ class AndroidDownloadEngine(context: Context) {
         checkCancelled(item.id)
 
         val stagingDirectory = stagingDirectoryFor(item.id)
-        resetStagingDirectory(stagingDirectory)
-        val request = buildDownloadRequest(item, stagingDirectory)
+        // A paused item keeps its staging directory so the next attempt continues.
+        val resuming = item.keepPartialFiles && stagingDirectory.isDirectory
+        if (resuming) ensureStagingDirectory(stagingDirectory) else resetStagingDirectory(stagingDirectory)
+        val request = buildDownloadRequest(item, stagingDirectory, resume = resuming)
 
         try {
             val response = try {
@@ -152,19 +156,38 @@ class AndroidDownloadEngine(context: Context) {
             }
             DownloadResult(files = published, commandOutput = response.out)
         } finally {
-            stagingDirectory.deleteRecursively()
+            // A paused run keeps its staging directory so a resume continues;
+            // the flag is cleared by prepare() on the next attempt.
+            if (!pausedProcesses.contains(item.id)) {
+                stagingDirectory.deleteRecursively()
+            }
             cancelledProcesses.remove(item.id)
         }
     }
 
     fun cancel(processId: String): Boolean {
         cancelledProcesses += processId
+        // A cancel must win over a previous pause: the partial file is then discarded.
+        pausedProcesses.remove(processId)
         effectProcessor.cancel()
         return YoutubeDL.getInstance().destroyProcessById(processId)
     }
 
+    /**
+     * Stops the item but keeps what was already downloaded, so resuming picks
+     * up from the same point instead of starting over.
+     */
+    fun pause(processId: String): Boolean {
+        pausedProcesses += processId
+        return cancel(processId)
+    }
+
+    /** True when the run was stopped by [pause] instead of a plain cancel. */
+    fun wasPaused(processId: String): Boolean = pausedProcesses.contains(processId)
+
     fun prepare(processId: String) {
         cancelledProcesses.remove(processId)
+        pausedProcesses.remove(processId)
     }
 
     suspend fun initialize() = withContext(Dispatchers.IO) {
@@ -177,6 +200,7 @@ class AndroidDownloadEngine(context: Context) {
         initializationMutex.withLock {
             if (initialized) return
             YtDlpRuntimeGate.withWriteLock {
+                YtDlpBundledSeeder.stageIfNewer(appContext)
                 YoutubeDL.getInstance().init(appContext)
                 FFmpeg.getInstance().init(appContext)
             }
@@ -184,7 +208,11 @@ class AndroidDownloadEngine(context: Context) {
         }
     }
 
-    private fun buildDownloadRequest(item: DownloadItem, stagingDirectory: File): YoutubeDLRequest {
+    private fun buildDownloadRequest(
+        item: DownloadItem,
+        stagingDirectory: File,
+        resume: Boolean = false,
+    ): YoutubeDLRequest {
         val template = FileNameTemplates.resolved(networkSettings.fileNameTemplate)
         val outputTemplate = File(stagingDirectory, template).absolutePath
         return YoutubeDLRequest(item.sourceUrl).apply {
@@ -193,6 +221,7 @@ class AndroidDownloadEngine(context: Context) {
             addOption("--trim-filenames", 180)
             addOption("--output", outputTemplate)
             addOption(if (item.options.downloadPlaylist) "--yes-playlist" else "--no-playlist")
+            if (resume) addOption("--continue")
             addCookieFileFor(item.sourceUrl)
             addNetworkOptions()
             addItemRateLimit(item)
@@ -211,6 +240,8 @@ class AndroidDownloadEngine(context: Context) {
         val profile = cookieProfilesStore.resolveForUrl(url) ?: return
         cookieProfilesStore.fileFor(profile.id)?.absolutePath
             ?.let { path -> addOption("--cookiefile", path) }
+        profile.impersonate
+            ?.let { client -> addOption("--impersonate", client) }
     }
 
     /** Applies the proxy and the download speed cap from the persistent settings. */
@@ -238,8 +269,7 @@ class AndroidDownloadEngine(context: Context) {
                 addOption("--extract-audio")
                 addOption("--audio-format", options.audioFormat.extension)
                 addOption("--audio-quality", "${options.audioBitrateKbps}K")
-                addOption("--embed-thumbnail")
-                addOption("--add-metadata")
+                if (options.embedThumbnail) addOption("--embed-thumbnail")
             }
 
             MediaType.VIDEO -> {
@@ -257,9 +287,10 @@ class AndroidDownloadEngine(context: Context) {
                         "ffmpeg:-c copy -movflags +faststart",
                     )
                 }
-                addOption("--add-metadata")
             }
         }
+        // WAV is a raw stream and silently discards whatever the taggers write.
+        if (options.embedMetadata && options.tagsSupported) addOption("--add-metadata")
     }
 
     private fun videoSelector(options: DownloadOptions): String {
@@ -408,8 +439,21 @@ class AndroidDownloadEngine(context: Context) {
             playlistItems = playlistItems,
             formats = formats,
             supportsSubtitles = manualSubtitleLangs > 0 || autoSubtitleLangs > 0 || isPlaylist,
+            subtitleLanguages = availableSubtitleLanguages(json),
         )
     }
+
+    /**
+     * Lists the caption languages for this media, manual first so a manual track wins
+     * over the automatic one when both exist for the same language.
+     */
+    private fun availableSubtitleLanguages(json: JSONObject): List<String> =
+        listOfNotNull(
+            json.optJSONObject("subtitles"),
+            json.optJSONObject("automatic_captions"),
+        ).flatMap { it.keys().asSequence().toList() }
+            .filter { it.isNotBlank() }
+            .distinct()
 
     private fun extractJsonObject(output: String): JSONObject {
         val trimmed = output.trim()
@@ -471,18 +515,53 @@ class AndroidDownloadEngine(context: Context) {
         "mp4", "mkv", "webm", "mov", "avi", "mp3", "m4a", "opus", "ogg", "flac", "wav",
     )
 
-    private fun stagingDirectoryFor(id: String): File {
+    fun temporaryStagingRoot(): File = stagingBase()
+
+    /** Total bytes currently held by temporary staging files (debris + active). */
+    fun temporaryBytes(): Long {
+        val root = stagingBase()
+        if (!root.isDirectory) return 0
+        return root.walkTopDown().filter(File::isFile).sumOf(File::length)
+    }
+
+    /** Deletes leftover partial/debris files and empty staging folders. */
+    fun clearTemporaryFiles(): Long {
+        val root = stagingBase()
+        if (!root.isDirectory) return 0
+        val debrisSuffixes = setOf("part", "ytdl", "temp", "tmp")
+        var freed = 0L
+        root.walkTopDown().forEach { file ->
+            if (file.isFile && file.extension.lowercase() in debrisSuffixes) {
+                freed += file.length()
+                file.delete()
+            }
+        }
+        root.walkBottomUp().forEach { dir ->
+            if (dir.isDirectory && dir.listFiles().orEmpty().isEmpty()) dir.delete()
+        }
+        return freed
+    }
+
+    private fun stagingBase(): File {
         val externalBase = appContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
             ?: appContext.filesDir
+        return File(externalBase, "staging")
+    }
+
+    private fun stagingDirectoryFor(id: String): File {
         val safeId = id.replace(Regex("[^A-Za-z0-9._-]"), "_")
-        return File(File(externalBase, "staging"), safeId)
+        return File(stagingBase(), safeId)
     }
 
     private fun resetStagingDirectory(directory: File) {
         if (directory.exists() && !directory.deleteRecursively()) {
             throw IOException("Não foi possível limpar a área temporária")
         }
-        if (!directory.mkdirs() && !directory.isDirectory) {
+        ensureStagingDirectory(directory)
+    }
+
+    private fun ensureStagingDirectory(directory: File) {
+        if (!directory.exists() && !directory.mkdirs() && !directory.isDirectory) {
             throw IOException("Não foi possível criar a área temporária")
         }
     }

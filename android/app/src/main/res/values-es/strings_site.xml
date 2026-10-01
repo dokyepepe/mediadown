@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="site_cancel_downloads">Cancelar descargas</string>
+    <string name="site_clear_selection">Limpiar</string>
+    <plurals name="site_count_images">
+        <item quantity="one">%1$d imagen</item>
+        <item quantity="many">%1$d imágenes</item>
+        <item quantity="other">%1$d imágenes</item>
+    </plurals>
+    <plurals name="site_count_pdfs">
+        <item quantity="one">%1$d PDF</item>
+        <item quantity="many">%1$d PDFs</item>
+        <item quantity="other">%1$d PDFs</item>
+    </plurals>
+    <plurals name="site_download_selected">
+        <item quantity="one">Descargar %1$d archivo</item>
+        <item quantity="many">Descargar %1$d archivos</item>
+        <item quantity="other">Descargar %1$d archivos</item>
+    </plurals>
+    <string name="site_empty_no_files_supporting">Algunos sitios crean su contenido solo con JavaScript o requieren iniciar sesión.</string>
+    <string name="site_empty_no_files_title">No se encontraron archivos públicos</string>
+    <string name="site_empty_ready_supporting">Funciona con PDFs enlazados o incrustados, imágenes adaptables y URLs directas.</string>
+    <string name="site_empty_ready_title">Listo para investigar</string>
+    <string name="site_heading_eyebrow">PDFs e imágenes</string>
+    <string name="site_heading_supporting">Analiza una página, elige los archivos encontrados y guárdalos en Descargas.</string>
+    <string name="site_heading_title">Archivos del sitio</string>
+    <string name="site_include_images">Imágenes</string>
+    <string name="site_include_pdfs">PDFs</string>
+    <string name="site_open_file">Abrir archivo</string>
+    <string name="site_scan_button">Analizar</string>
+    <string name="site_scan_supporting">El vídeo y el audio quedan en el flujo de Inicio; aquí solo entran documentos e imágenes.</string>
+    <string name="site_scan_title">Página para analizar</string>
+    <string name="site_scanning">Analizando…</string>
+    <string name="site_select_all">Seleccionar todo</string>
+    <string name="site_url_label">URL del sitio</string>
+    <string name="site_url_placeholder">https://sitio.com/documentos</string>
+</resources>

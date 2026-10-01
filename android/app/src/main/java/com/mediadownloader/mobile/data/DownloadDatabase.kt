@@ -64,6 +64,33 @@ internal class DownloadDatabase(context: Context) :
                 "ALTER TABLE downloads ADD COLUMN rate_limit_kbps INTEGER NOT NULL DEFAULT 0",
             )
         }
+        if (oldVersion < 6) {
+            db.execSQL(
+                "ALTER TABLE downloads ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
+            )
+            db.execSQL(
+                "ALTER TABLE downloads ADD COLUMN keep_partial_files INTEGER NOT NULL DEFAULT 0",
+            )
+            // Assigns a stable manual position to the rows created before the column existed.
+            db.execSQL(
+                """
+                UPDATE downloads SET sort_order = (
+                    SELECT COUNT(*) FROM downloads AS older
+                    WHERE older.created_at < downloads.created_at
+                       OR (older.created_at = downloads.created_at AND older.id < downloads.id)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_downloads_state_order ON downloads(state, sort_order)")
+        }
+        if (oldVersion < 7) {
+            db.execSQL(
+                "ALTER TABLE downloads ADD COLUMN embed_metadata INTEGER NOT NULL DEFAULT 1",
+            )
+            db.execSQL(
+                "ALTER TABLE downloads ADD COLUMN embed_thumbnail INTEGER NOT NULL DEFAULT 1",
+            )
+        }
     }
 
     fun upsertDownload(item: DownloadItem) {
@@ -93,9 +120,15 @@ internal class DownloadDatabase(context: Context) :
         arrayOf(DownloadState.QUEUED.name),
         null,
         null,
-        "created_at ASC",
+        "sort_order ASC, created_at ASC",
         "1",
     ).use { cursor -> if (cursor.moveToFirst()) cursor.toDownloadItem() else null }
+
+    /** Highest manual position currently in use, so new items land at the end. */
+    fun maxSortOrder(): Int = readableDatabase.rawQuery(
+        "SELECT IFNULL(MAX(sort_order), 0) FROM downloads",
+        null,
+    ).use { cursor -> if (cursor.moveToFirst()) cursor.getInt(0) else 0 }
 
     fun loadDownloads(): List<DownloadItem> = readableDatabase.query(
         "downloads",
@@ -104,11 +137,23 @@ internal class DownloadDatabase(context: Context) :
         null,
         null,
         null,
-        "created_at DESC",
+        // The queue is shown in manual order; everything else stays by recency.
+        "CASE WHEN state = 'QUEUED' THEN 0 ELSE 1 END ASC, " +
+            "CASE WHEN state = 'QUEUED' THEN sort_order ELSE 0 END ASC, " +
+            "created_at DESC",
     ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toDownloadItem()) } }
 
     fun deleteDownload(id: String) {
         writableDatabase.delete("downloads", "id = ?", arrayOf(id))
+    }
+
+    fun updateSortOrder(id: String, sortOrder: Int) {
+        writableDatabase.update(
+            "downloads",
+            ContentValues().apply { put("sort_order", sortOrder) },
+            "id = ?",
+            arrayOf(id),
+        )
     }
 
     fun deleteFinishedDownloads() {
@@ -146,6 +191,12 @@ internal class DownloadDatabase(context: Context) :
         writableDatabase.delete("history", "id = ?", arrayOf(id))
     }
 
+    fun deleteHistory(ids: Set<String>) {
+        if (ids.isEmpty()) return
+        val placeholders = ids.joinToString(",") { "?" }
+        writableDatabase.delete("history", "id IN ($placeholders)", ids.toTypedArray())
+    }
+
     fun clearHistory() {
         writableDatabase.delete("history", null, null)
     }
@@ -167,6 +218,8 @@ internal class DownloadDatabase(context: Context) :
         put("download_playlist", options.downloadPlaylist.asInt())
         put("include_subtitles", options.includeSubtitles.asInt())
         put("subtitle_languages", options.subtitleLanguages.joinToString(LANGUAGE_SEPARATOR))
+        put("embed_metadata", options.embedMetadata.asInt())
+        put("embed_thumbnail", options.embedThumbnail.asInt())
         put("audio_speed", options.audioSpeed)
         put("audio_pitch_semitones", options.audioPitchSemitones)
         put("audio_volume_percent", options.audioVolumePercent)
@@ -191,6 +244,8 @@ internal class DownloadDatabase(context: Context) :
         put("created_at", createdAtEpochMs)
         put("updated_at", updatedAtEpochMs)
         putNullable("completed_at", completedAtEpochMs)
+        put("sort_order", sortOrder)
+        put("keep_partial_files", keepPartialFiles.asInt())
     }
 
     private fun HistoryItem.toValues() = ContentValues().apply {
@@ -221,6 +276,8 @@ internal class DownloadDatabase(context: Context) :
             subtitleLanguages = string("subtitle_languages")
                 .split(LANGUAGE_SEPARATOR)
                 .filter(String::isNotBlank),
+            embedMetadata = int("embed_metadata") != 0,
+            embedThumbnail = int("embed_thumbnail") != 0,
             audioSpeed = float("audio_speed").coerceIn(
                 AudioEffects.MIN_SPEED,
                 AudioEffects.MAX_SPEED,
@@ -263,6 +320,8 @@ internal class DownloadDatabase(context: Context) :
             createdAtEpochMs = long("created_at"),
             updatedAtEpochMs = long("updated_at"),
             completedAtEpochMs = nullableLong("completed_at"),
+            sortOrder = int("sort_order"),
+            keepPartialFiles = int("keep_partial_files") != 0,
         )
     }
 
@@ -316,7 +375,7 @@ internal class DownloadDatabase(context: Context) :
 
     companion object {
         private const val DATABASE_NAME = "media_downloader.db"
-        private const val DATABASE_VERSION = 5
+        private const val DATABASE_VERSION = 7
         private const val LANGUAGE_SEPARATOR = "\u001F"
 
         private const val CREATE_DOWNLOADS = """
@@ -337,6 +396,8 @@ internal class DownloadDatabase(context: Context) :
                 download_playlist INTEGER NOT NULL,
                 include_subtitles INTEGER NOT NULL,
                 subtitle_languages TEXT NOT NULL,
+                embed_metadata INTEGER NOT NULL DEFAULT 1,
+                embed_thumbnail INTEGER NOT NULL DEFAULT 1,
                 audio_speed REAL NOT NULL DEFAULT 1.0,
                 audio_pitch_semitones REAL NOT NULL DEFAULT 0.0,
                 audio_volume_percent INTEGER NOT NULL DEFAULT 100,
@@ -360,7 +421,9 @@ internal class DownloadDatabase(context: Context) :
                 retry_count INTEGER NOT NULL,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL,
-                completed_at INTEGER
+                completed_at INTEGER,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                keep_partial_files INTEGER NOT NULL DEFAULT 0
             )
         """
 

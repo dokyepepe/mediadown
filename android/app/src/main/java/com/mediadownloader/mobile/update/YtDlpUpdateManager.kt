@@ -1,6 +1,7 @@
 package com.mediadownloader.mobile.update
 
 import android.content.Context
+import androidx.core.content.edit
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import kotlinx.coroutines.Dispatchers
@@ -88,7 +89,7 @@ class YtDlpUpdateManager private constructor(context: Context) {
 
     fun consumeRecoveryNotice(): String? {
         val notice = preferences.getString(KEY_RECOVERY_NOTICE, null)
-        if (notice != null) preferences.edit().remove(KEY_RECOVERY_NOTICE).commit()
+        if (notice != null) preferences.edit { remove(KEY_RECOVERY_NOTICE) }
         return notice
     }
 
@@ -111,9 +112,9 @@ class YtDlpUpdateManager private constructor(context: Context) {
     suspend fun checkForUpdate(): YtDlpCheckResult = withContext(Dispatchers.IO) {
         val release = fetchStableRelease()
         cachedRelease = release
-        preferences.edit()
-            .putLong(KEY_LAST_CHECK_EPOCH_MS, System.currentTimeMillis())
-            .commit()
+        preferences.edit {
+            putLong(KEY_LAST_CHECK_EPOCH_MS, System.currentTimeMillis())
+        }
         val status = refreshStatusBlocking()
         val outcome = when (
             YtDlpUpdatePolicy.availability(
@@ -290,7 +291,7 @@ class YtDlpUpdateManager private constructor(context: Context) {
             val (restored, didRestore) = settleFailedTransactionLocked(prepared)
             if (didRestore) {
                 previousBinary.delete()
-                preferences.edit().remove(KEY_PREVIOUS_VERSION).commit()
+                preferences.edit { remove(KEY_PREVIOUS_VERSION) }
             }
             return YtDlpInstallResult(
                 outcome = if (didRestore) {
@@ -389,10 +390,10 @@ class YtDlpUpdateManager private constructor(context: Context) {
         prepareActiveDirectory()
         YtDlpArtifactIntegrity.atomicReplace(pendingBackup, activeBinary)
         val restored = smokeTestLocked(expectedVersion = journal.originalVersion)
-        preferences.edit()
-            .putString(KEY_CURRENT_VERSION, restored)
-            .putString(KEY_REJECTED_VERSION, journal.targetVersion)
-            .commit()
+        preferences.edit {
+            putString(KEY_CURRENT_VERSION, restored)
+            putString(KEY_REJECTED_VERSION, journal.targetVersion)
+        }
         clearTransactionFiles()
         return restored
     }
@@ -401,18 +402,18 @@ class YtDlpUpdateManager private constructor(context: Context) {
         if (pendingBackup.isFile) {
             YtDlpArtifactIntegrity.atomicReplace(pendingBackup, previousBinary)
         }
-        val editor = preferences.edit()
-            .putString(KEY_CURRENT_VERSION, installedVersion)
-            .putString(KEY_PREVIOUS_VERSION, journal.originalVersion)
-        if (journal.kind == YtDlpTransactionKind.MANUAL_ROLLBACK) {
-            editor.putString(KEY_REJECTED_VERSION, journal.originalVersion)
-        } else if (
-            YtDlpUpdatePolicy.normalizeVersion(preferences.getString(KEY_REJECTED_VERSION, null)) ==
-            YtDlpUpdatePolicy.normalizeVersion(installedVersion)
-        ) {
-            editor.remove(KEY_REJECTED_VERSION)
+        preferences.edit {
+            putString(KEY_CURRENT_VERSION, installedVersion)
+            putString(KEY_PREVIOUS_VERSION, journal.originalVersion)
+            if (journal.kind == YtDlpTransactionKind.MANUAL_ROLLBACK) {
+                putString(KEY_REJECTED_VERSION, journal.originalVersion)
+            } else if (
+                YtDlpUpdatePolicy.normalizeVersion(preferences.getString(KEY_REJECTED_VERSION, null)) ==
+                YtDlpUpdatePolicy.normalizeVersion(installedVersion)
+            ) {
+                remove(KEY_REJECTED_VERSION)
+            }
         }
-        editor.commit()
         clearTransactionFiles()
     }
 
@@ -433,6 +434,7 @@ class YtDlpUpdateManager private constructor(context: Context) {
     }
 
     private fun ensureInitializedLocked() {
+        YtDlpBundledSeeder.stageIfNewer(appContext)
         YoutubeDL.getInstance().init(appContext)
         requireActiveBinary()
         prepareManagerDirectory()
@@ -462,11 +464,11 @@ class YtDlpUpdateManager private constructor(context: Context) {
     }
 
     private fun persistCurrentVersion(version: String) {
-        preferences.edit().putString(KEY_CURRENT_VERSION, version).commit()
+        preferences.edit { putString(KEY_CURRENT_VERSION, version) }
     }
 
     private fun saveRecoveryNotice(message: String) {
-        preferences.edit().putString(KEY_RECOVERY_NOTICE, message).commit()
+        preferences.edit { putString(KEY_RECOVERY_NOTICE, message) }
     }
 
     private fun fetchStableRelease(): StableRelease {

@@ -20,6 +20,7 @@ class AnalysisEngine(Protocol):
         proxy: str = "",
         cookies_file: str = "",
         cookies_browser: str = "",
+        impersonate: str = "",
     ) -> MediaInfo:
         ...
 
@@ -37,6 +38,7 @@ class AnalyzeWorker(QRunnable):
         proxy: str = "",
         cookies_file: str = "",
         cookies_browser: str = "",
+        impersonate: str = "",
     ) -> None:
         super().__init__()
         self.engine = engine
@@ -44,13 +46,18 @@ class AnalyzeWorker(QRunnable):
         self.proxy = proxy
         self.cookies_file = cookies_file
         self.cookies_browser = cookies_browser
+        self.impersonate = impersonate
         self.signals = AnalyzeSignals()
 
     @Slot()
     def run(self) -> None:
         try:
             info: MediaInfo = self.engine.analyze(
-                self.url, self.proxy, self.cookies_file, self.cookies_browser
+                self.url,
+                self.proxy,
+                self.cookies_file,
+                self.cookies_browser,
+                **({"impersonate": self.impersonate} if self.impersonate else {}),
             )
             self.signals.completed.emit(info)
         except Exception as error:
@@ -79,6 +86,7 @@ class PreviewWorker(QRunnable):
         proxy: str = "",
         cookies_file: str = "",
         cookies_browser: str = "",
+        impersonate: str = "",
     ) -> None:
         super().__init__()
         self.engine = engine
@@ -86,13 +94,18 @@ class PreviewWorker(QRunnable):
         self.proxy = proxy
         self.cookies_file = cookies_file
         self.cookies_browser = cookies_browser
+        self.impersonate = impersonate
         self.signals = PreviewSignals()
 
     @Slot()
     def run(self) -> None:
         try:
             source = self.engine.preview_source(
-                self.url, self.proxy, self.cookies_file, self.cookies_browser,
+                self.url,
+                self.proxy,
+                self.cookies_file,
+                self.cookies_browser,
+                **({"impersonate": self.impersonate} if self.impersonate else {}),
             )
             self.signals.completed.emit(source)
         except Exception as error:

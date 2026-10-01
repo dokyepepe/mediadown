@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_action_analyze">Analizar</string>
+    <plurals name="home_batch_hint">
+        <item quantity="one">%1$d enlace detectado aquí. Analiza un solo enlace o envía toda la lista a la cola.</item>
+        <item quantity="other">%1$d enlaces detectados aquí. Analiza un solo enlace o envía toda la lista a la cola.</item>
+        <item quantity="many">%1$d enlaces detectados aquí. Analiza un solo enlace o envía toda la lista a la cola.</item>
+    </plurals>
+    <plurals name="home_action_enqueue_batch">
+        <item quantity="one">Añadir %1$d enlace a la cola</item>
+        <item quantity="other">Añadir %1$d enlaces a la cola</item>
+        <item quantity="many">Añadir %1$d enlaces a la cola</item>
+    </plurals>
+    <string name="home_action_analyzing">Analizando…</string>
+    <string name="home_action_download_now">Descargar ahora</string>
+    <string name="home_action_download_playlist">Descargar lista de reproducción</string>
+    <string name="home_action_queued">Añadiendo a la cola…</string>
+    <string name="home_action_switch">Reemplazar</string>
+    <string name="home_audio_bass">Graves reforzados</string>
+    <string name="home_audio_bass_supporting">+6 dB a 100 Hz</string>
+    <string name="home_audio_echo">Eco</string>
+    <string name="home_audio_echo_supporting">Decaimiento suave de 300 ms</string>
+    <string name="home_audio_normalize">Normalización</string>
+    <string name="home_audio_normalize_supporting">Volumen uniforme (EBU R128)</string>
+    <string name="home_audio_pitch">Tono</string>
+    <string name="home_audio_pitch_normal">0 st (normal)</string>
+    <string name="home_audio_preview">Previsualizar</string>
+    <string name="home_audio_preview_audio">Previsualizar audio</string>
+    <string name="home_audio_rendering_preview">Generando vista previa…</string>
+    <plurals name="home_audio_semitones">
+        <item quantity="one">%1$s st</item>
+        <item quantity="many">%1$s st</item>
+        <item quantity="other">%1$s st</item>
+    </plurals>
+    <string name="home_audio_speed">Velocidad</string>
+    <string name="home_audio_speed_value">%1$sx</string>
+    <string name="home_audio_stop_preview">Detener vista previa</string>
+    <string name="home_audio_supporting_audio">Ajusta tono, velocidad, volumen, graves, eco, trémolo y normalización, y escucha hasta 30 s antes de descargar.</string>
+    <string name="home_audio_supporting_video">Ajusta tono, velocidad, volumen, graves, eco, trémolo y normalización, y toca las vistas previas antes de descargar.</string>
+    <string name="home_audio_title">Escucha con efectos</string>
+    <string name="home_audio_tremolo">Trémolo</string>
+    <string name="home_audio_tremolo_supporting">Oscilación de 5 Hz</string>
+    <string name="home_audio_volume">Volumen</string>
+    <string name="home_audio_volume_value">%1$d%%</string>
+    <plurals name="home_download_items">
+        <item quantity="one">Descargar %1$d elemento</item>
+        <item quantity="many">Descargar %1$d elementos</item>
+        <item quantity="other">Descargar %1$d elementos</item>
+    </plurals>
+    <string name="home_heading_eyebrow">Nueva descarga</string>
+    <string name="home_heading_supporting">Pega un enlace, revisa la vista previa y elige exactamente cómo guardar.</string>
+    <string name="home_heading_title">Descarga tu media</string>
+    <string name="home_options_editor_compatible">Compatible con editores</string>
+    <string name="home_options_editor_compatible_supporting">H.264/AAC .mp4 con moov al inicio (Premiere, DaVinci, CapCut)</string>
+    <string name="home_options_metadata">Incrustar metadatos</string>
+    <string name="home_options_metadata_supporting">Graba el título, el artista y la fecha en las etiquetas del archivo.</string>
+    <string name="home_options_thumbnail">Incrustar portada</string>
+    <string name="home_options_thumbnail_supporting">Guarda la miniatura como portada dentro del archivo de audio.</string>
+    <string name="home_options_format">Formato</string>
+    <string name="home_options_media_type">Tipo de media</string>
+    <string name="home_options_no_choices">No hay opciones disponibles.</string>
+    <string name="home_options_quality">Calidad</string>
+    <string name="home_options_rate_limit_label">Límite de velocidad por elemento (KiB/s)</string>
+    <string name="home_options_rate_limit_placeholder">Vacío = sin límite</string>
+    <string name="home_options_rate_limit_supporting">Se aplica a este elemento; los parámetros de fondo quedan intactos.</string>
+    <string name="home_options_recommended">%1$s · recomendado</string>
+    <string name="home_options_subtitles">Incluir subtítulos</string>
+    <string name="home_options_subtitles_supporting">Cuando estén disponibles en el idioma original</string>
+    <plurals name="home_options_subtitles_languages">
+        <item quantity="one">%1$d idioma disponible. Elige los que quieras descargar.</item>
+        <item quantity="other">%1$d idiomas disponibles. Elige los que quieras descargar.</item>
+        <item quantity="many">%1$d idiomas disponibles. Elige los que quieras descargar.</item>
+    </plurals>
+    <string name="home_options_supporting">Elige tipo, calidad y formato antes de descargar.</string>
+    <string name="home_options_title">Personaliza el archivo</string>
+    <string name="home_playlist_clear_selection">Limpiar selección</string>
+    <string name="home_playlist_select_all">Seleccionar todo</string>
+    <string name="home_playlist_supporting">Elige qué canciones o vídeos entrarán en la cola.</string>
+    <string name="home_playlist_title">Elementos de la lista</string>
+    <string name="home_preview_audio_only">Solo audio</string>
+    <string name="home_preview_audio_only_supporting">Una captura del sonido</string>
+    <string name="home_preview_content">Contenido de la vista previa</string>
+    <string name="home_preview_found">VISTA PREVIA ENCONTRADA</string>
+    <plurals name="home_preview_items">
+        <item quantity="one">%1$d elemento</item>
+        <item quantity="many">%1$d elementos</item>
+        <item quantity="other">%1$d elementos</item>
+    </plurals>
+    <string name="home_preview_playlist">Lista de reproducción</string>
+    <string name="home_preview_with_video">Con vídeo</string>
+    <string name="home_preview_with_video_supporting">Segmento corto con imagen</string>
+    <string name="home_privacy_banner">Tus enlaces y descargas permanecen en este dispositivo, sin cuenta ni telemetría.</string>
+    <string name="home_seconds_value">%1$s s</string>
+    <string name="home_spotify_auth_hint">Conecta tu cuenta de Spotify en Ajustes para ver las canciones de esta lista.</string>
+    <string name="home_spotify_download_audio">Descargar audio de YouTube</string>
+    <string name="home_spotify_download_tracks">Descargar canciones de YouTube</string>
+    <plurals name="home_spotify_more_tracks">
+        <item quantity="one">+ %1$d canción</item>
+        <item quantity="many">+ %1$d canciones</item>
+        <item quantity="other">+ %1$d canciones</item>
+    </plurals>
+    <string name="home_spotify_notice">Descargar audio protegido por Spotify no es posible; cada canción se localiza mediante una búsqueda en YouTube.</string>
+    <string name="home_spotify_supporting">Metadatos oficiales. El audio se busca en YouTube, nunca en Spotify.</string>
+    <string name="home_spotify_title">Spotify</string>
+    <plurals name="home_spotify_tracks">
+        <item quantity="one">%1$d canción</item>
+        <item quantity="many">%1$d canciones</item>
+        <item quantity="other">%1$d canciones</item>
+    </plurals>
+    <string name="home_trim_duration">Duración del segmento</string>
+    <string name="home_trim_duration_supporting">Detiene el segmento en la duración elegida</string>
+    <string name="home_trim_fade_in">Fundido de entrada</string>
+    <string name="home_trim_fade_out">Fundido de salida</string>
+    <string name="home_trim_start">Inicio del recorte</string>
+    <string name="home_trim_supporting">Empieza la media en otro segmento y suaviza los bordes del segmento guardado.</string>
+    <string name="home_trim_title">Recorte y fundidos</string>
+    <string name="home_trim_until_end">Recortar hasta el final</string>
+    <string name="home_trim_until_end_supporting">El segmento llega hasta el final de la media</string>
+    <string name="home_url_label">URL de vídeo, audio o lista de reproducción</string>
+    <string name="home_url_supporting">Los enlaces recibidos por el menú Compartir aparecen aquí.</string>
+    <string name="home_url_title">Enlace de media</string>
+</resources>

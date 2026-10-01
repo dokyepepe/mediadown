@@ -11,6 +11,7 @@ from uuid import uuid4
 
 class DownloadStatus(StrEnum):
     QUEUED = "queued"
+    PAUSED = "paused"
     PREPARING = "preparing"
     DOWNLOADING_VIDEO = "downloading_video"
     DOWNLOADING_AUDIO = "downloading_audio"
@@ -30,6 +31,7 @@ class DownloadStatus(StrEnum):
     def label(self) -> str:
         return {
             self.QUEUED: "Na fila",
+            self.PAUSED: "Pausado",
             self.PREPARING: "Preparando",
             self.DOWNLOADING_VIDEO: "Baixando vídeo",
             self.DOWNLOADING_AUDIO: "Baixando áudio",
@@ -41,6 +43,24 @@ class DownloadStatus(StrEnum):
             self.ERROR: "Erro",
             self.CANCELLED: "Cancelado",
         }[self]
+
+    @property
+    def active(self) -> bool:
+        """Whether the engine is currently working on an item in this state."""
+        return self in _ACTIVE_STATUSES
+
+
+_ACTIVE_STATUSES = frozenset(
+    {
+        DownloadStatus.PREPARING,
+        DownloadStatus.DOWNLOADING_VIDEO,
+        DownloadStatus.DOWNLOADING_AUDIO,
+        DownloadStatus.DOWNLOADING,
+        DownloadStatus.MERGING,
+        DownloadStatus.CONVERTING,
+        DownloadStatus.FINALIZING,
+    }
+)
 
 
 class MediaType(StrEnum):
@@ -66,11 +86,13 @@ class DownloadItem:
     eta: int | None = None
     downloaded_bytes: int = 0
     total_bytes: int | None = None
+    file_size: int = 0
     created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     completed_at: str | None = None
     error: str = ""
     technical_error: str = ""
     final_file: str = ""
+    provisional_title: bool = False
     options: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

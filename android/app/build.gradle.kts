@@ -1,3 +1,5 @@
+import org.gradle.api.GradleException
+
 import java.util.Properties
 
 plugins {
@@ -6,8 +8,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-// Chaves de release ficam em android/key.properties (gitignored). Sem esse arquivo
-// o assembleRelease assina com a chave de debug, para builds/CI não falharem.
+// Chaves de release ficam em android/key.properties (gitignored). Sem esse arquivo o
+// assembleRelease assinaria com a chave de debug, o que gera um APK que não pode ser
+// instalado/atualizado por cima de um release assinado corretamente. Por isso o guard
+// abaixo falha o build com instruções claras em vez de distribuir um release "debug".
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
@@ -18,6 +22,22 @@ val hasReleaseSigning = keystorePropertiesFile.exists() &&
     keystoreProperties.getProperty("storePassword") != null &&
     keystoreProperties.getProperty("keyAlias") != null &&
     keystoreProperties.getProperty("keyPassword") != null
+
+tasks.whenTaskAdded {
+    if (name == "validateSigningRelease") {
+        doFirst {
+            if (!hasReleaseSigning) {
+                throw GradleException(
+                    "A assinatura de release não está configurada. " +
+                        "Crie android/key.properties com storeFile, storePassword, keyAlias e keyPassword " +
+                        "(ou use a variant debug). Sem isso o APK release assinaria com a chave de debug " +
+                        "e a instalação falharia por cima de um release assinado corretamente " +
+                        "(INSTALL_FAILED_UPDATE_INCOMPATIBLE).",
+                )
+            }
+        }
+    }
+}
 
 android {
     namespace = "com.mediadownloader.mobile"
@@ -65,6 +85,15 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
+        }
+    }
+
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86_64")
+            isUniversalApk = true
         }
     }
 
@@ -177,7 +206,7 @@ dependencies {
     androidTestImplementation(composeBom)
 
     implementation("androidx.core:core-ktx:1.17.0")
-    implementation("androidx.activity:activity-compose:1.12.3")
+    implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
@@ -185,17 +214,17 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("com.google.zxing:core:3.5.4")
-    implementation("androidx.media3:media3-exoplayer:1.7.1")
-    implementation("androidx.media3:media3-ui:1.7.1")
+    implementation("androidx.media3:media3-exoplayer:1.11.1")
+    implementation("androidx.media3:media3-ui:1.11.1")
 
     implementation("io.github.junkfood02.youtubedl-android:library:$youtubeDlAndroid")
     implementation("io.github.junkfood02.youtubedl-android:ffmpeg:$youtubeDlAndroid")
 
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.json:json:20240303")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+    testImplementation("org.json:json:20260814")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="site_cancel_downloads">Cancel downloads</string>
+    <string name="site_clear_selection">Clear</string>
+    <plurals name="site_count_images">
+        <item quantity="one">%1$d image</item>
+        <item quantity="other">%1$d images</item>
+    </plurals>
+    <plurals name="site_count_pdfs">
+        <item quantity="one">%1$d PDF</item>
+        <item quantity="other">%1$d PDFs</item>
+    </plurals>
+    <plurals name="site_download_selected">
+        <item quantity="one">Download %1$d file</item>
+        <item quantity="other">Download %1$d files</item>
+    </plurals>
+    <string name="site_empty_no_files_supporting">Some sites build their content with JavaScript only or require a login.</string>
+    <string name="site_empty_no_files_title">No public files found</string>
+    <string name="site_empty_ready_supporting">Works with linked or embedded PDFs, responsive images and direct URLs.</string>
+    <string name="site_empty_ready_title">Ready to investigate</string>
+    <string name="site_heading_eyebrow">PDFs and images</string>
+    <string name="site_heading_supporting">Analyze a page, pick the files you find and save them to Downloads.</string>
+    <string name="site_heading_title">Site files</string>
+    <string name="site_include_images">Images</string>
+    <string name="site_include_pdfs">PDFs</string>
+    <string name="site_open_file">Open file</string>
+    <string name="site_scan_button">Scan</string>
+    <string name="site_scan_supporting">Video and audio stay in the Home flow; only documents and images belong here.</string>
+    <string name="site_scan_title">Page to analyze</string>
+    <string name="site_scanning">Scanning…</string>
+    <string name="site_select_all">Select all</string>
+    <string name="site_url_label">Site URL</string>
+    <string name="site_url_placeholder">https://site.com/documents</string>
+</resources>

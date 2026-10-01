@@ -17,16 +17,23 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,8 +45,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import com.mediadownloader.mobile.R
+import com.mediadownloader.mobile.media.SoundRole
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
@@ -163,8 +173,8 @@ internal fun SectionCard(
 @Composable
 internal fun SectionTitle(
     title: String,
-    supportingText: String? = null,
     modifier: Modifier = Modifier,
+    supportingText: String? = null,
     icon: ImageVector? = null,
 ) {
     Row(
@@ -422,4 +432,35 @@ internal fun DecorativeIcon(
         contentDescription = null,
         modifier = modifier.clearAndSetSemantics { },
     )
+}
+
+/**
+ * Compact menu that promotes a finished audio file to a system sound slot.
+ * Shared by the downloads list and the history so the flow stays identical.
+ */
+@Composable
+internal fun SoundRoleMenu(
+    onRoleSelected: (SoundRole) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = modifier) {
+        IconButton(onClick = { expanded = true }) {
+            Icon(
+                imageVector = Icons.Rounded.MusicNote,
+                contentDescription = stringResource(R.string.action_set_as_sound),
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            SoundRole.entries.forEach { role ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(role.labelRes)) },
+                    onClick = {
+                        expanded = false
+                        onRoleSelected(role)
+                    },
+                )
+            }
+        }
+    }
 }

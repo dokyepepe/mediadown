@@ -41,6 +41,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -48,6 +50,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mediadownloader.mobile.R
 
 @Composable
 fun SiteFilesScreen(
@@ -63,9 +66,9 @@ fun SiteFilesScreen(
         ) {
             item {
                 ScreenHeading(
-                    eyebrow = "PDFs e imagens",
-                    title = "Arquivos do site",
-                    supportingText = "Analise uma página, escolha os arquivos encontrados e salve em Downloads.",
+                    eyebrow = stringResource(R.string.site_heading_eyebrow),
+                    title = stringResource(R.string.site_heading_title),
+                    supportingText = stringResource(R.string.site_heading_supporting),
                     icon = Icons.Rounded.Collections,
                 )
             }
@@ -85,14 +88,14 @@ fun SiteFilesScreen(
                     EmptyState(
                         icon = if (state.pageTitle == null) Icons.Rounded.Description else Icons.Rounded.Search,
                         title = if (state.pageTitle == null) {
-                            "Pronto para investigar"
+                            stringResource(R.string.site_empty_ready_title)
                         } else {
-                            "Nenhum arquivo público encontrado"
+                            stringResource(R.string.site_empty_no_files_title)
                         },
                         supportingText = if (state.pageTitle == null) {
-                            "Funciona com PDFs vinculados ou incorporados, imagens responsivas e URLs diretas."
+                            stringResource(R.string.site_empty_ready_supporting)
                         } else {
-                            "Alguns sites montam o conteúdo apenas com JavaScript ou exigem login."
+                            stringResource(R.string.site_empty_no_files_supporting)
                         },
                     )
                 }
@@ -120,7 +123,7 @@ fun SiteFilesScreen(
                             ) {
                                 Icon(Icons.Rounded.Cancel, contentDescription = null)
                                 Spacer(Modifier.size(8.dp))
-                                Text("Cancelar downloads")
+                                Text(stringResource(R.string.site_cancel_downloads))
                             }
                         }
                     } else {
@@ -134,11 +137,11 @@ fun SiteFilesScreen(
                             Icon(Icons.Rounded.FileDownload, contentDescription = null)
                             Spacer(Modifier.size(9.dp))
                             Text(
-                                if (state.selectedCount == 1) {
-                                    "Baixar 1 arquivo"
-                                } else {
-                                    "Baixar ${state.selectedCount} arquivos"
-                                },
+                                pluralStringResource(
+                                    R.plurals.site_download_selected,
+                                    state.selectedCount,
+                                    state.selectedCount,
+                                ),
                             )
                         }
                     }
@@ -156,16 +159,16 @@ private fun SiteScanCard(
     SectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             SectionTitle(
-                title = "Página para analisar",
-                supportingText = "Vídeo e áudio continuam no fluxo Início; aqui entram somente documentos e imagens.",
+                title = stringResource(R.string.site_scan_title),
+                supportingText = stringResource(R.string.site_scan_supporting),
                 icon = Icons.Rounded.Link,
             )
             OutlinedTextField(
                 value = state.url,
                 onValueChange = { onAction(MobileUiAction.SiteUrlChanged(it)) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("URL do site") },
-                placeholder = { Text("https://site.com/documentos") },
+                label = { Text(stringResource(R.string.site_url_label)) },
+                placeholder = { Text(stringResource(R.string.site_url_placeholder)) },
                 leadingIcon = { Icon(Icons.Rounded.Link, contentDescription = null) },
                 supportingText = state.urlError?.let { error -> { Text(error) } },
                 isError = state.urlError != null,
@@ -189,7 +192,7 @@ private fun SiteScanCard(
                     },
                     enabled = !state.isScanning && !state.isDownloading,
                     leadingIcon = { Icon(Icons.Rounded.PictureAsPdf, contentDescription = null) },
-                    label = { Text("PDFs") },
+                    label = { Text(stringResource(R.string.site_include_pdfs)) },
                 )
                 ElevatedFilterChip(
                     selected = state.includeImages,
@@ -198,7 +201,7 @@ private fun SiteScanCard(
                     },
                     enabled = !state.isScanning && !state.isDownloading,
                     leadingIcon = { Icon(Icons.Rounded.Image, contentDescription = null) },
-                    label = { Text("Imagens") },
+                    label = { Text(stringResource(R.string.site_include_images)) },
                 )
             }
             Row(
@@ -214,7 +217,7 @@ private fun SiteScanCard(
                 ) {
                     Icon(Icons.Rounded.ContentPaste, contentDescription = null)
                     Spacer(Modifier.size(7.dp))
-                    Text("Colar")
+                    Text(stringResource(R.string.action_paste))
                 }
                 Button(
                     onClick = { onAction(MobileUiAction.ScanSiteFiles) },
@@ -233,7 +236,11 @@ private fun SiteScanCard(
                         Icon(Icons.Rounded.Search, contentDescription = null)
                     }
                     Spacer(Modifier.size(8.dp))
-                    Text(if (state.isScanning) "Analisando…" else "Analisar")
+                    Text(
+                        stringResource(
+                            if (state.isScanning) R.string.site_scanning else R.string.site_scan_button,
+                        ),
+                    )
                 }
             }
         }
@@ -245,12 +252,21 @@ private fun SiteResultHeader(
     state: SiteFilesUiState,
     onAction: (MobileUiAction) -> Unit,
 ) {
+    val pdfCount = state.items.count { it.kind == SiteFileKindUi.PDF }
+    val imageCount = state.items.count { it.kind == SiteFileKindUi.IMAGE }
     SectionCard {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             SectionTitle(
                 title = state.pageTitle.orEmpty(),
-                supportingText = "${state.items.count { it.kind == SiteFileKindUi.PDF }} PDF(s) • " +
-                    "${state.items.count { it.kind == SiteFileKindUi.IMAGE }} imagem(ns)",
+                supportingText = pluralStringResource(
+                    R.plurals.site_count_pdfs,
+                    pdfCount,
+                    pdfCount,
+                ) + " • " + pluralStringResource(
+                    R.plurals.site_count_images,
+                    imageCount,
+                    imageCount,
+                ),
                 icon = Icons.Rounded.Description,
             )
             if (state.items.isNotEmpty() && !state.isDownloading) {
@@ -259,10 +275,10 @@ private fun SiteResultHeader(
                     horizontalArrangement = Arrangement.End,
                 ) {
                     TextButton(onClick = { onAction(MobileUiAction.SelectAllSiteFiles(true)) }) {
-                        Text("Selecionar todos")
+                        Text(stringResource(R.string.site_select_all))
                     }
                     TextButton(onClick = { onAction(MobileUiAction.SelectAllSiteFiles(false)) }) {
-                        Text("Limpar")
+                        Text(stringResource(R.string.site_clear_selection))
                     }
                 }
             }
@@ -345,7 +361,7 @@ private fun SiteFileCard(
                 ) {
                     Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null)
                     Spacer(Modifier.size(8.dp))
-                    Text("Abrir arquivo")
+                    Text(stringResource(R.string.site_open_file))
                 }
             }
         }
@@ -373,7 +389,7 @@ private fun SiteStatusPill(status: SiteFileStatus) {
         SiteFileStatus.FAILED -> Icons.Rounded.Cancel
         SiteFileStatus.READY -> null
     }
-    StatusPill(status.label, container, content, icon = icon)
+    StatusPill(stringResource(status.labelRes), container, content, icon = icon)
 }
 
 private val SiteFileKindUi.icon: ImageVector

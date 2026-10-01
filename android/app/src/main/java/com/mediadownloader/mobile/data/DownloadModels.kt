@@ -1,4 +1,4 @@
-package com.mediadownloader.mobile.data
+﻿package com.mediadownloader.mobile.data
 
 import java.util.UUID
 
@@ -26,14 +26,21 @@ data class DownloadOptions(
     val mediaType: MediaType = MediaType.VIDEO,
     val maxVideoHeight: Int? = 1080,
     val videoContainer: VideoContainer = VideoContainer.MP4,
-    val editorCompatible: Boolean = false,
+    val editorCompatible: Boolean = true,
     val audioFormat: AudioFormat = AudioFormat.MP3,
     val audioBitrateKbps: Int = 192,
     val formatId: String? = null,
     val rateLimitKbps: Int = 0,
     val downloadPlaylist: Boolean = false,
     val includeSubtitles: Boolean = false,
-    val subtitleLanguages: List<String> = listOf("pt", "pt-BR", "en"),
+    val subtitleLanguages: List<String> = DEFAULT_SUBTITLE_LANGUAGES,
+    /** Writes the source tags (title, artist, date) into the output file. */
+    val embedMetadata: Boolean = true,
+    /**
+     * Attaches the source thumbnail as cover art. Only audio outputs are tagged,
+     * because video keeps its own poster frame.
+     */
+    val embedThumbnail: Boolean = true,
     val audioSpeed: Float = 1f,
     val audioPitchSemitones: Float = 0f,
     val audioVolumePercent: Int = 100,
@@ -76,6 +83,13 @@ data class DownloadOptions(
         require(fadeInSeconds >= 0f && fadeOutSeconds >= 0f) {
             "fade durations must be non-negative"
         }
+        require(subtitleLanguages.none { it.isBlank() }) {
+            "subtitleLanguages must not contain blank entries"
+        }
+    }
+
+    companion object {
+        val DEFAULT_SUBTITLE_LANGUAGES = listOf("pt", "pt-BR", "en")
     }
 
     /** The effect chain to apply after download, or `null` when everything is default. */
@@ -100,6 +114,13 @@ data class DownloadOptions(
             trimDurationSeconds != null ||
             fadeInSeconds > 0f ||
             fadeOutSeconds > 0f
+
+    /**
+     * True when tagging would be requested, but the chosen container cannot hold
+     * tags: WAV is a raw stream, so both switches are inert for it.
+     */
+    val tagsSupported: Boolean
+        get() = mediaType != MediaType.AUDIO || audioFormat != AudioFormat.WAV
 }
 
 enum class DownloadState {
@@ -107,6 +128,7 @@ enum class DownloadState {
     INITIALIZING,
     DOWNLOADING,
     PROCESSING,
+    PAUSED,
     COMPLETED,
     FAILED,
     CANCELLED,
@@ -132,6 +154,10 @@ data class DownloadItem(
     val createdAtEpochMs: Long,
     val updatedAtEpochMs: Long,
     val completedAtEpochMs: Long? = null,
+    /** Manual queue position; lower runs first. Ties fall back to creation time. */
+    val sortOrder: Int = 0,
+    /** Keeps the partially downloaded staging files so a resume continues from them. */
+    val keepPartialFiles: Boolean = false,
 ) {
     companion object {
         fun create(
@@ -156,6 +182,11 @@ data class DownloadItem(
         }
     }
 }
+
+data class DownloadStats(
+    val completedCount: Int = 0,
+    val totalDownloadedBytes: Long = 0,
+)
 
 data class HistoryItem(
     val id: String,
@@ -234,6 +265,8 @@ data class MediaAnalysis(
     val playlistItems: List<PlaylistEntry> = emptyList(),
     val formats: List<MediaFormat>,
     val supportsSubtitles: Boolean = true,
+    /** Subtitle languages offered for this media, from manual and automatic captions. */
+    val subtitleLanguages: List<String> = emptyList(),
 )
 
 data class PublishedFile(

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tab_home">Início</string>
+    <string name="tab_site_files">Arquivos</string>
+    <string name="tab_qr_code">QR Code</string>
+    <string name="tab_downloads">Downloads</string>
+    <string name="tab_history">Histórico</string>
+    <string name="tab_settings">Ajustes</string>
+
+    <string name="status_queued">Na fila</string>
+    <string name="status_preparing">Preparando</string>
+    <string name="status_downloading">Baixando</string>
+    <string name="status_processing">Processando</string>
+    <string name="status_paused">Pausado</string>
+    <string name="status_completed">Concluído</string>
+    <string name="status_failed">Falhou</string>
+    <string name="status_cancelled">Cancelado</string>
+
+    <string name="filter_all">Todos</string>
+    <string name="filter_active">Em andamento</string>
+    <string name="filter_completed">Concluídos</string>
+    <string name="filter_failed">Com erro</string>
+
+    <string name="media_kind_video">Vídeo</string>
+    <string name="media_kind_video_support">Imagem e som</string>
+    <string name="media_kind_audio">Áudio</string>
+    <string name="media_kind_audio_support">Somente o áudio</string>
+
+    <string name="theme_system">Sistema</string>
+    <string name="theme_light">Claro</string>
+    <string name="theme_dark">Escuro</string>
+    <string name="theme_amoled">AMOLED</string>
+
+    <string name="site_status_ready">Pronto</string>
+    <string name="site_status_downloading">Baixando</string>
+    <string name="site_status_saved">Salvo</string>
+    <string name="site_status_failed">Falhou</string>
+
+    <string name="action_cancel">Cancelar</string>
+    <string name="action_close">Fechar</string>
+    <string name="action_copy_link">Copiar link</string>
+    <string name="action_move_down">Mover para baixo na fila</string>
+    <string name="action_move_up">Mover para cima na fila</string>
+    <string name="action_open">Abrir</string>
+    <string name="action_paste">Colar</string>
+    <string name="action_pause">Pausar</string>
+    <string name="action_remove">Remover</string>
+    <string name="action_restore_default">Restaurar padrão</string>
+    <string name="action_resume">Retomar</string>
+    <string name="action_retry">Tentar novamente</string>
+    <string name="action_share">Compartilhar</string>
+    <string name="action_set_as_sound">Usar como som</string>
+
+    <string name="sound_role_ringtone">Tomada de chamada</string>
+    <string name="sound_role_notification">Notificação</string>
+    <string name="sound_role_alarm">Alarme</string>
+    <string name="message_sound_applied">%1$s é agora o som padrão de %2$s.</string>
+    <string name="message_sound_failed">Não foi possível alterar o som do sistema: %1$s</string>
+    <string name="message_sound_unsupported">Somente arquivos de áudio concluídos podem tornar-se som do sistema.</string>
+</resources>

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tab_home">Inicio</string>
+    <string name="tab_site_files">Archivos</string>
+    <string name="tab_qr_code">Código QR</string>
+    <string name="tab_downloads">Descargas</string>
+    <string name="tab_history">Historial</string>
+    <string name="tab_settings">Ajustes</string>
+
+    <string name="status_queued">En cola</string>
+    <string name="status_preparing">Preparando</string>
+    <string name="status_downloading">Descargando</string>
+    <string name="status_processing">Procesando</string>
+    <string name="status_paused">En pausa</string>
+    <string name="status_completed">Completado</string>
+    <string name="status_failed">Fallido</string>
+    <string name="status_cancelled">Cancelado</string>
+
+    <string name="filter_all">Todos</string>
+    <string name="filter_active">En curso</string>
+    <string name="filter_completed">Completados</string>
+    <string name="filter_failed">Con errores</string>
+
+    <string name="media_kind_video">Vídeo</string>
+    <string name="media_kind_video_support">Imagen y sonido</string>
+    <string name="media_kind_audio">Audio</string>
+    <string name="media_kind_audio_support">Solo audio</string>
+
+    <string name="theme_system">Sistema</string>
+    <string name="theme_light">Claro</string>
+    <string name="theme_dark">Oscuro</string>
+    <string name="theme_amoled">AMOLED</string>
+
+    <string name="site_status_ready">Listo</string>
+    <string name="site_status_downloading">Descargando</string>
+    <string name="site_status_saved">Guardado</string>
+    <string name="site_status_failed">Fallido</string>
+
+    <string name="action_cancel">Cancelar</string>
+    <string name="action_close">Cerrar</string>
+    <string name="action_copy_link">Copiar enlace</string>
+    <string name="action_move_down">Bajar en la cola</string>
+    <string name="action_move_up">Subir en la cola</string>
+    <string name="action_open">Abrir</string>
+    <string name="action_paste">Pegar</string>
+    <string name="action_pause">Pausar</string>
+    <string name="action_remove">Quitar</string>
+    <string name="action_restore_default">Restaurar predeterminado</string>
+    <string name="action_resume">Reanudar</string>
+    <string name="action_retry">Reintentar</string>
+    <string name="action_share">Compartir</string>
+    <string name="action_set_as_sound">Usar como sonido</string>
+
+    <string name="sound_role_ringtone">Tonelada</string>
+    <string name="sound_role_notification">Notificación</string>
+    <string name="sound_role_alarm">Alarma</string>
+    <string name="message_sound_applied">%1$s ahora es el sonido predeterminado de %2$s.</string>
+    <string name="message_sound_failed">No se pudo cambiar el sonido del sistema: %1$s</string>
+    <string name="message_sound_unsupported">Solo los archivos de audio finalizados pueden convertirse en sonido del sistema.</string>
+</resources>

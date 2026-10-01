@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="site_cancel_downloads">Cancelar downloads</string>
+    <string name="site_clear_selection">Limpar</string>
+    <plurals name="site_count_images">
+        <item quantity="one">%1$d imagem</item>
+        <item quantity="many">%1$d imagens</item>
+        <item quantity="other">%1$d imagens</item>
+    </plurals>
+    <plurals name="site_count_pdfs">
+        <item quantity="one">%1$d PDF</item>
+        <item quantity="many">%1$d PDFs</item>
+        <item quantity="other">%1$d PDFs</item>
+    </plurals>
+    <plurals name="site_download_selected">
+        <item quantity="one">Baixar %1$d arquivo</item>
+        <item quantity="many">Baixar %1$d arquivos</item>
+        <item quantity="other">Baixar %1$d arquivos</item>
+    </plurals>
+    <string name="site_empty_no_files_supporting">Alguns sites montam o conteúdo apenas com JavaScript ou exigem login.</string>
+    <string name="site_empty_no_files_title">Nenhum arquivo público encontrado</string>
+    <string name="site_empty_ready_supporting">Funciona com PDFs vinculados ou incorporados, imagens responsivas e URLs diretas.</string>
+    <string name="site_empty_ready_title">Pronto para investigar</string>
+    <string name="site_heading_eyebrow">PDFs e imagens</string>
+    <string name="site_heading_supporting">Analise uma página, escolha os arquivos encontrados e salve em Downloads.</string>
+    <string name="site_heading_title">Arquivos do site</string>
+    <string name="site_include_images">Imagens</string>
+    <string name="site_include_pdfs">PDFs</string>
+    <string name="site_open_file">Abrir arquivo</string>
+    <string name="site_scan_button">Analisar</string>
+    <string name="site_scan_supporting">Vídeo e áudio continuam no fluxo Início; aqui entram somente documentos e imagens.</string>
+    <string name="site_scan_title">Página para analisar</string>
+    <string name="site_scanning">Analisando…</string>
+    <string name="site_select_all">Selecionar todos</string>
+    <string name="site_url_label">URL do site</string>
+    <string name="site_url_placeholder">https://site.com/documentos</string>
+</resources>

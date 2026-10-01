@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
+import threading
+import time
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 from urllib.request import url2pathname
 
 from mediadownloader.utils.paths import resource_path
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _normalize_input_url(source_url: str) -> str:
@@ -65,7 +70,14 @@ class FFmpegManager:
         return str(executable.parent) if executable else ""
 
     def version(self) -> str:
-        executable = self.ffmpeg
+        return self._version_of(self.ffmpeg, "ffmpeg")
+
+    def ffprobe_version(self) -> str:
+        """Same read as :meth:`version`, for the companion binary diagnostics use."""
+        return self._version_of(self.ffprobe, "ffprobe")
+
+    @staticmethod
+    def _version_of(executable: Path | None, program: str) -> str:
         if not executable:
             return "não instalado"
         try:
@@ -78,9 +90,129 @@ class FFmpegManager:
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             first_line = completed.stdout.splitlines()[0]
-            return first_line.replace("ffmpeg version ", "").split(" ", 1)[0]
+            return first_line.replace(f"{program} version ", "").split(" ", 1)[0]
         except (OSError, subprocess.SubprocessError, IndexError):
             return "desconhecida"
+
+    def duration(self, source: Path) -> float:
+        """Length of ``source`` in seconds, or ``0.0`` when ffprobe cannot tell."""
+        executable = self.ffprobe
+        if not executable:
+            return 0.0
+        try:
+            completed = subprocess.run(
+                [
+                    str(executable), "-v", "error", "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1", str(source),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            return max(0.0, float(completed.stdout.strip()))
+        except (OSError, subprocess.SubprocessError, ValueError):
+            return 0.0
+
+    def post_process(
+        self,
+        source: Path,
+        *,
+        audio_filter: str = "",
+        start_seconds: float = 0.0,
+        duration_seconds: float = 0.0,
+        editor_compatible: bool = False,
+        has_video: bool = True,
+        cancel: threading.Event | None = None,
+        timeout: float = 3600.0,
+    ) -> Path:
+        """Apply trim/fade/encode choices to a finished download.
+
+        Copies streams untouched when nothing needs re-encoding, otherwise
+        converts to AAC (plus H.264 with ``+faststart`` when the editor profile
+        is requested) and replaces the original file.
+        """
+        executable = self.ffmpeg
+        if not executable:
+            raise RuntimeError("FFmpeg não está disponível para editar o arquivo.")
+        source = Path(source)
+        if editor_compatible and has_video:
+            # Editors expect fast-start MP4.
+            suffix = ".mp4"
+        elif audio_filter and not has_video:
+            # Re-encoded audio becomes AAC, which the MP3 container cannot carry.
+            suffix = ".m4a"
+        else:
+            suffix = source.suffix
+        output = source.with_name(f"{source.stem}.edited{suffix}")
+
+        args = [str(executable), "-hide_banner", "-loglevel", "error", "-y"]
+        if start_seconds > 0:
+            args += ["-ss", f"{start_seconds:.3f}"]
+        args += ["-i", str(source)]
+        if duration_seconds > 0:
+            args += ["-t", f"{duration_seconds:.3f}"]
+        if has_video:
+            args += ["-map", "0:v:0?", "-map", "0:a:0?"]
+        else:
+            args += ["-vn"]
+        if editor_compatible and has_video:
+            args += [
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                "-c:a", "aac", "-b:a", "192k",
+            ]
+        elif audio_filter:
+            args += ["-c:v", "copy" if has_video else "-vn", "-c:a", "aac", "-b:a", "192k"]
+        else:
+            args += ["-c", "copy"]
+        if audio_filter:
+            args += ["-af", audio_filter]
+        args += ["-map_metadata", "0", str(output)]
+
+        self._run(args, output, cancel=cancel, timeout=timeout)
+        try:
+            source.unlink()
+        except OSError:
+            LOGGER.warning("Não foi possível remover o arquivo original %s", source)
+        return output
+
+    @staticmethod
+    def _run(
+        args: list[str],
+        output: Path,
+        *,
+        cancel: threading.Event | None = None,
+        timeout: float = 3600.0,
+    ) -> None:
+        process = subprocess.Popen(
+            args,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        deadline = time.monotonic() + timeout
+        stderr = b""
+        while True:
+            try:
+                _, stderr = process.communicate(timeout=0.4)
+                break
+            except subprocess.TimeoutExpired:
+                if cancel is not None and cancel.is_set():
+                    process.kill()
+                    process.communicate()
+                    output.unlink(missing_ok=True)
+                    raise RuntimeError("Processamento cancelado.") from None
+                if time.monotonic() >= deadline:
+                    process.kill()
+                    process.communicate()
+                    output.unlink(missing_ok=True)
+                    raise RuntimeError("O FFmpeg excedeu o tempo limite.") from None
+        if process.returncode != 0 or not output.exists() or output.stat().st_size == 0:
+            output.unlink(missing_ok=True)
+            tail = (stderr or b"").decode("utf-8", "replace")[-400:]
+            raise RuntimeError(f"ffmpeg retornou {process.returncode}: {tail}")
 
     def render_preview(
         self,

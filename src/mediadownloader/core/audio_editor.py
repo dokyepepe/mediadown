@@ -30,6 +30,11 @@ _CODEC_BY_FORMAT: dict[str, tuple[str, str | None]] = {
     "wav": ("pcm_s16le", None),
 }
 
+#: Containers whose muxer accepts the ``attached_pic`` video stream, so a cover
+#: copied from the source survives the re-encode. Opus and WAV are audio-only
+#: containers and would fail if the picture stream were mapped into them.
+_FORMATS_WITH_VIDEO_ART = frozenset({"mp3", "m4a", "aac", "flac"})
+
 _WAVEFORM_SAMPLE_RATE = 4000
 _WAVEFORM_POINTS = 1200
 

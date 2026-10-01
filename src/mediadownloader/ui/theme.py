@@ -85,13 +85,69 @@ DARK = {
 }
 
 
-def apply_theme(app: QApplication, preference: str = "system") -> None:
-    dark = preference == "dark" or (
+AMOLED = {
+    "bg": "#000000",
+    "card": "#0A0A0A",
+    "surface_alt": "#131313",
+    "surface_hover": "#1C1C1C",
+    "text": "#ECF3EF",
+    "muted": "#9BA9A1",
+    "primary": "#7BE3A4",
+    "primary_hover": "#9BEDBC",
+    "action_fill": "#176A43",
+    "action_hover": "#1F5A3A",
+    "border": "#242424",
+    "border_strong": "#383838",
+    "danger": "#FFADB5",
+    "warning": "#F0CB7B",
+    "selection": "#0F2B1D",
+    "placeholder": "#8E9A93",
+    "disabled": "#6E7A74",
+    "highlight_text": "#FFFFFF",
+    "sidebar": "#000000",
+    "sidebar_hover": "#131313",
+    "sidebar_active": "#10351F",
+    "sidebar_text": "#EEF6F1",
+    "sidebar_muted": "#8A9C92",
+    "hero_start": "#0C2417",
+    "hero_end": "#050505",
+    "status_good_bg": "#0F2B1D",
+    "status_good": "#8FDCAC",
+    "status_error_bg": "#331A1E",
+    "status_error": "#FFB3BA",
+    "status_neutral_bg": "#1B1B1B",
+    "status_neutral": "#C3CEC9",
+    "status_wait_bg": "#33290F",
+    "status_wait": "#F0CB7B",
+}
+
+#: Themes the settings page offers, in display order. The mobile edition uses
+#: the same four options so both editions stay recognisable side by side.
+THEMES = ("system", "light", "dark", "amoled")
+
+
+def is_dark(preference: str) -> bool:
+    """Whether a theme preference resolves to a dark palette."""
+    if preference == "amoled":
+        return True
+    return preference == "dark" or (
         preference == "system"
         and QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark
     )
-    c = DARK if dark else LIGHT
-    app.setProperty("themeMode", "dark" if dark else "light")
+
+
+def palette_for(preference: str) -> dict[str, str]:
+    """The colour tokens for a theme preference, honouring the system setting."""
+    if preference == "amoled":
+        return AMOLED
+    return DARK if is_dark(preference) else LIGHT
+
+
+def apply_theme(app: QApplication, preference: str = "system") -> None:
+    dark = is_dark(preference)
+    c = AMOLED if preference == "amoled" else (DARK if dark else LIGHT)
+    mode = "amoled" if preference == "amoled" else ("dark" if dark else "light")
+    app.setProperty("themeMode", mode)
     app.setProperty("themePrimary", c["primary"])
     app.setProperty("sidebarText", c["sidebar_text"])
     app.setProperty("sidebarActiveText", c["primary"])
@@ -243,17 +299,17 @@ def apply_theme(app: QApplication, preference: str = "system") -> None:
             background: {c['card']}; border: 1px dashed {c['border_strong']}; border-radius: 14px;
         }}
 
-        QLineEdit, QComboBox, QSpinBox {{
+        QLineEdit, QComboBox, QSpinBox, QTimeEdit {{
             background: {c['card']}; border: 1px solid {c['border_strong']}; border-radius: 9px;
             padding: 8px 11px; min-height: 27px; color: {c['text']};
             selection-background-color: {c['action_fill']}; selection-color: {c['highlight_text']};
         }}
-        QLineEdit:hover, QComboBox:hover, QSpinBox:hover {{ border-color: {c['muted']}; }}
-        QLineEdit:focus, QComboBox:focus, QSpinBox:focus {{
+        QLineEdit:hover, QComboBox:hover, QSpinBox:hover, QTimeEdit:hover {{ border-color: {c['muted']}; }}
+        QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTimeEdit:focus {{
             border: 2px solid {c['primary']}; padding: 7px 10px;
         }}
         QLineEdit:read-only {{ background: {c['surface_alt']}; color: {c['muted']}; }}
-        QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled {{
+        QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QTimeEdit:disabled {{
             background: {c['surface_alt']}; color: {c['disabled']}; border-color: {c['border']};
         }}
         QComboBox::drop-down {{ border: 0; width: 30px; }}

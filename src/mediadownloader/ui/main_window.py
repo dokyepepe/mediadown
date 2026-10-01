@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlparse
 
 from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeySequence
@@ -13,9 +14,12 @@ from PySide6.QtWidgets import (
 
 from mediadownloader.core import DownloadEngine, FFmpegManager, MediaExtractor, QueueManager
 from mediadownloader.core.audio_effects import AudioEffectsController
+from mediadownloader.core.download_gate import GateConfig
 from mediadownloader.models import DownloadItem, DownloadOptions, DownloadStatus, MediaInfo, MediaType
+from mediadownloader.i18n import DEFAULT_LOCALE, TranslationService, tr
 from mediadownloader.services import HistoryService, SettingsService, SpotifyService
 from mediadownloader.services.clipboard_service import ClipboardService
+from mediadownloader.utils.alerts import notify
 from mediadownloader.utils.filenames import sanitize_filename
 from mediadownloader.utils.paths import asset_path, reveal_in_explorer
 from mediadownloader.version import APP_NAME, APP_VERSION
@@ -60,7 +64,40 @@ class MainWindow(QMainWindow):
         self.queue.item_finished.connect(self._download_finished)
         self.tray = QSystemTrayIcon(icon, self)
         self.tray.setToolTip(APP_NAME)
+        self.translations = TranslationService(self)
+        self.translations.locale_changed.connect(self._locale_changed)
+        self.translations.apply(settings.get("general.language", DEFAULT_LOCALE))
 
+    def _locale_changed(self, locale: str) -> None:
+        self.settings.set("general.language", locale)
+        self.retranslate()
+
+    def retranslate(self) -> None:
+        """Re-apply the catalogue after a language change.
+
+        Only the window chrome and the pages that expose ``retranslate`` change
+        now; the rest of the app keeps its text until it is rebuilt.
+        """
+        self.page_titles = [tr(label) for label in self.page_sources]
+        for button, source in zip(self.nav_buttons, self.page_sources):
+            button.setText(tr(source))
+        if self.brand_caption is not None:
+            self.brand_caption.setText(tr("MÍDIA  ÁUDIO  ARQUIVOS"))
+        if self.navigation_label is not None:
+            self.navigation_label.setText(tr("NAVEGAÇÃO"))
+        if self.privacy_title is not None:
+            self.privacy_title.setText(tr("Privado por padrão"))
+        if self.privacy_caption is not None:
+            self.privacy_caption.setText(tr("Seus dados ficam neste PC"))
+        if getattr(self, "tray", None) is not None:
+            self.tray.setToolTip(APP_NAME)
+        current = self.stack.currentWidget() if hasattr(self, "stack") else None
+        for page in (current,):
+            if page is not None and hasattr(page, "retranslate"):
+                page.retranslate()
+        self._update_page_title(self.stack.currentIndex() if hasattr(self, "stack") else 0)
+
+    def _update_page_title(self, index: int) -> None:
     def _build_ui(self) -> None:
         central = QWidget()
         root = QHBoxLayout(central)
@@ -69,7 +106,7 @@ class MainWindow(QMainWindow):
         sidebar = QWidget()
         sidebar.setObjectName("Sidebar")
         sidebar.setFixedWidth(236)
-        sidebar.setAccessibleName("Navegação principal")
+        sidebar.setAccessibleName(tr("Navegação principal"))
         side = QVBoxLayout(sidebar)
         side.setContentsMargins(16, 22, 16, 16)
         side.setSpacing(6)
@@ -84,7 +121,7 @@ class MainWindow(QMainWindow):
         brand = QLabel("Media Downloader")
         brand.setObjectName("BrandName")
         brand_caption = QLabel("MÍDIA • ÁUDIO • ARQUIVOS")
-        brand_caption.setObjectName("BrandCaption")
+        self.brand_caption.setObjectName("BrandCaption")
         brand_text.addWidget(brand)
         brand_text.addWidget(brand_caption)
         brand_layout.addWidget(brand_icon)
@@ -92,10 +129,10 @@ class MainWindow(QMainWindow):
         side.addWidget(brand_widget)
         side.addSpacing(22)
 
-        navigation_label = QLabel("NAVEGAÇÃO")
-        navigation_label.setObjectName("SidebarSection")
+        self.navigation_label = QLabel(tr("NAVEGAÇÃO"))
+        self.navigation_label.setObjectName("SidebarSection")
         navigation_label.setContentsMargins(10, 0, 0, 4)
-        side.addWidget(navigation_label)
+        side.addWidget(self.navigation_label)
 
         self.stack = QStackedWidget()
         self.stack.setObjectName("MainStack")
@@ -107,7 +144,7 @@ class MainWindow(QMainWindow):
         self.settings_page = SettingsPage(self.settings, self.queue, self.ffmpeg, self.spotify)
         self.site_files_page = SiteFilesPage(self.settings)
         self.qrcode_page = QrCodePage()
-        self.about_page = AboutPage()
+        self.about_page = AboutPage(self.settings, self.ffmpeg)
         pages = [
             ("Início", "home", self.home_page),
             ("Downloads", "downloads", self.downloads_page),
@@ -123,11 +160,12 @@ class MainWindow(QMainWindow):
             index for index, (_label, _icon, page) in enumerate(pages)
             if page is self.settings_page
         )
-        self.page_titles = [label for label, _icon, _page in pages]
+        self.page_sources = [label for label, _icon, _page in pages]
+        self.page_titles = [tr(label) for label in self.page_sources]
         group = QButtonGroup(self)
         self.nav_buttons: list[SidebarButton] = []
         for index, (label, icon_name, page) in enumerate(pages):
-            button = SidebarButton(label, icon_name)
+            button = SidebarButton(tr(label), icon_name)
             button.clicked.connect(lambda checked=False, page_index=index: self._navigate(page_index))
             group.addButton(button)
             self.nav_buttons.append(button)
@@ -149,13 +187,13 @@ class MainWindow(QMainWindow):
         privacy_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         privacy_text = QVBoxLayout()
         privacy_text.setSpacing(1)
-        privacy_title = QLabel("Privado por padrão")
-        privacy_title.setObjectName("SidebarFooterTitle")
-        privacy_caption = QLabel("Seus dados ficam neste PC")
-        privacy_caption.setObjectName("SidebarFooterCaption")
-        privacy_caption.setWordWrap(True)
-        privacy_text.addWidget(privacy_title)
-        privacy_text.addWidget(privacy_caption)
+        self.privacy_title = QLabel(tr("Privado por padrão"))
+        self.privacy_title.setObjectName("SidebarFooterTitle")
+        self.privacy_caption = QLabel(tr("Seus dados ficam neste PC"))
+        self.privacy_caption.setObjectName("SidebarFooterCaption")
+        self.privacy_caption.setWordWrap(True)
+        privacy_text.addWidget(self.privacy_title)
+        privacy_text.addWidget(self.privacy_caption)
         footer_layout.addWidget(privacy_icon, 0, Qt.AlignmentFlag.AlignTop)
         footer_layout.addLayout(privacy_text, 1)
         side.addWidget(footer)
@@ -168,6 +206,7 @@ class MainWindow(QMainWindow):
         root.addWidget(self.stack, 1)
         self.setCentralWidget(central)
         self.home_page.download_requested.connect(self._queue_media)
+        self.home_page.batch_requested.connect(self._queue_batch)
         self.home_page.configure_spotify_requested.connect(
             lambda: self._navigate(self.settings_index)
         )
@@ -179,6 +218,8 @@ class MainWindow(QMainWindow):
         self.queue.item_updated.connect(lambda _item: self._update_download_nav())
         self.queue.item_finished.connect(lambda _item: self._update_download_nav())
         self.queue.active_count_changed.connect(lambda _count: self._update_download_nav())
+        self.queue.set_gate(GateConfig.from_settings(self.settings))
+        self.queue.set_keep_awake(bool(self.settings.get("downloads.keep_awake", False)))
         self._update_download_nav()
 
     def _build_shortcuts(self) -> None:
@@ -220,13 +261,17 @@ class MainWindow(QMainWindow):
         self._pre_fullscreen_geometry = None
         self._pre_fullscreen_was_maximized = False
 
-    def _navigate(self, index: int) -> None:
-        self.stack.setCurrentIndex(index)
+    def _update_page_title(self, index: int) -> None:
         if 0 <= index < len(self.nav_buttons):
             self.nav_buttons[index].setChecked(True)
             title = self.page_titles[index]
             self.setWindowTitle(f"{APP_NAME} — {title}")
-            self.setAccessibleDescription(f"Seção atual: {title}.")
+            self.setAccessibleDescription(tr("Seção atual: {title}.").format(title=title))
+        self._update_download_nav()
+
+    def _navigate(self, index: int) -> None:
+        self.stack.setCurrentIndex(index)
+        self._update_page_title(index)
         if index == 2:
             self.history_page.reload()
         header = self.stack.currentWidget().findChild(PageHeader)
@@ -239,7 +284,9 @@ class MainWindow(QMainWindow):
         pending = sum(not item.status.terminal for item in self.queue.items.values())
         button = self.nav_buttons[1]
         description = (
-            f"Downloads, {pending} item(ns) ativo(s)." if pending else "Downloads, nenhuma atividade."
+            tr("Downloads, {count} item(ns) ativo(s).").format(count=pending)
+            if pending
+            else tr("Downloads, nenhuma atividade.")
         )
         button.setAccessibleName(description)
         button.setToolTip(description)
@@ -277,6 +324,35 @@ class MainWindow(QMainWindow):
         # Keep the analysis and URL visible. Downloads remain available from the
         # sidebar without unexpectedly replacing the form in progress.
 
+    def _queue_batch(self, urls: list[str], options: DownloadOptions) -> None:
+        """Queue every pasted address at once, before any of them is analyzed."""
+        output_dir = Path(options.output_dir)
+        for position, url in enumerate(urls, start=1):
+            item_options = DownloadOptions.from_dict(options.to_dict())
+            item_options.output_dir = str(output_dir)
+            host = (urlparse(url).hostname or "").removeprefix("www.")
+            item = DownloadItem(
+                url=url,
+                title=f"Link {position}",
+                author=host,
+                platform=host,
+                media_type=options.media_type,
+                format=(
+                    options.audio_format
+                    if options.media_type == MediaType.AUDIO
+                    else options.video_format
+                ),
+                quality=(
+                    f"{options.audio_quality} kbps"
+                    if options.media_type == MediaType.AUDIO
+                    else options.video_quality
+                ),
+                output_path=str(output_dir),
+                provisional_title=True,
+            )
+            self.queue.add(item, item_options)
+        # The pasted links stay in the field so the same batch can be re-sent.
+
     def _redownload(self, old: DownloadItem) -> None:
         options = DownloadOptions.from_dict(old.options)
         item = DownloadItem(
@@ -290,9 +366,10 @@ class MainWindow(QMainWindow):
     def _download_finished(self, item: DownloadItem) -> None:
         self.history_page.reload()
         if item.status == DownloadStatus.COMPLETED:
+            notify(bool(self.settings.get("downloads.completion_sound", True)))
             if self.settings.get("general.notifications", True) and QSystemTrayIcon.isSystemTrayAvailable():
                 self.tray.show()
-                self.tray.showMessage("Download concluído", item.title, QSystemTrayIcon.MessageIcon.Information, 5000)
+                self.tray.showMessage(tr("Download concluído"), item.title, QSystemTrayIcon.MessageIcon.Information, 5000)
             if self.settings.get("general.open_folder_on_complete", False):
                 if item.final_file:
                     reveal_in_explorer(item.final_file, select_file=True)
@@ -312,5 +389,6 @@ class MainWindow(QMainWindow):
                 return
         self.queue.cancel_all()
         self.site_files_page.cancel_downloads()
+        self.queue.shutdown()
         self.queue.pool.waitForDone(2500)
         event.accept()

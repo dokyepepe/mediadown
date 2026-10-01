@@ -44,10 +44,16 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "add_metadata": True,
         "duplicate_policy": "rename",
         "create_playlist_folder": True,
+        "window_enabled": False,
+        "window_start_minute": 0,
+        "window_end_minute": 360,
+        "minimum_free_mb": 32,
+        "keep_awake": False,
+        "completion_sound": True,
     },
     "filenames": {"template": "%(title)s.%(ext)s"},
     "network": {"proxy_type": "none", "proxy_url": "", "rate_limit_kbps": 0},
-    "cookies": {"source": "none", "file": "", "browser": "", "profiles": []},
+    "cookies": {"source": "none", "file": "", "browser": "", "impersonate": "", "profiles": []},
     "spotify": {"client_id": ""},
 }
 
@@ -120,6 +126,21 @@ class SettingsService:
     def update_section(self, section: str, values: dict[str, Any]) -> None:
         with self._lock:
             self._data.setdefault(section, {}).update(values)
+            self.save()
+
+    def replace(self, values: dict[str, Any]) -> None:
+        """Adopt a whole configuration, e.g. one restored from a backup file.
+
+        The incoming document is merged onto the defaults instead of replacing
+        them outright, so a backup taken by an older build still leaves every
+        key added since then at its default rather than missing.
+        """
+        if not isinstance(values, dict):
+            raise TypeError("settings must be an object")
+        with self._lock:
+            merged = deepcopy(DEFAULT_SETTINGS)
+            self._merge(merged, values)
+            self._data = merged
             self.save()
 
     def save(self) -> None:

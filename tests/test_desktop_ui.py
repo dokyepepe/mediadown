@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QKeySequence
-from PySide6.QtWidgets import QApplication, QHBoxLayout, QTableWidget
+from PySide6.QtWidgets import QApplication, QHBoxLayout, QTableWidget, QTextEdit
 
 from mediadownloader.services.history_service import HistoryService
 from mediadownloader.services.settings_service import SettingsService
@@ -92,6 +92,9 @@ def test_home_uses_horizontal_desktop_url_actions(qapp, qtbot, tmp_path: Path) -
         and url_layout.itemAt(index).layout().indexOf(page.url_input) >= 0
         for index in range(url_layout.count())
     )
+    assert isinstance(page.url_input, QTextEdit)
+    assert page.url_input.acceptDrops() is False
+    assert page.url_input.toPlainText() == ""
 
 
 def test_history_is_a_desktop_table(qtbot, tmp_path: Path) -> None:
@@ -106,14 +109,20 @@ def test_empty_download_state_keeps_readable_centered_width(qtbot) -> None:
     # DownloadsPage only needs these signals/properties while it builds the empty state.
     from PySide6.QtCore import QObject, Signal
 
+    from mediadownloader.core.download_gate import GateConfig
+
     class EmptyQueue(QObject):
         item_added = Signal(object)
         item_updated = Signal(object)
         item_finished = Signal(object)
         active_count_changed = Signal(int)
+        gate_changed = Signal(bool, str)
         paused = False
         has_active = False
-        items = {}
+        items: dict = {}
+        gate_config = GateConfig()
+        gate_blocked = False
+        gate_reason = ""
 
     page = DownloadsPage(EmptyQueue())  # type: ignore[arg-type]
     qtbot.addWidget(page)

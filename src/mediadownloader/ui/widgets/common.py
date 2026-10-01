@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QSpinBox, QVBoxLayout, QWidget,
 )
 
+from mediadownloader.i18n import tr
 from mediadownloader.models import DownloadStatus
 
 from ..icons import set_button_icon, svg_pixmap
@@ -134,8 +135,9 @@ class PageHeader(QWidget):
         super().__init__()
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-        self.setAccessibleName(title)
-        self.setAccessibleDescription(subtitle)
+        # Keep the source text so a language change can retranslate in place.
+        self._source_title = title
+        self._source_subtitle = subtitle
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 8)
         layout.setSpacing(14)
@@ -145,20 +147,34 @@ class PageHeader(QWidget):
         icon.setFixedSize(48, 48)
         text = QVBoxLayout()
         text.setSpacing(2)
-        title_label = QLabel(title)
-        title_label.setObjectName("PageTitle")
-        title_label.setWordWrap(True)
-        title_label.setMinimumWidth(0)
-        title_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-        subtitle_label = QLabel(subtitle)
-        subtitle_label.setObjectName("PageSubtitle")
-        subtitle_label.setWordWrap(True)
-        subtitle_label.setMinimumWidth(0)
-        subtitle_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-        text.addWidget(title_label)
-        text.addWidget(subtitle_label)
+        self.title_label = QLabel()
+        self.title_label.setObjectName("PageTitle")
+        self.title_label.setWordWrap(True)
+        self.title_label.setMinimumWidth(0)
+        self.title_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.subtitle_label = QLabel()
+        self.subtitle_label.setObjectName("PageSubtitle")
+        self.subtitle_label.setWordWrap(True)
+        self.subtitle_label.setMinimumWidth(0)
+        self.subtitle_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        text.addWidget(self.title_label)
+        text.addWidget(self.subtitle_label)
         layout.addWidget(icon)
         layout.addLayout(text, 1)
+        self.retranslate()
+
+    def set_header(self, title: str, subtitle: str) -> None:
+        self._source_title = title
+        self._source_subtitle = subtitle
+        self.retranslate()
+
+    def retranslate(self) -> None:
+        title = tr(self._source_title)
+        subtitle = tr(self._source_subtitle)
+        self.title_label.setText(title)
+        self.subtitle_label.setText(subtitle)
+        self.setAccessibleName(title)
+        self.setAccessibleDescription(subtitle)
 
 
 class EmptyState(QWidget):
@@ -204,6 +220,15 @@ class EmptyState(QWidget):
         layout.addStretch()
         layout.addWidget(self.content, 0, Qt.AlignmentFlag.AlignHCenter)
         layout.addStretch()
+
+    def set_title(self, title: str) -> None:
+        """Swap the headline, for pages that reuse this state for "no matches"."""
+        self.title_label.setText(title)
+        self.setAccessibleName(title)
+
+    def set_subtitle(self, subtitle: str) -> None:
+        self.subtitle_label.setText(subtitle)
+        self.setAccessibleDescription(subtitle)
 
 
 class WorkflowStep(QFrame):

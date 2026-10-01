@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_tagline">Your content, on your device</string>
+
+    <string name="legal_responsible_use_title">Responsible use</string>
+    <string name="legal_privacy_title">Privacy</string>
+    <string name="legal_app_license_title">Media Downloader license</string>
+    <string name="legal_third_party_title">Third-party licenses</string>
+
+    <string name="legal_responsible_use_body">Download only content you own, that is in the public domain, or that you are authorized to download. The app does not remove DRM, and you are responsible for respecting copyright and the terms of the source platform.</string>
+    <string name="legal_privacy_body">Links, queue, preferences and history stay on this device. The app has no account, ads or telemetry. The network connection is used only to analyze and download the media or site files you request and to update yt-dlp.</string>
+    <string name="legal_third_party_body">This app includes AndroidX, Kotlin, ZXing, yt-dlp, Python, FFmpeg and youtubedl-android. Each component keeps its respective open-source license; the full notices ship with the project source code.</string>
+</resources>

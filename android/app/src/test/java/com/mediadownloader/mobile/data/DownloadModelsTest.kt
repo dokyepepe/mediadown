@@ -136,6 +136,29 @@ class DownloadModelsTest {
     }
 
     @Test
+    fun optionsEmbedTagsByDefaultAndCanBeTurnedOff() {
+        assertTrue(DownloadOptions().embedMetadata)
+        assertTrue(DownloadOptions().embedThumbnail)
+
+        val plain = DownloadOptions(embedMetadata = false, embedThumbnail = false)
+        assertFalse(plain.embedMetadata)
+        assertFalse(plain.embedThumbnail)
+    }
+
+    @Test
+    fun optionsReportUnsupportedTagsForWavOnly() {
+        assertFalse(
+            DownloadOptions(mediaType = MediaType.AUDIO, audioFormat = AudioFormat.WAV).tagsSupported,
+        )
+        assertTrue(
+            DownloadOptions(mediaType = MediaType.AUDIO, audioFormat = AudioFormat.MP3).tagsSupported,
+        )
+        assertTrue(
+            DownloadOptions(mediaType = MediaType.VIDEO, videoContainer = VideoContainer.MKV).tagsSupported,
+        )
+    }
+
+    @Test
     fun resultExposesFirstPublishedFile() {
         val first = PublishedFile("content://first", "first.mp4", "video/mp4", 50L)
         val second = PublishedFile("content://second", "second.srt", "application/x-subrip", 10L)

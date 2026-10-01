@@ -30,9 +30,12 @@ class DownloadRepository private constructor(context: Context) {
         thumbnailUrl: String? = null,
         options: DownloadOptions = DownloadOptions(),
     ): DownloadItem = write {
-        DownloadItem.create(sourceUrl, title, sourceName, thumbnailUrl, options).also {
-            database.upsertDownload(it)
-        }
+        DownloadItem
+            .create(sourceUrl, title, sourceName, thumbnailUrl, options)
+            .copy(sortOrder = database.maxSortOrder() + 1)
+            .also {
+                database.upsertDownload(it)
+            }
     }
 
     suspend fun enqueue(item: DownloadItem): DownloadItem = write {
@@ -42,6 +45,8 @@ class DownloadRepository private constructor(context: Context) {
             progress = 0,
             etaSeconds = null,
             errorMessage = null,
+            keepPartialFiles = false,
+            sortOrder = database.maxSortOrder() + 1,
             updatedAtEpochMs = now,
             completedAtEpochMs = null,
         ).also(database::upsertDownload)
@@ -53,6 +58,28 @@ class DownloadRepository private constructor(context: Context) {
 
     suspend fun nextQueued(): DownloadItem? = withContext(Dispatchers.IO) {
         database.getNextQueuedDownload()
+    }
+
+    /**
+     * Atomically claims the next queued item (marks it INITIALIZING under the
+     * write lock). Safe to call from N concurrent workers: each item is handed
+     * to exactly one worker.
+     */
+    suspend fun claimNextQueued(): DownloadItem? = write {
+        database.getNextQueuedDownload()?.let { next ->
+            database.upsertDownload(
+                next.copy(
+                    state = DownloadState.INITIALIZING,
+                    progress = 0,
+                    etaSeconds = null,
+                    statusLine = "Preparando o mecanismo de download",
+                    errorMessage = null,
+                    updatedAtEpochMs = System.currentTimeMillis(),
+                    completedAtEpochMs = null,
+                ),
+            )
+            next
+        }
     }
 
     suspend fun markInitializing(id: String): DownloadItem? = mutate(id) {
@@ -100,6 +127,7 @@ class DownloadRepository private constructor(context: Context) {
             outputFileName = file.displayName,
             outputMimeType = file.mimeType,
             outputSizeBytes = file.sizeBytes,
+            keepPartialFiles = false,
             updatedAtEpochMs = now,
             completedAtEpochMs = now,
         )
@@ -125,9 +153,64 @@ class DownloadRepository private constructor(context: Context) {
                 etaSeconds = null,
                 statusLine = "Cancelado",
                 errorMessage = null,
+                keepPartialFiles = false,
                 updatedAtEpochMs = System.currentTimeMillis(),
             )
         }
+    }
+
+    /**
+     * Freezes the item where it is. The already downloaded part is kept so
+     * [resume] continues from it instead of starting over.
+     */
+    suspend fun pause(id: String): DownloadItem? = mutate(id) {
+        if (it.state in PAUSABLE_STATES) {
+            it.copy(
+                state = DownloadState.PAUSED,
+                etaSeconds = null,
+                statusLine = "Pausado",
+                errorMessage = null,
+                keepPartialFiles = true,
+                updatedAtEpochMs = System.currentTimeMillis(),
+            )
+        } else {
+            it
+        }
+    }
+
+    /** Puts a paused item back in the queue, keeping its manual position. */
+    suspend fun resume(id: String): DownloadItem? = mutate(id) {
+        if (it.state == DownloadState.PAUSED) {
+            it.copy(
+                state = DownloadState.QUEUED,
+                progress = 0,
+                etaSeconds = null,
+                statusLine = "Na fila novamente",
+                errorMessage = null,
+                updatedAtEpochMs = System.currentTimeMillis(),
+            )
+        } else {
+            it
+        }
+    }
+
+    /**
+     * Swaps a queued item with its neighbour so the user controls the run order.
+     * Returns the id when the move happened, `null` when there is no neighbour.
+     */
+    suspend fun moveQueued(id: String, up: Boolean): String? = write {
+        val current = database.getDownload(id)
+            ?.takeIf { it.state == DownloadState.QUEUED }
+            ?: return@write null
+        val queued = database.loadDownloads()
+            .filter { it.state == DownloadState.QUEUED }
+            .sortedWith(compareBy({ it.sortOrder }, { it.createdAtEpochMs }, { it.id }))
+        val index = queued.indexOfFirst { it.id == id }
+        val neighbourIndex = if (up) index - 1 else index + 1
+        val neighbour = queued.getOrNull(neighbourIndex) ?: return@write null
+        database.updateSortOrder(id, neighbour.sortOrder)
+        database.updateSortOrder(neighbour.id, current.sortOrder)
+        id
     }
 
     suspend fun retry(id: String): DownloadItem? = mutate(id) {
@@ -144,6 +227,7 @@ class DownloadRepository private constructor(context: Context) {
                 outputFileName = null,
                 outputMimeType = null,
                 outputSizeBytes = null,
+                keepPartialFiles = false,
                 retryCount = it.retryCount + 1,
                 updatedAtEpochMs = System.currentTimeMillis(),
                 completedAtEpochMs = null,
@@ -190,8 +274,30 @@ class DownloadRepository private constructor(context: Context) {
         database.deleteHistory(id)
     }
 
+    /** Bulk removal used by the history multi-selection; keeps the write mutex for all rows. */
+    suspend fun deleteHistory(ids: Collection<String>) = write {
+        if (ids.isEmpty()) return@write
+        database.deleteHistory(ids.toSet())
+    }
+
     suspend fun clearHistory() = write {
         database.clearHistory()
+    }
+
+    /** Persists a re-name applied to a history row (the stored URI keeps its id). */
+    suspend fun renameHistoryFileName(id: String, newFileName: String): HistoryItem? = write {
+        val current = database.loadHistory().firstOrNull { it.id == id } ?: return@write null
+        val updated = current.copy(fileName = newFileName)
+        database.upsertHistory(updated)
+        updated
+    }
+
+    suspend fun stats(): DownloadStats = withContext(Dispatchers.IO) {
+        val items = database.loadHistory()
+        DownloadStats(
+            completedCount = items.size,
+            totalDownloadedBytes = items.sumOf { it.sizeBytes.coerceAtLeast(0) },
+        )
     }
 
     private suspend fun mutate(
@@ -217,6 +323,12 @@ class DownloadRepository private constructor(context: Context) {
             DownloadState.COMPLETED,
             DownloadState.FAILED,
             DownloadState.CANCELLED,
+        )
+        private val PAUSABLE_STATES = setOf(
+            DownloadState.QUEUED,
+            DownloadState.INITIALIZING,
+            DownloadState.DOWNLOADING,
+            DownloadState.PROCESSING,
         )
 
         @Volatile

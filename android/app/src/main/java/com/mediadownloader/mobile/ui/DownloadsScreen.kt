@@ -21,15 +21,21 @@ import androidx.compose.material.icons.rounded.Cancel
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedFilterChip
 import androidx.compose.material3.FilledTonalButton
@@ -49,10 +55,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mediadownloader.mobile.R
 
 @Composable
 fun DownloadsScreen(
@@ -88,12 +97,15 @@ fun DownloadsScreen(
         ) {
             item {
                 ScreenHeading(
-                    eyebrow = "Sua fila",
-                    title = "Downloads",
+                    eyebrow = stringResource(R.string.downloads_heading_eyebrow),
+                    title = stringResource(R.string.downloads_heading_title),
                     supportingText = when (activeCount) {
-                        0 -> "Acompanhe cada arquivo do link até o dispositivo."
-                        1 -> "1 download está avançando agora."
-                        else -> "$activeCount downloads estão avançando agora."
+                        0 -> stringResource(R.string.downloads_heading_supporting_idle)
+                        else -> pluralStringResource(
+                            R.plurals.downloads_heading_active,
+                            activeCount,
+                            activeCount,
+                        )
                     },
                     icon = Icons.Rounded.Download,
                 )
@@ -114,7 +126,7 @@ fun DownloadsScreen(
                     value = state.searchQuery,
                     onValueChange = { onAction(MobileUiAction.DownloadsSearchQueryChanged(it)) },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Buscar por título ou origem") },
+                    placeholder = { Text(stringResource(R.string.downloads_search_placeholder)) },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Rounded.Search,
@@ -130,7 +142,9 @@ fun DownloadsScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.Close,
-                                    contentDescription = "Limpar busca",
+                                    contentDescription = stringResource(
+                                        R.string.downloads_search_clear,
+                                    ),
                                 )
                             }
                         }
@@ -156,7 +170,7 @@ fun DownloadsScreen(
                                     modifier = Modifier.size(17.dp),
                                 )
                             },
-                            label = { Text("${filter.label} · $count") },
+                            label = { Text("${stringResource(filter.labelRes)} · $count") },
                         )
                     }
                 }
@@ -166,13 +180,20 @@ fun DownloadsScreen(
                 item {
                     EmptyState(
                         icon = Icons.Rounded.CloudDownload,
-                        title = if (state.items.isEmpty()) "Sua fila está vazia" else "Nada encontrado",
-                        supportingText = if (state.items.isEmpty()) {
-                            "Os downloads adicionados na tela Início aparecerão aqui com o progresso em tempo real."
-                        } else if (query.isNotEmpty()) {
-                            "Nenhum download corresponde a \"${state.searchQuery.trim()}\". Confira a busca e o filtro selecionado."
+                        title = if (state.items.isEmpty()) {
+                            stringResource(R.string.downloads_empty_title)
                         } else {
-                            "Selecione outro filtro para encontrar seus downloads."
+                            stringResource(R.string.downloads_no_results_title)
+                        },
+                        supportingText = if (state.items.isEmpty()) {
+                            stringResource(R.string.downloads_empty_supporting)
+                        } else if (query.isNotEmpty()) {
+                            stringResource(
+                                R.string.downloads_no_results_query,
+                                state.searchQuery.trim(),
+                            )
+                        } else {
+                            stringResource(R.string.downloads_no_results_filter)
                         },
                     )
                 }
@@ -200,7 +221,7 @@ fun DownloadsScreen(
                             modifier = Modifier.size(20.dp),
                         )
                         Text(
-                            text = "Remover itens finalizados",
+                            text = stringResource(R.string.downloads_remove_finished),
                             modifier = Modifier.padding(start = 9.dp),
                         )
                     }
@@ -222,7 +243,7 @@ private fun DownloadSummary(
     ) {
         DownloadMetric(
             value = activeCount,
-            label = "Em andamento",
+            label = stringResource(R.string.filter_active),
             icon = Icons.Rounded.Download,
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -230,7 +251,7 @@ private fun DownloadSummary(
         )
         DownloadMetric(
             value = completedCount,
-            label = "Concluídos",
+            label = stringResource(R.string.filter_completed),
             icon = Icons.Rounded.CheckCircle,
             containerColor = MaterialTheme.colorScheme.tertiaryContainer,
             contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -238,7 +259,7 @@ private fun DownloadSummary(
         )
         DownloadMetric(
             value = failedCount,
-            label = "Atenção",
+            label = stringResource(R.string.downloads_metric_attention),
             icon = Icons.Rounded.ErrorOutline,
             containerColor = if (failedCount > 0) {
                 MaterialTheme.colorScheme.errorContainer
@@ -361,7 +382,7 @@ private fun DownloadCard(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = item.progressText ?: item.status.label,
+                            text = item.progressText ?: stringResource(item.status.labelRes),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
@@ -388,6 +409,43 @@ private fun DownloadCard(
                 )
             }
 
+            if (item.status == DownloadStatus.FAILED && !item.sourceUrl.isNullOrBlank()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(
+                        onClick = { onAction(MobileUiAction.CopyDownloadLink(item.id)) },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.ContentCopy,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Text(
+                            stringResource(R.string.action_copy_link),
+                            modifier = Modifier.padding(start = 7.dp),
+                        )
+                    }
+                    TextButton(
+                        onClick = { onAction(MobileUiAction.Navigate(AppTab.SETTINGS)) },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Tune,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Text(
+                            stringResource(R.string.downloads_adjust_cookies),
+                            modifier = Modifier.padding(start = 7.dp),
+                        )
+                    }
+                }
+            }
+
             DownloadActions(item = item, onAction = onAction)
         }
     }
@@ -403,19 +461,101 @@ private fun DownloadActions(
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (item.canMoveUp || item.canMoveDown) {
+            if (item.canMoveUp) {
+                IconButton(
+                    onClick = { onAction(MobileUiAction.MoveDownload(item.id, up = true)) },
+                    modifier = Modifier.size(38.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.KeyboardArrowUp,
+                        contentDescription = stringResource(R.string.action_move_up),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+            if (item.canMoveDown) {
+                IconButton(
+                    onClick = { onAction(MobileUiAction.MoveDownload(item.id, up = false)) },
+                    modifier = Modifier.size(38.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.KeyboardArrowDown,
+                        contentDescription = stringResource(R.string.action_move_down),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+        }
+
         when (item.status) {
             DownloadStatus.QUEUED,
             DownloadStatus.PREPARING,
             DownloadStatus.DOWNLOADING,
-            DownloadStatus.PROCESSING -> TextButton(onClick = {
-                onAction(MobileUiAction.CancelDownload(item.id))
-            }) {
-                Icon(
-                    imageVector = Icons.Rounded.Cancel,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Text("Cancelar", modifier = Modifier.padding(start = 7.dp))
+            DownloadStatus.PROCESSING -> {
+                TextButton(
+                    onClick = { onAction(MobileUiAction.PauseDownload(item.id)) },
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Pause,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        stringResource(R.string.action_pause),
+                        modifier = Modifier.padding(start = 7.dp),
+                    )
+                }
+                TextButton(
+                    onClick = { onAction(MobileUiAction.CancelDownload(item.id)) },
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Cancel,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        stringResource(R.string.action_cancel),
+                        modifier = Modifier.padding(start = 7.dp),
+                    )
+                }
+            }
+
+            DownloadStatus.PAUSED -> {
+                TextButton(
+                    onClick = { onAction(MobileUiAction.RemoveDownload(item.id)) },
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.DeleteOutline,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        stringResource(R.string.action_remove),
+                        modifier = Modifier.padding(start = 7.dp),
+                    )
+                }
+                Button(
+                    onClick = { onAction(MobileUiAction.ResumeDownload(item.id)) },
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 9.dp, vertical = 8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        stringResource(R.string.action_resume),
+                        modifier = Modifier.padding(start = 7.dp),
+                    )
+                }
             }
 
             DownloadStatus.FAILED,
@@ -430,7 +570,10 @@ private fun DownloadActions(
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
                     )
-                    Text("Remover", modifier = Modifier.padding(start = 7.dp))
+                    Text(
+                        stringResource(R.string.action_remove),
+                        modifier = Modifier.padding(start = 7.dp),
+                    )
                 }
                 Button(
                     onClick = { onAction(MobileUiAction.RetryDownload(item.id)) },
@@ -443,7 +586,7 @@ private fun DownloadActions(
                         modifier = Modifier.size(18.dp),
                     )
                     Text(
-                        "Tentar novamente",
+                        stringResource(R.string.action_retry),
                         modifier = Modifier.padding(start = 7.dp),
                         maxLines = 2,
                         textAlign = TextAlign.Center,
@@ -452,6 +595,13 @@ private fun DownloadActions(
             }
 
             DownloadStatus.COMPLETED -> {
+                if (item.canSetAsSound) {
+                    SoundRoleMenu(
+                        onRoleSelected = { role ->
+                            onAction(MobileUiAction.SetDownloadSound(item.id, role))
+                        },
+                    )
+                }
                 TextButton(
                     onClick = { onAction(MobileUiAction.RemoveDownload(item.id)) },
                     modifier = Modifier.weight(1f),
@@ -462,7 +612,10 @@ private fun DownloadActions(
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
                     )
-                    Text("Remover", modifier = Modifier.padding(start = 7.dp))
+                    Text(
+                        stringResource(R.string.action_remove),
+                        modifier = Modifier.padding(start = 7.dp),
+                    )
                 }
                 FilledTonalButton(
                     onClick = { onAction(MobileUiAction.OpenDownload(item.id)) },
@@ -474,7 +627,10 @@ private fun DownloadActions(
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
                     )
-                    Text("Abrir", modifier = Modifier.padding(start = 7.dp))
+                    Text(
+                        stringResource(R.string.action_open),
+                        modifier = Modifier.padding(start = 7.dp),
+                    )
                 }
             }
         }
@@ -491,10 +647,11 @@ private fun DownloadStatusPill(status: DownloadStatus) {
         DownloadStatus.PROCESSING -> colors.primaryContainer to colors.onPrimaryContainer
         DownloadStatus.COMPLETED -> colors.tertiaryContainer to colors.onTertiaryContainer
         DownloadStatus.FAILED -> colors.errorContainer to colors.onErrorContainer
+        DownloadStatus.PAUSED -> colors.secondaryContainer to colors.onSecondaryContainer
         DownloadStatus.CANCELLED -> colors.surfaceVariant to colors.onSurfaceVariant
     }
     StatusPill(
-        label = status.label,
+        label = stringResource(status.labelRes),
         containerColor = container,
         contentColor = content,
         icon = status.icon,
@@ -509,6 +666,7 @@ private val DownloadStatus.icon: ImageVector
         DownloadStatus.PROCESSING -> Icons.Rounded.Autorenew
         DownloadStatus.COMPLETED -> Icons.Rounded.CheckCircle
         DownloadStatus.FAILED -> Icons.Rounded.ErrorOutline
+        DownloadStatus.PAUSED -> Icons.Rounded.Pause
         DownloadStatus.CANCELLED -> Icons.Rounded.Cancel
     }
 
@@ -524,7 +682,8 @@ private val DownloadStatus.isActive: Boolean
     get() = this == DownloadStatus.QUEUED ||
         this == DownloadStatus.PREPARING ||
         this == DownloadStatus.DOWNLOADING ||
-        this == DownloadStatus.PROCESSING
+        this == DownloadStatus.PROCESSING ||
+        this == DownloadStatus.PAUSED
 
 private fun List<DownloadItemUi>.countFor(filter: DownloadFilter): Int = count { item ->
     when (filter) {

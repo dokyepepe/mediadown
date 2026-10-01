@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Media Downloader</string>
+    <string name="download_channel_name">Downloads</string>
+    <string name="download_channel_description">Progreso de las descargas de media</string>
+    <string name="quick_download_widget_description">Descarga rápidamente el enlace del portapapeles</string>
+    <string name="quick_download_widget_subtitle">Descarga el enlace del portapapeles</string>
+    <string name="quick_download_widget_download">Pegar y descargar</string>
+    <string name="quick_download_widget_open">Abrir</string>
+    <string name="quick_download_widget_status_idle">Pega un enlace y toca Pegar y descargar</string>
+    <string name="quick_download_widget_status_downloading">Descargando %1$s — %2$d%%</string>
+    <string name="quick_download_widget_status_processing">Procesando %1$s</string>
+    <plurals name="quick_download_widget_status_queued">
+        <item quantity="one">%1$d descarga en cola</item>
+        <item quantity="many">%1$d descargas en cola</item>
+        <item quantity="other">%1$d descargas en cola</item>
+    </plurals>
+    <string name="quick_download_widget_kind_video">Vídeo</string>
+    <string name="quick_download_widget_kind_audio">Audio</string>
+    <string name="download_list_widget_description">Cola de descargas en tiempo real</string>
+    <string name="download_list_widget_subtitle">Cola de descargas</string>
+    <string name="download_list_widget_empty">No hay descargas activas ni en cola</string>
+    <string name="quick_tile_label">Descargar del portapapeles</string>
+</resources>

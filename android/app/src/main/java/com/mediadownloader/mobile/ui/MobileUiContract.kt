@@ -1,6 +1,10 @@
 package com.mediadownloader.mobile.ui
 
+import android.net.Uri
+import com.mediadownloader.mobile.R
+import com.mediadownloader.mobile.data.AudioFormat
 import com.mediadownloader.mobile.data.CookieCheckUi
+import com.mediadownloader.mobile.media.SoundRole
 import com.mediadownloader.mobile.data.StorageCategory
 
 import kotlinx.coroutines.flow.StateFlow
@@ -38,13 +42,13 @@ data class UiMessage(
     val text: String,
 )
 
-enum class AppTab(val label: String, val glyph: String) {
-    HOME("Início", "⌂"),
-    SITE_FILES("Arquivos", "▤"),
-    QR_CODE("QR Code", "▦"),
-    DOWNLOADS("Downloads", "⇩"),
-    HISTORY("Histórico", "↶"),
-    SETTINGS("Ajustes", "⚙"),
+enum class AppTab(val labelRes: Int, val glyph: String) {
+    HOME(R.string.tab_home, "⌂"),
+    SITE_FILES(R.string.tab_site_files, "▤"),
+    QR_CODE(R.string.tab_qr_code, "▦"),
+    DOWNLOADS(R.string.tab_downloads, "⇩"),
+    HISTORY(R.string.tab_history, "↶"),
+    SETTINGS(R.string.tab_settings, "⚙"),
 }
 
 data class QrCodeUiState(
@@ -98,11 +102,11 @@ enum class SiteFileKindUi(val label: String) {
     IMAGE("Imagem"),
 }
 
-enum class SiteFileStatus(val label: String) {
-    READY("Pronto"),
-    DOWNLOADING("Baixando"),
-    SAVED("Salvo"),
-    FAILED("Falhou"),
+enum class SiteFileStatus(val labelRes: Int) {
+    READY(R.string.site_status_ready),
+    DOWNLOADING(R.string.site_status_downloading),
+    SAVED(R.string.site_status_saved),
+    FAILED(R.string.site_status_failed),
 }
 
 data class HomeUiState(
@@ -116,11 +120,18 @@ data class HomeUiState(
     val downloadPlaylist: Boolean = true,
     val playlistSelection: Set<Int> = emptySet(),
     val includeSubtitles: Boolean = false,
-    val editorCompatible: Boolean = false,
+    val editorCompatible: Boolean = true,
+    val embedMetadata: Boolean = true,
+    val embedThumbnail: Boolean = true,
     val itemRateLimitText: String = "",
     val canPaste: Boolean = true,
+    /** Valid HTTP links currently typed in the field; above one enables the batch action. */
+    val batchCount: Int = 0,
     val isStartingDownload: Boolean = false,
     val analysisHint: String? = null,
+    /** Caption languages found for the analyzed media; empty when none are offered. */
+    val subtitleLanguages: List<String> = emptyList(),
+    val selectedSubtitleLanguages: Set<String> = emptySet(),
     val audioSpeed: Float = 1f,
     val audioPitchSemitones: Float = 0f,
     val audioVolumePercent: Int = 100,
@@ -140,7 +151,12 @@ data class HomeUiState(
     val isSpotifyDownloading: Boolean = false,
 ) {
     val canAnalyze: Boolean
-        get() = url.isNotBlank() && !isAnalyzing && !isStartingDownload && !isSpotifyDownloading
+        get() = url.isNotBlank() && batchCount <= 1 && !isAnalyzing && !isStartingDownload &&
+            !isSpotifyDownloading
+
+    /** True when the field holds a list that can be queued in one go. */
+    val canEnqueueBatch: Boolean
+        get() = batchCount > 1 && !isAnalyzing && !isStartingDownload
 
     val canDownload: Boolean
         get() = preview != null && selectedQualityId != null && selectedFormatId != null &&
@@ -169,6 +185,10 @@ data class HomeUiState(
     val audioTrimDefault: Boolean
         get() = trimStartSeconds == 0f && trimDurationSeconds == null &&
             fadeInSeconds == 0f && fadeOutSeconds == 0f
+
+    /** WAV carries no tags, so the metadata switch is hidden for it. */
+    val embedMetadataSupported: Boolean
+        get() = selectedKind != MediaKind.AUDIO || selectedFormatId != AudioFormat.WAV.extension
 }
 
 data class MediaPreviewUi(
@@ -198,9 +218,9 @@ data class ChoiceUi(
     val recommended: Boolean = false,
 )
 
-enum class MediaKind(val label: String, val supportingText: String) {
-    VIDEO("Vídeo", "Imagem e som"),
-    AUDIO("Áudio", "Somente o áudio"),
+enum class MediaKind(val labelRes: Int, val supportingTextRes: Int) {
+    VIDEO(R.string.media_kind_video, R.string.media_kind_video_support),
+    AUDIO(R.string.media_kind_audio, R.string.media_kind_audio_support),
 }
 
 data class PlaylistItemUi(
@@ -274,11 +294,11 @@ data class DownloadsUiState(
     val searchQuery: String = "",
 )
 
-enum class DownloadFilter(val label: String) {
-    ALL("Todos"),
-    ACTIVE("Em andamento"),
-    COMPLETED("Concluídos"),
-    FAILED("Com erro"),
+enum class DownloadFilter(val labelRes: Int) {
+    ALL(R.string.filter_all),
+    ACTIVE(R.string.filter_active),
+    COMPLETED(R.string.filter_completed),
+    FAILED(R.string.filter_failed),
 }
 
 data class DownloadItemUi(
@@ -293,21 +313,30 @@ data class DownloadItemUi(
     val errorMessage: String? = null,
     val thumbnailUrl: String? = null,
     val canOpen: Boolean = false,
+    val sourceUrl: String? = null,
+    val canPause: Boolean = false,
+    val canResume: Boolean = false,
+    val canMoveUp: Boolean = false,
+    val canMoveDown: Boolean = false,
+    val canSetAsSound: Boolean = false,
 )
 
-enum class DownloadStatus(val label: String) {
-    QUEUED("Na fila"),
-    PREPARING("Preparando"),
-    DOWNLOADING("Baixando"),
-    PROCESSING("Processando"),
-    COMPLETED("Concluído"),
-    FAILED("Falhou"),
-    CANCELLED("Cancelado"),
+enum class DownloadStatus(val labelRes: Int) {
+    QUEUED(R.string.status_queued),
+    PREPARING(R.string.status_preparing),
+    DOWNLOADING(R.string.status_downloading),
+    PROCESSING(R.string.status_processing),
+    PAUSED(R.string.status_paused),
+    COMPLETED(R.string.status_completed),
+    FAILED(R.string.status_failed),
+    CANCELLED(R.string.status_cancelled),
 }
 
 data class HistoryUiState(
     val items: List<HistoryItemUi> = emptyList(),
     val searchQuery: String = "",
+    /** Ids picked in multi-select mode; empty means the screen is browsing normally. */
+    val selectedIds: Set<String> = emptySet(),
 )
 
 data class HistoryItemUi(
@@ -319,6 +348,7 @@ data class HistoryItemUi(
     val thumbnailUrl: String? = null,
     val canOpen: Boolean = true,
     val canShare: Boolean = true,
+    val canSetAsSound: Boolean = false,
 )
 
 data class SettingsUiState(
@@ -353,6 +383,20 @@ data class SettingsUiState(
     val spotifyConnected: Boolean = false,
     val spotifyAccountName: String? = null,
     val isSpotifyConnecting: Boolean = false,
+    val parallelDownloads: Int = 1,
+    val wifiOnly: Boolean = false,
+    val downloadWindowEnabled: Boolean = false,
+    val downloadWindowStartMin: Int = 0,
+    val downloadWindowEndMin: Int = 360,
+    val completionSound: Boolean = true,
+    val completionVibrate: Boolean = false,
+    /** Site ids the user can currently download from; drives the compatibility card. */
+    val compatSupportedSites: Set<String> = emptySet(),
+    val keepAwakeDuringDownloads: Boolean = false,
+    val statsCompletedCount: Int = 0,
+    val statsDownloadedBytes: Long = 0,
+    val statsTempBytes: Long = 0,
+    val statsFreeBytes: Long = 0,
 ) {
     val isYtDlpOperationBusy: Boolean
         get() = updateState == YtDlpUpdateState.CHECKING ||
@@ -376,12 +420,14 @@ data class CookieSubProfileUi(
     val label: String,
     val hosts: String,
     val cookie: CookieCheckUi? = null,
+    val impersonate: String = "",
 )
 
-enum class ThemePreference(val label: String) {
-    SYSTEM("Sistema"),
-    LIGHT("Claro"),
-    DARK("Escuro"),
+enum class ThemePreference(val labelRes: Int) {
+    SYSTEM(R.string.theme_system),
+    LIGHT(R.string.theme_light),
+    DARK(R.string.theme_dark),
+    AMOLED(R.string.theme_amoled),
 }
 
 enum class YtDlpUpdateState {
@@ -415,6 +461,8 @@ sealed interface MobileUiAction {
     data class ReceiveSharedUrl(val value: String) : MobileUiAction
     data class UrlChanged(val value: String) : MobileUiAction
     object PasteUrl : MobileUiAction
+    object EnqueueUrlBatch : MobileUiAction
+    data class ToggleSubtitleLanguage(val language: String) : MobileUiAction
     object AnalyzeUrl : MobileUiAction
     object ClearAnalysis : MobileUiAction
     data class SelectMediaKind(val kind: MediaKind) : MobileUiAction
@@ -427,6 +475,10 @@ sealed interface MobileUiAction {
     data class SelectPreviewKind(val kind: MediaKind) : MobileUiAction
     data class SetItemRateLimitText(val value: String) : MobileUiAction
     data class ToggleEditorCompatibility(val enabled: Boolean) : MobileUiAction
+
+    data class SetEmbedMetadata(val enabled: Boolean) : MobileUiAction
+
+    data class SetEmbedThumbnail(val enabled: Boolean) : MobileUiAction
     object StartDownload : MobileUiAction
     data class SetAudioSpeed(val value: Float) : MobileUiAction
     data class SetAudioPitch(val semitones: Float) : MobileUiAction
@@ -458,6 +510,9 @@ sealed interface MobileUiAction {
     data class SelectDownloadFilter(val filter: DownloadFilter) : MobileUiAction
     data class DownloadsSearchQueryChanged(val value: String) : MobileUiAction
     data class CancelDownload(val id: String) : MobileUiAction
+    data class PauseDownload(val id: String) : MobileUiAction
+    data class ResumeDownload(val id: String) : MobileUiAction
+    data class MoveDownload(val id: String, val up: Boolean) : MobileUiAction
     data class RetryDownload(val id: String) : MobileUiAction
     data class RemoveDownload(val id: String) : MobileUiAction
     data class OpenDownload(val id: String) : MobileUiAction
@@ -466,6 +521,11 @@ sealed interface MobileUiAction {
     data class OpenHistoryItem(val id: String) : MobileUiAction
     data class ShareHistoryItem(val id: String) : MobileUiAction
     data class HistorySearchQueryChanged(val value: String) : MobileUiAction
+    data class BeginHistorySelection(val id: String) : MobileUiAction
+    data class ToggleHistorySelection(val id: String) : MobileUiAction
+    data class ToggleSelectAllHistoryItems(val selected: Boolean) : MobileUiAction
+    object ClearHistorySelection : MobileUiAction
+    object DeleteSelectedHistoryItems : MobileUiAction
     object ExportHistory : MobileUiAction
     object ClearHistory : MobileUiAction
 
@@ -492,6 +552,24 @@ sealed interface MobileUiAction {
     data class SetDefaultVideoFormat(val id: String) : MobileUiAction
     data class SetDefaultAudioBitrate(val value: Int) : MobileUiAction
     data class SetDefaultAudioFormat(val id: String) : MobileUiAction
+    data class SetParallelDownloads(val value: Int) : MobileUiAction
+    data class SetWifiOnly(val enabled: Boolean) : MobileUiAction
+    data class SetDownloadWindowEnabled(val enabled: Boolean) : MobileUiAction
+    data class SetDownloadWindowStartMin(val value: Int) : MobileUiAction
+    data class SetDownloadWindowEndMin(val value: Int) : MobileUiAction
+    data class SetCompletionSound(val enabled: Boolean) : MobileUiAction
+    data class SetCompletionVibrate(val enabled: Boolean) : MobileUiAction
+    data class SetKeepAwakeDuringDownloads(val enabled: Boolean) : MobileUiAction
+    object ExportSettings : MobileUiAction
+    data class ImportSettings(val uri: Uri) : MobileUiAction
+    data class SetCookieProfileImpersonate(val id: String, val value: String) : MobileUiAction
+    data class CopyDownloadLink(val id: String) : MobileUiAction
+    object RemoveTemporaryFiles : MobileUiAction
+    object RefreshStats : MobileUiAction
+    data class RedownloadHistoryItem(val id: String) : MobileUiAction
+    data class RenameHistoryItem(val id: String, val newFileName: String) : MobileUiAction
+    data class SetDownloadSound(val id: String, val role: SoundRole) : MobileUiAction
+    data class SetHistorySound(val id: String, val role: SoundRole) : MobileUiAction
     object ShareDiagnostics : MobileUiAction
     object WidgetDownloadFromClipboard : MobileUiAction
     data class SetSpotifyClientId(val value: String) : MobileUiAction

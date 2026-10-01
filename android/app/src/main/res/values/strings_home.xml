@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_action_analyze">Analyze</string>
+    <plurals name="home_batch_hint">
+        <item quantity="one">%1$d link detected here. Analyze a single link or send the whole list to the queue.</item>
+        <item quantity="other">%1$d links detected here. Analyze a single link or send the whole list to the queue.</item>
+    </plurals>
+    <plurals name="home_action_enqueue_batch">
+        <item quantity="one">Add %1$d link to the queue</item>
+        <item quantity="other">Add %1$d links to the queue</item>
+    </plurals>
+    <string name="home_action_analyzing">Analyzing…</string>
+    <string name="home_action_download_now">Download now</string>
+    <string name="home_action_download_playlist">Download playlist</string>
+    <string name="home_action_queued">Adding to queue…</string>
+    <string name="home_action_switch">Replace</string>
+    <string name="home_audio_bass">Boosted bass</string>
+    <string name="home_audio_bass_supporting">+6 dB at 100 Hz</string>
+    <string name="home_audio_echo">Echo</string>
+    <string name="home_audio_echo_supporting">Gentle 300 ms decay</string>
+    <string name="home_audio_normalize">Normalization</string>
+    <string name="home_audio_normalize_supporting">Uniform loudness (EBU R128)</string>
+    <string name="home_audio_pitch">Pitch</string>
+    <string name="home_audio_pitch_normal">0 st (normal)</string>
+    <string name="home_audio_preview">Preview</string>
+    <string name="home_audio_preview_audio">Preview audio</string>
+    <string name="home_audio_rendering_preview">Generating preview…</string>
+    <plurals name="home_audio_semitones">
+        <item quantity="one">%1$s st</item>
+        <item quantity="other">%1$s st</item>
+    </plurals>
+    <string name="home_audio_speed">Speed</string>
+    <string name="home_audio_speed_value">%1$sx</string>
+    <string name="home_audio_stop_preview">Stop preview</string>
+    <string name="home_audio_supporting_audio">Adjust pitch, speed, volume, bass, echo, tremolo and normalization, and listen to up to 30 s before downloading.</string>
+    <string name="home_audio_supporting_video">Adjust pitch, speed, volume, bass, echo, tremolo and normalization, and tap the previews before downloading.</string>
+    <string name="home_audio_title">Listen with effects</string>
+    <string name="home_audio_tremolo">Tremolo</string>
+    <string name="home_audio_tremolo_supporting">5 Hz oscillation</string>
+    <string name="home_audio_volume">Volume</string>
+    <string name="home_audio_volume_value">%1$d%%</string>
+    <plurals name="home_download_items">
+        <item quantity="one">Download %1$d item</item>
+        <item quantity="other">Download %1$d items</item>
+    </plurals>
+    <string name="home_heading_eyebrow">New download</string>
+    <string name="home_heading_supporting">Paste a link, check the preview and choose exactly how to save.</string>
+    <string name="home_heading_title">Download your media</string>
+    <string name="home_options_editor_compatible">Editor compatible</string>
+    <string name="home_options_editor_compatible_supporting">H.264/AAC .mp4 with moov at the start (Premiere, DaVinci, CapCut)</string>
+    <string name="home_options_metadata">Embed metadata</string>
+    <string name="home_options_metadata_supporting">Writes the title, artist and date into the file tags.</string>
+    <string name="home_options_thumbnail">Embed cover</string>
+    <string name="home_options_thumbnail_supporting">Saves the thumbnail as cover art inside the audio file.</string>
+    <string name="home_options_format">Format</string>
+    <string name="home_options_media_type">Media type</string>
+    <string name="home_options_no_choices">No options available.</string>
+    <string name="home_options_quality">Quality</string>
+    <string name="home_options_rate_limit_label">Per-item speed limit (KiB/s)</string>
+    <string name="home_options_rate_limit_placeholder">Empty = no limit</string>
+    <string name="home_options_rate_limit_supporting">Applies to this item; background parameters stay untouched.</string>
+    <string name="home_options_recommended">%1$s · recommended</string>
+    <string name="home_options_subtitles">Include subtitles</string>
+    <string name="home_options_subtitles_supporting">When available in the original language</string>
+    <plurals name="home_options_subtitles_languages">
+        <item quantity="one">%1$d language available. Pick the ones to download.</item>
+        <item quantity="other">%1$d languages available. Pick the ones to download.</item>
+    </plurals>
+    <string name="home_options_supporting">Choose type, quality and format before downloading.</string>
+    <string name="home_options_title">Customize the file</string>
+    <string name="home_playlist_clear_selection">Clear selection</string>
+    <string name="home_playlist_select_all">Select all</string>
+    <string name="home_playlist_supporting">Choose which songs or videos enter the queue.</string>
+    <string name="home_playlist_title">Playlist items</string>
+    <string name="home_preview_audio_only">Audio only</string>
+    <string name="home_preview_audio_only_supporting">An audio capture</string>
+    <string name="home_preview_content">Preview content</string>
+    <string name="home_preview_found">PREVIEW FOUND</string>
+    <plurals name="home_preview_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
+    <string name="home_preview_playlist">Playlist</string>
+    <string name="home_preview_with_video">With video</string>
+    <string name="home_preview_with_video_supporting">Short segment with picture</string>
+    <string name="home_privacy_banner">Your links and downloads stay on this device — no account and no telemetry.</string>
+    <string name="home_seconds_value">%1$s s</string>
+    <string name="home_spotify_auth_hint">Connect your Spotify account in Settings to see the tracks of this playlist.</string>
+    <string name="home_spotify_download_audio">Download audio from YouTube</string>
+    <string name="home_spotify_download_tracks">Download tracks from YouTube</string>
+    <plurals name="home_spotify_more_tracks">
+        <item quantity="one">+ %1$d track</item>
+        <item quantity="other">+ %1$d tracks</item>
+    </plurals>
+    <string name="home_spotify_notice">Downloading audio protected by Spotify is not possible; each track is located through a YouTube search.</string>
+    <string name="home_spotify_supporting">Official metadata. The audio is fetched from YouTube, never from Spotify.</string>
+    <string name="home_spotify_title">Spotify</string>
+    <plurals name="home_spotify_tracks">
+        <item quantity="one">%1$d track</item>
+        <item quantity="other">%1$d tracks</item>
+    </plurals>
+    <string name="home_trim_duration">Segment duration</string>
+    <string name="home_trim_duration_supporting">Stops the segment at the chosen duration</string>
+    <string name="home_trim_fade_in">Fade in</string>
+    <string name="home_trim_fade_out">Fade out</string>
+    <string name="home_trim_start">Trim start</string>
+    <string name="home_trim_supporting">Start the media at a different segment and soften the edges of the saved segment.</string>
+    <string name="home_trim_title">Trim and fades</string>
+    <string name="home_trim_until_end">Trim to the end</string>
+    <string name="home_trim_until_end_supporting">The segment runs to the end of the media</string>
+    <string name="home_url_label">Video, audio or playlist URL</string>
+    <string name="home_url_supporting">Links received through the Share menu appear here.</string>
+    <string name="home_url_title">Media link</string>
+</resources>

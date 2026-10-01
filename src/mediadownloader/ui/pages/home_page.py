@@ -10,9 +10,9 @@ from PySide6.QtGui import (
     QKeySequence, QShortcut,
 )
 from PySide6.QtWidgets import (
-    QButtonGroup, QCheckBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout,
-    QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QScrollArea,
-    QVBoxLayout, QWidget,
+    QButtonGroup, QCheckBox, QDoubleSpinBox, QFileDialog, QFrame, QGridLayout,
+    QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
+    QPushButton, QScrollArea, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from mediadownloader.core.audio_effects import (
@@ -26,6 +26,7 @@ from mediadownloader.models import DownloadOptions, MediaInfo, MediaType, Previe
 from mediadownloader.services import SettingsService
 from mediadownloader.utils.cookie_profiles import resolve_cookies
 from mediadownloader.utils.errors import FriendlyError
+from mediadownloader.utils.urls import extract_urls
 from mediadownloader.utils.validators import is_valid_url, validate_url
 
 from ..icons import set_button_icon, svg_asset_pixmap, svg_icon
@@ -35,8 +36,22 @@ from ..widgets import (
 )
 
 
+def _seconds_spin(label: str, tip: str) -> QDoubleSpinBox:
+    spin = QDoubleSpinBox()
+    spin.setAccessibleName(label)
+    spin.setToolTip(tip)
+    spin.setRange(0.0, 3600.0)
+    spin.setDecimals(1)
+    spin.setSingleStep(1.0)
+    spin.setSuffix(" s")
+    spin.setSpecialValueText("—")
+    spin.setMinimumWidth(112)
+    return spin
+
+
 class HomePage(QWidget):
     download_requested = Signal(object, object, object)
+    batch_requested = Signal(object, object)
     analysis_changed = Signal(bool)
     configure_spotify_requested = Signal()
 
@@ -99,26 +114,40 @@ class HomePage(QWidget):
 
         url_row = QHBoxLayout()
         url_row.setSpacing(9)
-        self.url_input = QLineEdit()
-        self.url_input.setPlaceholderText("https://…  Cole a URL da mídia")
+        self.url_input = QTextEdit()
+        self.url_input.setPlaceholderText("https://…  Cole a URL da mídia (uma por linha para enfileirar várias)")
         self.url_input.setAccessibleName("URL da mídia")
         self.url_input.setAccessibleDescription(
-            "Cole uma URL pública suportada e pressione Enter ou o botão Analisar."
+            "Cole uma URL pública suportada e pressione Ctrl+Enter ou o botão Analisar. "
+            "Vários endereços, um por linha, podem ser enviados à fila de uma vez."
         )
-        self.url_input.setToolTip("Cole o endereço da mídia (Ctrl+L para focar este campo).")
-        self.url_input.addAction(svg_icon("globe", 18), QLineEdit.ActionPosition.LeadingPosition)
-        self.url_input.setMinimumHeight(44)
-        self.url_input.returnPressed.connect(self.analyze)
+        self.url_input.setToolTip(
+            "Cole o endereço da mídia (Ctrl+L para focar este campo). "
+            "Um endereço por linha para enfileirar várias."
+        )
+        self.url_input.setAcceptRichText(False)
+        # The page handles drops itself so a dropped link can bring many URLs.
+        self.url_input.setAcceptDrops(False)
+        self.url_input.setFixedHeight(74)
+        self.url_input.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.url_input.textChanged.connect(self._refresh_batch)
         self.paste_button = SecondaryButton("Colar", icon_name="paste")
-        self.paste_button.setToolTip("Colar uma URL válida da área de transferência")
+        self.paste_button.setToolTip("Colar uma ou várias URLs da área de transferência")
         self.paste_button.clicked.connect(self.paste_url)
         self.analyze_button = PrimaryButton("ANALISAR", icon_name="analyze")
-        self.analyze_button.setToolTip("Analisar a URL sem bloquear a janela")
+        self.analyze_button.setToolTip("Analisar a primeira URL sem bloquear a janela")
         self.analyze_button.clicked.connect(self.analyze)
+        self.batch_button = SecondaryButton("", icon_name="downloads")
+        self.batch_button.setToolTip(
+            "Enfileira todos os endereços de uma vez, sem analisar um por um"
+        )
+        self.batch_button.clicked.connect(self.queue_batch)
         url_row.addWidget(self.url_input, 1)
         url_row.addWidget(self.paste_button)
+        url_row.addWidget(self.batch_button)
         url_row.addWidget(self.analyze_button)
         hero_layout.addLayout(url_row)
+        self._refresh_batch()
 
         trust_row = QHBoxLayout()
         trust_row.setSpacing(8)
@@ -386,7 +415,46 @@ class HomePage(QWidget):
         subtitle_grid.addWidget(self.subtitle_mode, 1, 0)
         subtitle_grid.addWidget(QLabel("Idioma"), 0, 1)
         subtitle_grid.addWidget(self.subtitle_language, 1, 1)
+        self.multilingual_subtitles = QCheckBox("Salvar todas as legendas disponíveis")
+        self.multilingual_subtitles.setToolTip(
+            "Baixa todas as trilhas de legenda publicadas, não só a do idioma escolhido."
+        )
+        subtitle_grid.addWidget(self.multilingual_subtitles, 2, 0, 1, 2)
         options_layout.addLayout(subtitle_grid)
+
+        edit_grid = QGridLayout()
+        edit_grid.setHorizontalSpacing(9)
+        self.trim_start = _seconds_spin("Começar em", "Pule os primeiros segundos do arquivo.")
+        self.trim_duration = _seconds_spin(
+            "Duração", "0 = mantém o arquivo inteiro. Ex.: 90 corta depois do ponto inicial."
+        )
+        self.fade_in = _seconds_spin("Fade in", "Rampa de volume no início.")
+        self.fade_out = _seconds_spin("Fade out", "Rampa de volume no final.")
+        edit_grid.addWidget(QLabel("Início"), 0, 0)
+        edit_grid.addWidget(self.trim_start, 1, 0)
+        edit_grid.addWidget(QLabel("Duração"), 0, 1)
+        edit_grid.addWidget(self.trim_duration, 1, 1)
+        edit_grid.addWidget(QLabel("Fade"), 0, 2)
+        fades = QHBoxLayout()
+        fades.setSpacing(6)
+        self.fade_in.setPrefix("in ")
+        self.fade_out.setPrefix("out ")
+        fades.addWidget(self.fade_in)
+        fades.addWidget(self.fade_out)
+        edit_grid.addLayout(fades, 1, 2)
+        self.editor_compatible = QCheckBox("Arquivo pronto para o editor de vídeo")
+        self.editor_compatible.setToolTip(
+            "Converte para H.264/AAC com reprodução rápida, necessário para Premiere, "
+            "DaVinci Resolve e CapCut."
+        )
+        edit_grid.addWidget(self.editor_compatible, 2, 0, 1, 3)
+        edit_tip = QLabel(
+            "Corte e fades são aplicados pelo FFmpeg depois do download (requer componente)."
+        )
+        edit_tip.setObjectName("Muted")
+        edit_tip.setWordWrap(True)
+        edit_grid.addWidget(edit_tip, 3, 0, 1, 3)
+        options_layout.addLayout(edit_grid)
         result_layout.addWidget(self.options_card)
 
         self.destination_card = QFrame()
@@ -440,9 +508,11 @@ class HomePage(QWidget):
 
         QShortcut(QKeySequence("Ctrl+L"), self, activated=self.url_input.setFocus)
         QShortcut(QKeySequence("Ctrl+O"), self, activated=self.choose_destination)
+        QShortcut(QKeySequence("Ctrl+Return"), self.url_input, activated=self.analyze)
+        QShortcut(QKeySequence("Ctrl+Shift+Return"), self.url_input, activated=self.queue_batch)
 
         tab_order = [
-            self.url_input, self.paste_button, self.analyze_button,
+            self.url_input, self.paste_button, self.batch_button, self.analyze_button,
             self.open_spotify_button, self.copy_spotify_button, self.configure_spotify_button,
             self.download_current_button, self.select_all_button, self.clear_all_button,
             self.playlist_list,
@@ -492,19 +562,38 @@ class HomePage(QWidget):
 
     def paste_url(self) -> None:
         from PySide6.QtWidgets import QApplication
-        text = QApplication.clipboard().text().strip()
-        if is_valid_url(text):
-            self.url_input.setText(text)
-            self.notice.hide()
-        else:
+        urls = extract_urls(QApplication.clipboard().text())
+        if not urls:
             self._show_notice("A área de transferência não contém uma URL válida.", error=True)
+            return
+        if len(urls) == 1 and is_valid_url(urls[0]):
+            self.url_input.setPlainText(urls[0])
+        else:
+            self.url_input.setPlainText("\n".join(urls))
+            self._show_notice(f"{len(urls)} endereço(s) lido(s). Use LOTE para mandar todos à fila.")
+        self.notice.hide()
 
     def set_detected_url(self, url: str) -> None:
-        if not self.url_input.text().strip():
+        if not self.url_input.toPlainText().strip():
             self._show_notice("Link detectado na área de transferência. Use “Colar” para inseri-lo.")
 
+    def _typed_urls(self) -> list[str]:
+        return extract_urls(self.url_input.toPlainText())
+
+    def _refresh_batch(self) -> None:
+        amount = len(self._typed_urls())
+        self.batch_button.setVisible(amount > 1)
+        self.batch_button.setText(f"LOTE {amount}")
+        self.batch_button.setAccessibleName(f"Enfileirar {amount} links de uma vez")
+
     def analyze(self) -> None:
-        valid, message = validate_url(self.url_input.text())
+        urls = self._typed_urls()
+        if not urls:
+            valid, message = validate_url(self.url_input.toPlainText().strip())
+            self._show_notice(message if not valid else "Cole uma URL pública suportada.", error=True)
+            return
+        url = urls[0]
+        valid, message = validate_url(url)
         if not valid:
             self._show_notice(message, error=True)
             return
@@ -880,11 +969,8 @@ class HomePage(QWidget):
                 error=True,
             )
             return
-        output = Path(self.destination.text()).expanduser()
-        try:
-            output.mkdir(parents=True, exist_ok=True)
-        except OSError as error:
-            self._show_notice(f"Não foi possível usar a pasta de destino: {error}", error=True)
+        output = self._destination_path()
+        if output is None:
             return
         entries = []
         if self.media.is_playlist:
@@ -899,10 +985,45 @@ class HomePage(QWidget):
             if not entries:
                 QMessageBox.information(self, "Playlist", "Selecione pelo menos um item.")
                 return
+        options = self._current_options(output)
+        self.download_requested.emit(self.media, options, entries)
+        amount = len(entries) if entries else 1
+        self._show_notice(
+            f"{amount} item(ns) adicionado(s) à fila. Acompanhe o progresso em Downloads."
+        )
+
+    def queue_batch(self) -> None:
+        """Queue every address in the field at once, without analyzing them one by one."""
+        urls = self._typed_urls()
+        if len(urls) < 2:
+            self._show_notice(
+                "Cole dois ou mais endereços, um por linha, para enfileirar em lote.", error=True
+            )
+            return
+        output = self._destination_path()
+        if output is None:
+            return
+        self.batch_requested.emit(urls, self._current_options(output))
+        self._show_notice(
+            f"{len(urls)} link(s) adicionados à fila. Acompanhe o progresso em Downloads."
+        )
+
+    def _destination_path(self) -> Path | None:
+        """Resolve and create the destination folder, reporting why it is unusable."""
+        output = Path(self.destination.text()).expanduser()
+        try:
+            output.mkdir(parents=True, exist_ok=True)
+        except OSError as error:
+            self._show_notice(f"Não foi possível usar a pasta de destino: {error}", error=True)
+            return None
+        return output
+
+    def _current_options(self, output: Path) -> DownloadOptions:
         media_type = MediaType.AUDIO if self.audio_button.isChecked() else MediaType.VIDEO
         video_quality = self.video_quality.currentData() or "auto"
-        resolved = self._cookie_source_for(self.media.url)
-        options = DownloadOptions(
+        source_url = self.media.url if self.media else next(iter(self._typed_urls()), "")
+        resolved = self._cookie_source_for(source_url)
+        return DownloadOptions(
             media_type=media_type,
             video_format=self.video_format.currentText().lower().replace("automático", "auto"),
             video_quality=str(video_quality),
@@ -919,6 +1040,7 @@ class HomePage(QWidget):
             add_metadata=self.add_metadata.isChecked(),
             subtitle_mode=str(self.subtitle_mode.currentData()),
             subtitle_language=str(self.subtitle_language.currentData()),
+            all_subtitles=self.multilingual_subtitles.isChecked(),
             output_dir=str(output),
             filename_template=self.settings.get("filenames.template", "%(title)s.%(ext)s"),
             create_playlist_folder=self.playlist_folder.isChecked(),
@@ -927,11 +1049,11 @@ class HomePage(QWidget):
             cookies_file=resolved[0],
             cookies_browser=resolved[1],
             rate_limit_kbps=int(self.settings.get("network.rate_limit_kbps", 0)),
-        )
-        self.download_requested.emit(self.media, options, entries)
-        amount = len(entries) if entries else 1
-        self._show_notice(
-            f"{amount} item(ns) adicionado(s) à fila. Acompanhe o progresso em Downloads."
+            trim_start_seconds=self.trim_start.value(),
+            trim_duration_seconds=self.trim_duration.value(),
+            fade_in_seconds=self.fade_in.value(),
+            fade_out_seconds=self.fade_out.value(),
+            editor_compatible=self.editor_compatible.isChecked(),
         )
 
     def _show_notice(self, message: str, error: bool = False) -> None:
@@ -945,9 +1067,11 @@ class HomePage(QWidget):
         QAccessible.updateAccessibility(QAccessibleEvent(self.notice, QAccessible.Event.Alert))
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
-        if event.mimeData().hasText() and is_valid_url(event.mimeData().text().strip()):
+        if event.mimeData().hasText() and extract_urls(event.mimeData().text()):
             event.acceptProposedAction()
 
     def dropEvent(self, event: QDropEvent) -> None:
-        self.url_input.setText(event.mimeData().text().strip())
-        event.acceptProposedAction()
+        urls = extract_urls(event.mimeData().text())
+        if urls:
+            self.url_input.setPlainText("\n".join(urls))
+            event.acceptProposedAction()

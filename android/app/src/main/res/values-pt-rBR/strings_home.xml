@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_action_analyze">Analisar</string>
+    <plurals name="home_batch_hint">
+        <item quantity="one">%1$d link detectado aqui. Analise um único link ou envie toda a lista para a fila.</item>
+        <item quantity="other">%1$d links detectados aqui. Analise um único link ou envie toda a lista para a fila.</item>
+        <item quantity="many">%1$d links detectados aqui. Analise um único link ou envie toda a lista para a fila.</item>
+    </plurals>
+    <plurals name="home_action_enqueue_batch">
+        <item quantity="one">Adicionar %1$d link à fila</item>
+        <item quantity="other">Adicionar %1$d links à fila</item>
+        <item quantity="many">Adicionar %1$d links à fila</item>
+    </plurals>
+    <string name="home_action_analyzing">Analisando…</string>
+    <string name="home_action_download_now">Baixar agora</string>
+    <string name="home_action_download_playlist">Baixar playlist</string>
+    <string name="home_action_queued">Adicionando à fila…</string>
+    <string name="home_action_switch">Trocar</string>
+    <string name="home_audio_bass">Graves reforçados</string>
+    <string name="home_audio_bass_supporting">+6 dB em 100 Hz</string>
+    <string name="home_audio_echo">Eco</string>
+    <string name="home_audio_echo_supporting">Decaimento suave de 300 ms</string>
+    <string name="home_audio_normalize">Normalização</string>
+    <string name="home_audio_normalize_supporting">Loudness uniforme (EBU R128)</string>
+    <string name="home_audio_pitch">Tom</string>
+    <string name="home_audio_pitch_normal">0 st (normal)</string>
+    <string name="home_audio_preview">Pré-visualizar</string>
+    <string name="home_audio_preview_audio">Pré-visualizar áudio</string>
+    <string name="home_audio_rendering_preview">Gerando prévia…</string>
+    <plurals name="home_audio_semitones">
+        <item quantity="one">%1$s st</item>
+        <item quantity="many">%1$s st</item>
+        <item quantity="other">%1$s st</item>
+    </plurals>
+    <string name="home_audio_speed">Velocidade</string>
+    <string name="home_audio_speed_value">%1$sx</string>
+    <string name="home_audio_stop_preview">Parar prévia</string>
+    <string name="home_audio_supporting_audio">Ajuste tom, velocidade, volume, graves, eco, tremolo e normalização, e toque até 30 s antes de baixar.</string>
+    <string name="home_audio_supporting_video">Ajuste tom, velocidade, volume, graves, eco, tremolo e normalização, e toque as prévias antes de baixar.</string>
+    <string name="home_audio_title">Ouça com efeitos</string>
+    <string name="home_audio_tremolo">Tremolo</string>
+    <string name="home_audio_tremolo_supporting">Oscilação de 5 Hz</string>
+    <string name="home_audio_volume">Volume</string>
+    <string name="home_audio_volume_value">%1$d%%</string>
+    <plurals name="home_download_items">
+        <item quantity="one">Baixar %1$d item</item>
+        <item quantity="many">Baixar %1$d itens</item>
+        <item quantity="other">Baixar %1$d itens</item>
+    </plurals>
+    <string name="home_heading_eyebrow">Novo download</string>
+    <string name="home_heading_supporting">Cole um link, confira a prévia e escolha exatamente como salvar.</string>
+    <string name="home_heading_title">Baixe sua mídia</string>
+    <string name="home_options_editor_compatible">Compatível com editores</string>
+    <string name="home_options_editor_compatible_supporting">H.264/AAC .mp4 com moov no início (Premiere, DaVinci, CapCut)</string>
+    <string name="home_options_metadata">Incorporar metadados</string>
+    <string name="home_options_metadata_supporting">Grava o título, o artista e a data nas tags do arquivo.</string>
+    <string name="home_options_thumbnail">Incorporar capa</string>
+    <string name="home_options_thumbnail_supporting">Salva a miniatura como capa dentro do arquivo de áudio.</string>
+    <string name="home_options_format">Formato</string>
+    <string name="home_options_media_type">Tipo de mídia</string>
+    <string name="home_options_no_choices">Nenhuma opção disponível.</string>
+    <string name="home_options_quality">Qualidade</string>
+    <string name="home_options_rate_limit_label">Limite de velocidade por item (KiB/s)</string>
+    <string name="home_options_rate_limit_placeholder">Vazio = sem limite</string>
+    <string name="home_options_rate_limit_supporting">Aplica-se a este item, os parâmetros em segundo plano ficam intactos.</string>
+    <string name="home_options_recommended">%1$s · recomendado</string>
+    <string name="home_options_subtitles">Incluir legendas</string>
+    <string name="home_options_subtitles_supporting">Quando disponíveis no idioma original</string>
+    <plurals name="home_options_subtitles_languages">
+        <item quantity="one">%1$d idioma disponível. Escolha os que deseja baixar.</item>
+        <item quantity="other">%1$d idiomas disponíveis. Escolha os que deseja baixar.</item>
+        <item quantity="many">%1$d idiomas disponíveis. Escolha os que deseja baixar.</item>
+    </plurals>
+    <string name="home_options_supporting">Escolha tipo, qualidade e formato antes de baixar.</string>
+    <string name="home_options_title">Personalize o arquivo</string>
+    <string name="home_playlist_clear_selection">Limpar seleção</string>
+    <string name="home_playlist_select_all">Selecionar tudo</string>
+    <string name="home_playlist_supporting">Escolha quais músicas ou vídeos entrarão na fila.</string>
+    <string name="home_playlist_title">Itens da playlist</string>
+    <string name="home_preview_audio_only">Somente áudio</string>
+    <string name="home_preview_audio_only_supporting">Uma captura do som</string>
+    <string name="home_preview_content">Conteúdo da prévia</string>
+    <string name="home_preview_found">PRÉVIA ENCONTRADA</string>
+    <plurals name="home_preview_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="many">%1$d itens</item>
+        <item quantity="other">%1$d itens</item>
+    </plurals>
+    <string name="home_preview_playlist">Playlist</string>
+    <string name="home_preview_with_video">Com vídeo</string>
+    <string name="home_preview_with_video_supporting">Trecho curto com imagem</string>
+    <string name="home_privacy_banner">Seus links e downloads permanecem neste aparelho — sem conta e sem telemetria.</string>
+    <string name="home_seconds_value">%1$s s</string>
+    <string name="home_spotify_auth_hint">Conecte sua conta do Spotify nos Ajustes para ver as faixas desta playlist.</string>
+    <string name="home_spotify_download_audio">Baixar áudio pelo YouTube</string>
+    <string name="home_spotify_download_tracks">Baixar faixas pelo YouTube</string>
+    <plurals name="home_spotify_more_tracks">
+        <item quantity="one">+ %1$d faixa</item>
+        <item quantity="many">+ %1$d faixas</item>
+        <item quantity="other">+ %1$d faixas</item>
+    </plurals>
+    <string name="home_spotify_notice">O download do áudio protegido pelo Spotify não é possível; cada faixa é localizada por uma busca no YouTube.</string>
+    <string name="home_spotify_supporting">Metadados oficiais. O áudio é buscado no YouTube, nunca no Spotify.</string>
+    <string name="home_spotify_title">Spotify</string>
+    <plurals name="home_spotify_tracks">
+        <item quantity="one">%1$d faixa</item>
+        <item quantity="many">%1$d faixas</item>
+        <item quantity="other">%1$d faixas</item>
+    </plurals>
+    <string name="home_trim_duration">Duração do trecho</string>
+    <string name="home_trim_duration_supporting">Interrompe o trecho na duração escolhida</string>
+    <string name="home_trim_fade_in">Fade de entrada</string>
+    <string name="home_trim_fade_out">Fade de saída</string>
+    <string name="home_trim_start">Início do recorte</string>
+    <string name="home_trim_supporting">Comece a mídia em outro trecho e suavize as bordas do trecho salvo.</string>
+    <string name="home_trim_title">Recorte e fades</string>
+    <string name="home_trim_until_end">Recorte até o fim</string>
+    <string name="home_trim_until_end_supporting">O trecho segue até o final da mídia</string>
+    <string name="home_url_label">URL do vídeo, áudio ou playlist</string>
+    <string name="home_url_supporting">Links recebidos pelo menu Compartilhar aparecem aqui.</string>
+    <string name="home_url_title">Link da mídia</string>
+</resources>

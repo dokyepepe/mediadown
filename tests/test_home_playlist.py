@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt
+﻿from PySide6.QtCore import Qt
 
 from mediadownloader.models import DownloadOptions, MediaInfo, PlaylistEntry
 from mediadownloader.services.settings_service import SettingsService
@@ -32,7 +32,7 @@ def test_playlist_supports_ignored_selected_individual_and_all(qtbot, tmp_path) 
     qtbot.addWidget(page)
     captured: list[list] = []
     page.download_requested.connect(lambda _media, _options, entries: captured.append(entries))
-    page.url_input.setText("https://example.com/playlist")
+    page.url_input.setPlainText("https://example.com/playlist")
     page._analysis_complete(_playlist())
 
     assert page.playlist_list.count() == 3
@@ -53,7 +53,7 @@ def test_playlist_supports_ignored_selected_individual_and_all(qtbot, tmp_path) 
         for index in range(page.playlist_list.count())
     )
 
-    assert page.url_input.text() == "https://example.com/playlist"
+    assert page.url_input.toPlainText() == "https://example.com/playlist"
     assert not page.result.isHidden()
 
 

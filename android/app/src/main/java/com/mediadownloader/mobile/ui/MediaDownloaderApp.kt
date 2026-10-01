@@ -43,8 +43,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.mediadownloader.mobile.R
 
 private val APPLICATION_LICENSE_TEXT = """
     MIT License
@@ -77,6 +79,7 @@ fun MediaDownloaderApp(
     thumbnail: ThumbnailRenderer = { url, referer, description, thumbnailModifier ->
         DefaultThumbnail(url, referer, description, thumbnailModifier)
     },
+    onImportSettings: () -> Unit = {},
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
     MediaDownloaderApp(
@@ -85,6 +88,7 @@ fun MediaDownloaderApp(
         previewPlayer = controller.previewExoPlayer,
         modifier = modifier,
         thumbnail = thumbnail,
+        onImportSettings = onImportSettings,
     )
 }
 
@@ -97,6 +101,7 @@ fun MediaDownloaderApp(
         DefaultThumbnail(url, referer, description, thumbnailModifier)
     },
     previewPlayer: androidx.media3.exoplayer.ExoPlayer? = null,
+    onImportSettings: () -> Unit = {},
 ) {
     MediaDownloaderTheme(preference = state.settings.theme) {
         val snackbarHostState = remember { SnackbarHostState() }
@@ -166,6 +171,7 @@ fun MediaDownloaderApp(
                 AppTab.SETTINGS -> SettingsScreen(
                     state = state.settings,
                     onAction = onAction,
+                    onImportSettings = onImportSettings,
                     modifier = Modifier.padding(contentPadding),
                 )
             }
@@ -179,28 +185,16 @@ private fun LegalDocumentDialog(
     onDismiss: () -> Unit,
 ) {
     val title = when (document) {
-        LegalDocument.RESPONSIBLE_USE -> "Uso responsável"
-        LegalDocument.PRIVACY -> "Privacidade"
-        LegalDocument.APPLICATION_LICENSE -> "Licença do Media Downloader"
-        LegalDocument.OPEN_SOURCE_LICENSES -> "Licenças de terceiros"
+        LegalDocument.RESPONSIBLE_USE -> stringResource(R.string.legal_responsible_use_title)
+        LegalDocument.PRIVACY -> stringResource(R.string.legal_privacy_title)
+        LegalDocument.APPLICATION_LICENSE -> stringResource(R.string.legal_app_license_title)
+        LegalDocument.OPEN_SOURCE_LICENSES -> stringResource(R.string.legal_third_party_title)
     }
     val text = when (document) {
-        LegalDocument.RESPONSIBLE_USE ->
-            "Baixe somente conteúdo próprio, em domínio público ou para o qual você tenha " +
-                "autorização. O aplicativo não remove DRM e o usuário é responsável por " +
-                "respeitar direitos autorais e os termos da plataforma de origem."
-
-        LegalDocument.PRIVACY ->
-            "Links, fila, preferências e histórico permanecem neste aparelho. O aplicativo " +
-                "não possui conta, anúncios ou telemetria. A conexão de rede é usada apenas " +
-                "para analisar e baixar a mídia ou os arquivos de sites solicitados e atualizar o yt-dlp."
-
+        LegalDocument.RESPONSIBLE_USE -> stringResource(R.string.legal_responsible_use_body)
+        LegalDocument.PRIVACY -> stringResource(R.string.legal_privacy_body)
         LegalDocument.APPLICATION_LICENSE -> APPLICATION_LICENSE_TEXT
-
-        LegalDocument.OPEN_SOURCE_LICENSES ->
-            "Este aplicativo inclui AndroidX, Kotlin, ZXing, yt-dlp, Python, FFmpeg e " +
-                "youtubedl-android. Os componentes mantêm suas respectivas licenças de " +
-                "código aberto; os avisos completos acompanham o código-fonte do projeto."
+        LegalDocument.OPEN_SOURCE_LICENSES -> stringResource(R.string.legal_third_party_body)
     }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -216,7 +210,7 @@ private fun LegalDocumentDialog(
         },
         confirmButton = {
             Button(onClick = onDismiss) {
-                Text("Fechar")
+                Text(stringResource(R.string.action_close))
             }
         },
     )
@@ -248,7 +242,7 @@ private fun MobileTopBar(selectedTab: AppTab) {
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "Seu conteúdo, no seu dispositivo",
+                    text = stringResource(R.string.app_tagline),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -260,7 +254,7 @@ private fun MobileTopBar(selectedTab: AppTab) {
                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
             ) {
                 Text(
-                    text = selectedTab.label,
+                    text = stringResource(selectedTab.labelRes),
                     modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
                     style = MaterialTheme.typography.labelMedium,
                 )
@@ -328,7 +322,7 @@ private fun MobileBottomBar(
                                 modifier = Modifier.size(23.dp),
                             )
                         },
-                        label = { Text(tab.label) },
+                        label = { Text(stringResource(tab.labelRes)) },
                         alwaysShowLabel = true,
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,

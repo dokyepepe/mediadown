@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="downloads_adjust_cookies">Ajustar cookies/yt-dlp</string>
+    <string name="downloads_empty_supporting">Os downloads adicionados na tela Início aparecerão aqui com o progresso em tempo real.</string>
+    <string name="downloads_empty_title">Sua fila está vazia</string>
+    <plurals name="downloads_heading_active">
+        <item quantity="one">%1$d download está avançando agora.</item>
+        <item quantity="many">%1$d downloads estão avançando agora.</item>
+        <item quantity="other">%1$d downloads estão avançando agora.</item>
+    </plurals>
+    <string name="downloads_heading_eyebrow">Sua fila</string>
+    <string name="downloads_heading_supporting_idle">Acompanhe cada arquivo do link até o dispositivo.</string>
+    <string name="downloads_heading_title">Downloads</string>
+    <string name="downloads_metric_attention">Atenção</string>
+    <string name="downloads_no_results_filter">Selecione outro filtro para encontrar seus downloads.</string>
+    <string name="downloads_no_results_query">Nenhum download corresponde a &quot;%1$s&quot;. Confira a busca e o filtro selecionado.</string>
+    <string name="downloads_no_results_title">Nada encontrado</string>
+    <string name="downloads_remove_finished">Remover itens finalizados</string>
+    <string name="downloads_search_clear">Limpar busca</string>
+    <string name="downloads_search_placeholder">Buscar por título ou origem</string>
+</resources>

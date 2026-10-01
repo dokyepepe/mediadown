@@ -24,10 +24,12 @@ from mediadownloader.models import (
     PreviewSource,
 )
 from mediadownloader.utils.errors import FriendlyError, classify_error
+from mediadownloader.utils.cookie_profiles import normalize_impersonate
 from mediadownloader.utils.filenames import unique_path, validate_template
 from mediadownloader.utils.paths import resource_path
 from mediadownloader.utils.validators import is_spotify_url
 
+from .audio_effects import build_audio_filters, build_fade_filters
 from .ffmpeg_manager import FFmpegManager
 from .format_manager import FormatManager
 
@@ -166,12 +168,35 @@ class DownloadEngine:
     def __init__(self, ffmpeg: FFmpegManager | None = None) -> None:
         self.ffmpeg = ffmpeg or FFmpegManager()
 
+    @staticmethod
+    def _credential_options(
+        options: dict[str, Any],
+        proxy: str = "",
+        cookies_file: str = "",
+        cookies_browser: str = "",
+        impersonate: str = "",
+    ) -> None:
+        """Apply the shared network/cookie arguments to a yt-dlp option dict.
+
+        ``impersonate`` is only forwarded when the target is one yt-dlp knows,
+        so an unsupported value can never abort a download.
+        """
+        if proxy:
+            options["proxy"] = proxy
+        if cookies_file:
+            options["cookiefile"] = cookies_file
+        elif cookies_browser:
+            options["cookiesfrombrowser"] = (cookies_browser,)
+        if target := normalize_impersonate(impersonate):
+            options["impersonate"] = target
+
     def analyze(
         self,
         url: str,
         proxy: str = "",
         cookies_file: str = "",
         cookies_browser: str = "",
+        impersonate: str = "",
     ) -> MediaInfo:
         options = {
             "quiet": True,
@@ -182,12 +207,7 @@ class DownloadEngine:
             "socket_timeout": 20,
         }
         options.update(self._component_options())
-        if proxy:
-            options["proxy"] = proxy
-        if cookies_file:
-            options["cookiefile"] = cookies_file
-        elif cookies_browser:
-            options["cookiesfrombrowser"] = (cookies_browser,)
+        self._credential_options(options, proxy, cookies_file, cookies_browser, impersonate)
         try:
             with yt_dlp.YoutubeDL(options) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -265,6 +285,7 @@ class DownloadEngine:
         proxy: str = "",
         cookies_file: str = "",
         cookies_browser: str = "",
+        impersonate: str = "",
     ) -> PreviewSource:
         """Resolve a directly playable stream for the in-app preview.
 
@@ -281,7 +302,9 @@ class DownloadEngine:
         last_error: Exception | None = None
         for selector in selectors:
             try:
-                info = self._extract_single(url, selector, proxy, cookies_file, cookies_browser)
+                info = self._extract_single(
+                    url, selector, proxy, cookies_file, cookies_browser, impersonate
+                )
             except Exception as error:  # noqa: BLE001 - probe each fallback selector
                 last_error = error
                 continue
@@ -300,7 +323,7 @@ class DownloadEngine:
         # video and audio streams; the preview merges them locally with FFmpeg.
         try:
             dash = self._extract_single(
-                url, "bestvideo+bestaudio", proxy, cookies_file, cookies_browser,
+                url, "bestvideo+bestaudio", proxy, cookies_file, cookies_browser, impersonate,
             )
         except Exception as error:  # noqa: BLE001
             last_error = error
@@ -334,6 +357,7 @@ class DownloadEngine:
         proxy: str,
         cookies_file: str,
         cookies_browser: str,
+        impersonate: str = "",
     ) -> dict[str, Any]:
         options: dict[str, Any] = {
             "quiet": True,
@@ -345,12 +369,7 @@ class DownloadEngine:
             "socket_timeout": 20,
         }
         options.update(self._component_options())
-        if proxy:
-            options["proxy"] = proxy
-        if cookies_file:
-            options["cookiefile"] = cookies_file
-        elif cookies_browser:
-            options["cookiesfrombrowser"] = (cookies_browser,)
+        self._credential_options(options, proxy, cookies_file, cookies_browser, impersonate)
         with yt_dlp.YoutubeDL(options) as ydl:
             info = ydl.extract_info(url, download=False)
         if not info:
@@ -557,18 +576,22 @@ class DownloadEngine:
             ydl_options["merge_output_format"] = forced_container
         if self.ffmpeg.available:
             ydl_options["ffmpeg_location"] = self.ffmpeg.location()
-        if options.proxy:
-            ydl_options["proxy"] = options.proxy
-        if options.cookies_file:
-            ydl_options["cookiefile"] = options.cookies_file
-        elif options.cookies_browser:
-            ydl_options["cookiesfrombrowser"] = (options.cookies_browser,)
+        self._credential_options(
+            ydl_options,
+            options.proxy,
+            options.cookies_file,
+            options.cookies_browser,
+            options.impersonate,
+        )
         if ratelimit := rate_limit_value(options.rate_limit_kbps):
             ydl_options["ratelimit"] = ratelimit
         if options.subtitle_mode != "none":
             ydl_options["writesubtitles"] = True
             ydl_options["writeautomaticsub"] = True
-            if options.subtitle_language != "auto":
+            if options.all_subtitles:
+                ydl_options["writeallsubs"] = True
+                ydl_options["subtitlesformat"] = "srt"
+            elif options.subtitle_language != "auto":
                 ydl_options["subtitleslangs"] = [options.subtitle_language]
             ydl_options["embedsubtitles"] = options.subtitle_mode == "embed"
 
@@ -587,7 +610,8 @@ class DownloadEngine:
             self._ytdlp_download(item, ydl_options, final_filename)
             if cancel_event.is_set():
                 raise DownloadCancelled()
-            return self._locate_final_file(final_filename[-1] if final_filename else "", options)
+            produced = self._locate_final_file(final_filename[-1] if final_filename else "", options)
+            return self._post_process(item, produced, options, reporter, cancel_event)
         except DownloadCancelled:
             raise
         except DownloadError as error:
@@ -615,9 +639,10 @@ class DownloadEngine:
                     raise classify_error(retry_error) from retry_error
                 if cancel_event.is_set():
                     raise DownloadCancelled()
-                return self._locate_final_file(
+                produced = self._locate_final_file(
                     final_filename[-1] if final_filename else "", options
                 )
+                return self._post_process(item, produced, options, reporter, cancel_event)
             LOGGER.exception("yt-dlp falhou no download %s", item.id)
             raise classify_error(error) from error
         except FriendlyError:
@@ -652,7 +677,62 @@ class DownloadEngine:
             or options.embed_thumbnail
             or options.add_metadata
             or options.subtitle_mode == "embed"
+            or options.needs_post_processing
         )
+
+    def _post_process(
+        self,
+        item: DownloadItem,
+        produced: str,
+        options: DownloadOptions,
+        reporter: "_ProgressReporter",
+        cancel_event: threading.Event,
+    ) -> str:
+        """Trim, fade or transcode the finished file when the user asked for it."""
+        if not produced or not options.needs_post_processing or not self.ffmpeg.available:
+            return produced
+        source = Path(produced)
+        if not source.exists():
+            return produced
+        has_video = item.media_type != MediaType.AUDIO
+        segment = options.trim_duration_seconds
+        if not segment and (options.fade_out_seconds or options.audio_speed != 1.0):
+            measured = self.ffmpeg.duration(source)
+            segment = measured / options.audio_speed if measured else 0.0
+        chains = [
+            build_audio_filters(
+                options.audio_speed,
+                options.audio_pitch,
+                options.audio_volume,
+                bass=options.audio_bass,
+                echo=options.audio_echo,
+                tremolo=options.audio_tremolo,
+                normalize=options.audio_normalize,
+            ),
+            build_fade_filters(
+                options.fade_in_seconds, options.fade_out_seconds, segment
+            ),
+        ]
+        audio_filter = ",".join(chain for chain in chains if chain)
+        reporter.emit({"status": DownloadStatus.FINALIZING.value, "progress": 99.0}, force=True)
+        try:
+            edited = self.ffmpeg.post_process(
+                source,
+                audio_filter=audio_filter,
+                start_seconds=options.trim_start_seconds,
+                duration_seconds=options.trim_duration_seconds,
+                editor_compatible=options.editor_compatible,
+                has_video=has_video,
+                cancel=cancel_event,
+            )
+        except RuntimeError as error:
+            if cancel_event.is_set():
+                raise DownloadCancelled() from error
+            raise FriendlyError(
+                f"Não foi possível aplicar os ajustes no arquivo: {error}",
+                code="post_process",
+            ) from error
+        return str(edited)
 
     def _component_options(self) -> dict[str, Any]:
         result: dict[str, Any] = {}

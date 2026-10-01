@@ -111,10 +111,11 @@ def main() -> int:
     from mediadownloader.services.update_service import activate_updated_ytdlp
     activation = activate_updated_ytdlp()
 
-    from PySide6.QtCore import QLocale, QTimer, Qt
+    from PySide6.QtCore import QTimer, Qt
     from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication, QMessageBox
 
+    from mediadownloader.i18n import DEFAULT_LOCALE, TranslationService
     from mediadownloader.services import HistoryService, SettingsService
     from mediadownloader.ui.main_window import MainWindow
     from mediadownloader.ui.theme import apply_theme
@@ -132,8 +133,9 @@ def main() -> int:
     app_icon = QIcon(str(asset_path("app.ico")))
     if not app_icon.isNull():
         app.setWindowIcon(app_icon)
-    QLocale.setDefault(QLocale(QLocale.Language.Portuguese, QLocale.Country.Brazil))
     settings = SettingsService()
+    translations = TranslationService(app)
+    translations.apply(settings.get("general.language", DEFAULT_LOCALE))
     apply_theme(app, settings.get("general.theme", "system"))
     smoke_test = "--smoke-test" in sys.argv
     window = MainWindow(settings, HistoryService())

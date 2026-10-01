@@ -34,14 +34,14 @@ DASH_INFO = {
 class _DashOnlyEngine(DownloadEngine):
     """Rejects every muxed selector; only resolves separate DASH tracks."""
 
-    def _extract_single(self, url, selector, proxy, cookies_file, cookies_browser):
+    def _extract_single(self, url, selector, proxy, cookies_file, cookies_browser, impersonate=""):
         if selector == "bestvideo+bestaudio":
             return DASH_INFO
         raise RuntimeError("format muxado indisponível")
 
 
 class _MuxedEngine(DownloadEngine):
-    def _extract_single(self, url, selector, proxy, cookies_file, cookies_browser):
+    def _extract_single(self, url, selector, proxy, cookies_file, cookies_browser, impersonate=""):
         return {
             "url": "https://cdn.example.com/muxed.mp4",
             "ext": "mp4",

@@ -11,6 +11,7 @@ import android.provider.MediaStore
 import android.provider.DocumentsContract
 import android.webkit.MimeTypeMap
 import androidx.annotation.RequiresApi
+import androidx.core.net.toUri
 import com.mediadownloader.mobile.data.PublishedFile
 import com.mediadownloader.mobile.data.StorageCategory
 import com.mediadownloader.mobile.data.StorageLocationStore
@@ -48,7 +49,7 @@ internal class MediaStorePublisher(private val context: Context) {
         rawTreeUri: String,
         isCancelled: () -> Boolean,
     ): PublishedFile {
-        val treeUri = Uri.parse(rawTreeUri)
+        val treeUri = rawTreeUri.toUri()
         val parent = DocumentsContract.buildDocumentUriUsingTree(
             treeUri,
             DocumentsContract.getTreeDocumentId(treeUri),

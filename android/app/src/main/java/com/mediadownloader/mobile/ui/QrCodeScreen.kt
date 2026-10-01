@@ -38,11 +38,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.mediadownloader.mobile.R
 
 @Composable
 fun QrCodeScreen(
@@ -58,9 +60,9 @@ fun QrCodeScreen(
         ) {
             item {
                 ScreenHeading(
-                    eyebrow = "Compartilhar links",
-                    title = "Gerar QR Code",
-                    supportingText = "Transforme uma URL em QR Code sem enviar dados para a internet.",
+                    eyebrow = stringResource(R.string.qr_heading_eyebrow),
+                    title = stringResource(R.string.qr_generate),
+                    supportingText = stringResource(R.string.qr_heading_supporting),
                     icon = Icons.Rounded.QrCode2,
                 )
             }
@@ -69,16 +71,16 @@ fun QrCodeScreen(
                 SectionCard {
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         SectionTitle(
-                            title = "URL do QR Code",
-                            supportingText = "Use um endereço completo iniciado por http:// ou https://.",
+                            title = stringResource(R.string.qr_url_title),
+                            supportingText = stringResource(R.string.qr_url_hint),
                             icon = Icons.Rounded.Link,
                         )
                         OutlinedTextField(
                             value = state.url,
                             onValueChange = { onAction(MobileUiAction.QrCodeUrlChanged(it)) },
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text("URL") },
-                            placeholder = { Text("https://exemplo.com") },
+                            label = { Text(stringResource(R.string.qr_url_label)) },
+                            placeholder = { Text(stringResource(R.string.qr_url_placeholder)) },
                             leadingIcon = { Icon(Icons.Rounded.Link, contentDescription = null) },
                             supportingText = state.urlError?.let { error -> { Text(error) } },
                             isError = state.urlError != null,
@@ -101,7 +103,7 @@ fun QrCodeScreen(
                                 .heightIn(min = 56.dp),
                         ) {
                             Icon(Icons.Rounded.QrCode2, contentDescription = null)
-                            Text("  Gerar QR Code")
+                            Text("  " + stringResource(R.string.qr_generate))
                         }
                     }
                 }
@@ -121,7 +123,7 @@ fun QrCodeScreen(
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = "O QR Code aparecerá aqui depois de gerar.",
+                                text = stringResource(R.string.qr_placeholder),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
                             )
@@ -133,8 +135,8 @@ fun QrCodeScreen(
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                         ) {
                             SectionTitle(
-                                title = "QR Code pronto",
-                                supportingText = "Imagem em alto contraste, gerada somente neste aparelho.",
+                                title = stringResource(R.string.qr_ready_title),
+                                supportingText = stringResource(R.string.qr_ready_supporting),
                                 icon = Icons.Rounded.CheckCircle,
                             )
                             Box(
@@ -150,15 +152,17 @@ fun QrCodeScreen(
                             ) {
                                 Image(
                                     bitmap = image,
-                                    contentDescription =
-                                        "QR Code gerado para ${state.generatedUrl}. Toque para abrir.",
+                                    contentDescription = stringResource(
+                                        R.string.qr_image_description,
+                                        state.generatedUrl.orEmpty(),
+                                    ),
                                     modifier = Modifier.fillMaxSize(),
                                     contentScale = ContentScale.Fit,
                                     filterQuality = FilterQuality.None,
                                 )
                             }
                             Text(
-                                text = "Toque na imagem para ampliar ou use uma das opções abaixo.",
+                                text = stringResource(R.string.qr_tap_hint),
                                 modifier = Modifier.fillMaxWidth(),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodySmall,
@@ -171,7 +175,10 @@ fun QrCodeScreen(
                                     .heightIn(min = 52.dp),
                             ) {
                                 Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null)
-                                Text("  Abrir QR Code", fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "  " + stringResource(R.string.qr_open_button),
+                                    fontWeight = FontWeight.SemiBold,
+                                )
                             }
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
@@ -184,7 +191,7 @@ fun QrCodeScreen(
                                         .heightIn(min = 52.dp),
                                 ) {
                                     Icon(Icons.Rounded.SaveAlt, contentDescription = null)
-                                    Text("  Salvar PNG")
+                                    Text("  " + stringResource(R.string.qr_save_png))
                                 }
                                 OutlinedButton(
                                     onClick = { onAction(MobileUiAction.ShareGeneratedQrCode) },
@@ -193,7 +200,7 @@ fun QrCodeScreen(
                                         .heightIn(min = 52.dp),
                                 ) {
                                     Icon(Icons.Rounded.Share, contentDescription = null)
-                                    Text("  Compartilhar")
+                                    Text("  " + stringResource(R.string.action_share))
                                 }
                             }
                         }

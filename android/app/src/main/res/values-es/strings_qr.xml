@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="qr_generate">Generar código QR</string>
+    <string name="qr_heading_eyebrow">Compartir enlaces</string>
+    <string name="qr_heading_supporting">Convierte una URL en un código QR sin enviar datos a internet.</string>
+    <string name="qr_image_description">Código QR generado para %1$s. Toca para abrir.</string>
+    <string name="qr_open_button">Abrir código QR</string>
+    <string name="qr_placeholder">El código QR aparecerá aquí después de generarlo.</string>
+    <string name="qr_ready_supporting">Imagen de alto contraste, generada solo en este dispositivo.</string>
+    <string name="qr_ready_title">Código QR listo</string>
+    <string name="qr_save_png">Guardar PNG</string>
+    <string name="qr_tap_hint">Toca la imagen para hacer zoom o usa una de las opciones de abajo.</string>
+    <string name="qr_url_hint">Usa una dirección completa que empiece por http:// o https://.</string>
+    <string name="qr_url_label">URL</string>
+    <string name="qr_url_placeholder">https://ejemplo.com</string>
+    <string name="qr_url_title">URL del código QR</string>
+</resources>

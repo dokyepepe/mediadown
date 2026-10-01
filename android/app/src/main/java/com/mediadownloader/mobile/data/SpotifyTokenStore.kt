@@ -1,6 +1,7 @@
 package com.mediadownloader.mobile.data
 
 import android.content.Context
+import androidx.core.content.edit
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -26,11 +27,11 @@ class SpotifyTokenStore(context: Context) {
     }
 
     fun write(value: String) {
-        preferences.edit().putString(KEY_PAYLOAD, encrypt(value)).apply()
+        preferences.edit { putString(KEY_PAYLOAD, encrypt(value)) }
     }
 
     fun clear() {
-        preferences.edit().remove(KEY_PAYLOAD).apply()
+        preferences.edit { remove(KEY_PAYLOAD) }
     }
 
     private fun encrypt(value: String): String {

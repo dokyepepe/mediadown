@@ -97,6 +97,45 @@ private val DarkColors = darkColorScheme(
     surfaceContainerHighest = Color(0xFF313633),
 )
 
+private val AmoledColors = darkColorScheme(
+    primary = Color(0xFF94D5B4),
+    onPrimary = Color(0xFF003823),
+    primaryContainer = Color(0xFF005237),
+    onPrimaryContainer = Color(0xFFB9F1D2),
+    inversePrimary = Color(0xFF146B4A),
+    secondary = Color(0xFFB5CCBE),
+    onSecondary = Color(0xFF20362A),
+    secondaryContainer = Color(0xFF374D40),
+    onSecondaryContainer = Color(0xFFD1E8DA),
+    tertiary = Color(0xFF9CCFDA),
+    onTertiary = Color(0xFF003640),
+    tertiaryContainer = Color(0xFF164E5B),
+    onTertiaryContainer = Color(0xFFB6EBF7),
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005),
+    errorContainer = Color(0xFF93000A),
+    onErrorContainer = Color(0xFFFFDAD6),
+    background = Color(0xFF000000),
+    onBackground = Color(0xFFE2E5E1),
+    surface = Color(0xFF000000),
+    onSurface = Color(0xFFE2E5E1),
+    surfaceVariant = Color(0xFF1C1F1C),
+    onSurfaceVariant = Color(0xFFC5CDC7),
+    surfaceTint = Color(0xFF94D5B4),
+    inverseSurface = Color(0xFFE2E5E1),
+    inverseOnSurface = Color(0xFF2C312E),
+    outline = Color(0xFF8F978F),
+    outlineVariant = Color(0xFF2A2E2B),
+    scrim = Color(0xFF000000),
+    surfaceBright = Color(0xFF111512),
+    surfaceDim = Color(0xFF000000),
+    surfaceContainerLowest = Color(0xFF000000),
+    surfaceContainerLow = Color(0xFF0A0D0B),
+    surfaceContainer = Color(0xFF0E110F),
+    surfaceContainerHigh = Color(0xFF191C19),
+    surfaceContainerHighest = Color(0xFF232724),
+)
+
 private val AppTypography = Typography(
     displaySmall = TextStyle(
         fontFamily = FontFamily.SansSerif,
@@ -202,17 +241,22 @@ fun MediaDownloaderTheme(
         ThemePreference.SYSTEM -> isSystemInDarkTheme()
         ThemePreference.LIGHT -> false
         ThemePreference.DARK -> true
+        ThemePreference.AMOLED -> true
     }
 
     // Material You: no modo Sistema, Android 12+ reflete o wallpaper do usuário.
-    val colorScheme = if (
-        preference == ThemePreference.SYSTEM &&
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    ) {
-        val context = LocalContext.current
-        if (useDarkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-    } else {
-        if (useDarkTheme) DarkColors else LightColors
+    val colorScheme = when (preference) {
+        ThemePreference.AMOLED -> AmoledColors
+        ThemePreference.SYSTEM -> {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                if (useDarkTheme) DarkColors else LightColors
+            } else {
+                val context = LocalContext.current
+                if (useDarkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            }
+        }
+        ThemePreference.LIGHT -> LightColors
+        ThemePreference.DARK -> DarkColors
     }
 
     MaterialTheme(

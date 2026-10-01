@@ -5,19 +5,26 @@ from __future__ import annotations
 from pathlib import Path
 from uuid import uuid4
 
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, QUrl, Signal, Slot
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, QTime, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QFrame,
     QHBoxLayout, QLabel, QLineEdit, QListWidget, QMessageBox, QPushButton, QScrollArea,
-    QVBoxLayout, QWidget,
+    QTimeEdit, QVBoxLayout, QWidget,
 )
 
 from mediadownloader.core import DownloadEngine, FFmpegManager, QueueManager
+from mediadownloader.core.download_gate import GateConfig, clamp_minute, format_minute
+from mediadownloader.core.site_compatibility import rows as site_rows
 from mediadownloader.models import CookieCheck
-from mediadownloader.services import SettingsService, SpotifyService
+from mediadownloader.services import (
+    BackupError, CleanupResult, SettingsService, SpotifyService, backup_service, stats_service,
+)
 from mediadownloader.services.update_service import UpdateService
+from mediadownloader.utils.cookie_profiles import SUPPORTED_IMPERSONATE, normalize_impersonate
 from mediadownloader.utils.filenames import validate_template
+from mediadownloader.utils.formatting import format_bytes
+from mediadownloader.utils.proxy import validate_proxy_url
 from mediadownloader.version import APP_VERSION
 
 from ..icons import set_button_icon
@@ -55,6 +62,12 @@ def _check_cookies_worker(ffmpeg, source: str, file: str, browser: str):
     return run
 
 
+def _select_impersonate(combo: QComboBox, value: str) -> None:
+    """Point an impersonation combo at ``value``, falling back to \"Não usar\"."""
+    index = combo.findData(normalize_impersonate(value))
+    combo.setCurrentIndex(index if index >= 0 else 0)
+
+
 class ProfileDialog(QDialog):
     """Collect a per-site cookies.txt profile (label, hosts, file)."""
 
@@ -72,6 +85,14 @@ class ProfileDialog(QDialog):
         self.hosts_edit = QLineEdit()
         self.hosts_edit.setPlaceholderText("youtube.com, m.youtube.com")
         self.file_edit = QLineEdit()
+        self.impersonate = WheelSafeComboBox()
+        self.impersonate.addItem("Não usar", "")
+        for name in SUPPORTED_IMPERSONATE:
+            self.impersonate.addItem(name, name)
+        self.impersonate.setToolTip(
+            "Usa a impressão digital do navegador em requisições que falham com bot. "
+            "Exige curl-cffi; quando ausente, o download segue sem a imitação."
+        )
         file_row = QWidget()
         file_layout = QHBoxLayout(file_row)
         file_layout.setContentsMargins(0, 0, 0, 0)
@@ -83,6 +104,7 @@ class ProfileDialog(QDialog):
         form.addRow("Nome", self.label_edit)
         form.addRow("Sites", self.hosts_edit)
         form.addRow("cookies.txt", file_row)
+        form.addRow("Imitar navegador", self.impersonate)
         form_widget.addLayout(form)
         hint = QLabel(
             "Os sites podem conter domínios e subdomínios (ex.: youtube.com também cobre "
@@ -101,6 +123,9 @@ class ProfileDialog(QDialog):
             self.label_edit.setText(str(profile.get("label") or ""))
             self.hosts_edit.setText(", ".join(str(host) for host in profile.get("hosts") or []))
             self.file_edit.setText(str(profile.get("file") or ""))
+        _select_impersonate(
+            self.impersonate, str((profile or {}).get("impersonate") or "")
+        )
 
     def _browse(self) -> None:
         filename, _ = QFileDialog.getOpenFileName(
@@ -125,6 +150,7 @@ class ProfileDialog(QDialog):
             "label": self.label_edit.text().strip() or "Perfil sem nome",
             "hosts": [host.strip() for host in self.hosts_edit.text().split(",") if host.strip()],
             "file": self.file_edit.text().strip(),
+            "impersonate": normalize_impersonate(self.impersonate.currentData()),
         }
 
 
@@ -233,7 +259,7 @@ class SettingsPage(QWidget):
         )
         general.setProperty("accent", "true")
         self.language = WheelSafeComboBox(); self.language.addItem("Português (Brasil)", "pt_BR")
-        self.theme = WheelSafeComboBox(); self.theme.addItem("Sistema", "system"); self.theme.addItem("Claro", "light"); self.theme.addItem("Escuro", "dark")
+        self.theme = WheelSafeComboBox(); self.theme.addItem("Sistema", "system"); self.theme.addItem("Claro", "light"); self.theme.addItem("Escuro", "dark"); self.theme.addItem("AMOLED (preto puro)", "amoled")
         self.video_download_dir = QLineEdit()
         self.audio_download_dir = QLineEdit()
         self.site_files_download_dir = QLineEdit()
@@ -293,6 +319,54 @@ class SettingsPage(QWidget):
         downloads.form.addRow("", self.add_metadata)
         root.addWidget(downloads)
 
+        queue_rules = SettingsSection(
+            "Fila e agendamento",
+            "A fila espera fora da sua janela de horário e para quando o disco está sem espaço.",
+            "clock",
+        )
+        self.window_enabled = QCheckBox("Respeitar janela de horário")
+        self.window_start = QTimeEdit(); self.window_start.setDisplayFormat("HH:mm")
+        self.window_end = QTimeEdit(); self.window_end.setDisplayFormat("HH:mm")
+        window_row = QWidget()
+        window_row_layout = QHBoxLayout(window_row)
+        window_row_layout.setContentsMargins(0, 0, 0, 0)
+        window_row_layout.addWidget(self.window_start)
+        window_row_layout.addWidget(QLabel("até"))
+        window_row_layout.addWidget(self.window_end)
+        window_row_layout.addStretch()
+        self.window_start.setToolTip("Início da janela, no horário local.")
+        self.window_end.setToolTip(
+            "Fim da janela. Igual ao início significa \"sempre liberado\"."
+        )
+        self.minimum_free_mb = WheelSafeSpinBox()
+        self.minimum_free_mb.setRange(0, 1_048_576)
+        self.minimum_free_mb.setSingleStep(32)
+        self.minimum_free_mb.setSuffix(" MB")
+        self.minimum_free_mb.setSpecialValueText("Sem limite")
+        self.minimum_free_mb.setToolTip(
+            "A fila pausa sozinha quando o disco livre ficar abaixo deste valor."
+        )
+        self.keep_awake = QCheckBox("Impedir suspensão durante os downloads")
+        self.completion_sound = QCheckBox("Tocar som ao concluir")
+        self.window_enabled.toggled.connect(self._refresh_window_state)
+        queue_rules.form.addRow("", self.window_enabled)
+        queue_rules.form.addRow("Janela", window_row)
+        queue_rules.form.addRow("Espaço livre mínimo", self.minimum_free_mb)
+        queue_rules.form.addRow("", self.keep_awake)
+        queue_rules.form.addRow("", self.completion_sound)
+        self.gate_status_panel = QFrame()
+        self.gate_status_panel.setObjectName("ComponentStatus")
+        self.gate_status_panel.setProperty("state", "neutral")
+        gate_status_layout = QHBoxLayout(self.gate_status_panel)
+        gate_status_layout.setContentsMargins(10, 8, 10, 8)
+        self.gate_status = QLabel()
+        self.gate_status.setObjectName("Muted")
+        self.gate_status.setWordWrap(True)
+        self.gate_status.setAccessibleName("Estado atual do agendamento da fila")
+        gate_status_layout.addWidget(self.gate_status, 1)
+        queue_rules.form.addRow("Estado", self.gate_status_panel)
+        root.addWidget(queue_rules)
+
         filenames = SettingsSection("Nome dos arquivos", "Use campos compatíveis com o yt-dlp. Nomes inválidos no Windows são sanitizados pela engine.", "file")
         self.template_preset = WheelSafeComboBox()
         self.template_preset.addItem("Título", "%(title)s.%(ext)s")
@@ -314,10 +388,18 @@ class SettingsPage(QWidget):
         )
         self.proxy_type = WheelSafeComboBox(); self.proxy_type.addItem("Nenhum", "none"); self.proxy_type.addItem("HTTP", "http"); self.proxy_type.addItem("HTTPS", "https"); self.proxy_type.addItem("SOCKS", "socks")
         self.proxy_url = QLineEdit(); self.proxy_url.setPlaceholderText("http://host:porta (evite credenciais no campo)")
+        self.proxy_url.editingFinished.connect(self._refresh_proxy_status)
+        self.proxy_type.currentIndexChanged.connect(self._refresh_proxy_status)
         self.rate_limit = WheelSafeSpinBox(); self.rate_limit.setRange(0, 1_000_000); self.rate_limit.setSuffix(" KiB/s"); self.rate_limit.setSpecialValueText("Sem limite")
         self.rate_limit.setToolTip("Limita a velocidade de cada download. 0 (Sem limite) usa toda a banda disponível.")
+        self.proxy_status = QLabel()
+        self.proxy_status.setObjectName("Muted")
+        self.proxy_status.setWordWrap(True)
+        self.proxy_status.setProperty("state", "neutral")
+        self.proxy_status.setAccessibleName("Validação do endereço de proxy")
         network.form.addRow("Proxy", self.proxy_type)
         network.form.addRow("Endereço", self.proxy_url)
+        network.form.addRow("Validação", self.proxy_status)
         network.form.addRow("Limite de velocidade", self.rate_limit)
         root.addWidget(network)
 
@@ -328,9 +410,18 @@ class SettingsPage(QWidget):
         cookie_file_row = QWidget(); cookie_layout = QHBoxLayout(cookie_file_row); cookie_layout.setContentsMargins(0, 0, 0, 0); cookie_layout.addWidget(self.cookies_file, 1)
         choose_cookie = QPushButton("Escolher"); set_button_icon(choose_cookie, "file"); choose_cookie.clicked.connect(self._browse_cookies); cookie_layout.addWidget(choose_cookie)
         self.browser = WheelSafeComboBox(); self.browser.addItems(["chrome", "edge", "firefox", "brave", "opera", "vivaldi"])
+        self.impersonate = WheelSafeComboBox()
+        self.impersonate.addItem("Não usar", "")
+        for name in SUPPORTED_IMPERSONATE:
+            self.impersonate.addItem(name, name)
+        self.impersonate.setToolTip(
+            "Some quando um site bloqueia o download como robô. Exige curl-cffi; "
+            "sem ele, o download segue normalmente sem a imitação."
+        )
         cookies.form.addRow("Fonte", self.cookie_source)
         cookies.form.addRow("cookies.txt", cookie_file_row)
         cookies.form.addRow("Navegador", self.browser)
+        cookies.form.addRow("Imitar navegador", self.impersonate)
         self.cookies_status_panel = QFrame()
         self.cookies_status_panel.setObjectName("ComponentStatus")
         self.cookies_status_panel.setProperty("state", "neutral")
@@ -381,6 +472,81 @@ class SettingsPage(QWidget):
         profile_actions_row.addStretch()
         profiles.form.addRow("", profile_actions)
         root.addWidget(profiles)
+
+        storage = SettingsSection(
+            "Armazenamento",
+            "Totais do histórico e arquivos temporários deixados por downloads interrompidos.",
+            "list",
+        )
+        self.stats_completed = QLabel(); self.stats_completed.setObjectName("SectionTitle")
+        self.stats_downloaded = QLabel(); self.stats_downloaded.setObjectName("SectionTitle")
+        self.stats_temporary = QLabel(); self.stats_temporary.setObjectName("SectionTitle")
+        self.stats_free = QLabel(); self.stats_free.setObjectName("SectionTitle")
+        self.stats_refresh = SecondaryButton("ATUALIZAR", icon_name="retry")
+        self.stats_refresh.clicked.connect(self._refresh_stats)
+        self.stats_cleanup = SecondaryButton("LIMPAR TEMPORÁRIOS", icon_name="trash")
+        self.stats_cleanup.clicked.connect(self._cleanup_temporaries)
+        self.stats_cleanup.setToolTip(
+            "Remove apenas partes e fragmentos de transferências interrompidas. "
+            "Mídias concluídas nunca são apagadas."
+        )
+        storage.form.addRow("Downloads concluídos", self.stats_completed)
+        storage.form.addRow("Total transferido", self.stats_downloaded)
+        storage.form.addRow("Temporários", self.stats_temporary)
+        storage.form.addRow("Espaço livre", self.stats_free)
+        storage_actions = QWidget()
+        storage_actions_row = QHBoxLayout(storage_actions)
+        storage_actions_row.setContentsMargins(0, 0, 0, 0)
+        storage_actions_row.setSpacing(8)
+        storage_actions_row.addWidget(self.stats_cleanup)
+        storage_actions_row.addWidget(self.stats_refresh)
+        storage_actions_row.addStretch()
+        storage.form.addRow("", storage_actions)
+        root.addWidget(storage)
+
+        backup = SettingsSection(
+            "Backup e restauração",
+            "Leve as configurações e os perfis de cookies para outro computador em um único arquivo.",
+            "file",
+        )
+        self.backup_status = QLabel(
+            "O Spotify não é exportado: sua sessão fica protegida pelo Gerenciador de Credenciais do Windows."
+        )
+        self.backup_status.setObjectName("Muted")
+        self.backup_status.setWordWrap(True)
+        self.export_button = SecondaryButton("EXPORTAR", icon_name="downloads")
+        self.export_button.clicked.connect(self._export_backup)
+        self.import_button = SecondaryButton("IMPORTAR", icon_name="folder")
+        self.import_button.clicked.connect(self._import_backup)
+        backup_actions = QWidget()
+        backup_actions_row = QHBoxLayout(backup_actions)
+        backup_actions_row.setContentsMargins(0, 0, 0, 0)
+        backup_actions_row.setSpacing(8)
+        backup_actions_row.addWidget(self.export_button)
+        backup_actions_row.addWidget(self.import_button)
+        backup_actions_row.addStretch()
+        backup.form.addRow(self.backup_status)
+        backup.form.addRow("", backup_actions)
+        root.addWidget(backup)
+
+        sites = SettingsSection(
+            "Sites compatíveis",
+            "Verificado contra os extractors do yt-dlp instalado, sem acessar a rede.",
+            "globe",
+        )
+        self.site_list = QLabel()
+        self.site_list.setObjectName("Muted")
+        self.site_list.setWordWrap(True)
+        self.site_list.setTextFormat(Qt.TextFormat.RichText)
+        self.site_list.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self.site_list.setAccessibleName("Situação de cada site suportado")
+        sites.form.addRow(self.site_list)
+        self.refresh_sites = SecondaryButton("VERIFICAR NOVAMENTE", icon_name="retry")
+        self.refresh_sites.clicked.connect(self._refresh_sites)
+        sites.form.addRow("", self.refresh_sites)
+        root.addWidget(sites)
 
         spotify = SettingsSection(
             "Spotify",
@@ -543,6 +709,16 @@ class SettingsPage(QWidget):
         self.add_profile_button.setAccessibleName("Adicionar perfil de cookies por site")
         self.edit_profile_button.setAccessibleName("Editar perfil de cookies selecionado")
         self.remove_profile_button.setAccessibleName("Remover perfil de cookies selecionado")
+        self.window_start.setAccessibleName("Início da janela de downloads")
+        self.window_end.setAccessibleName("Fim da janela de downloads")
+        self.minimum_free_mb.setAccessibleName("Espaço livre mínimo em megabytes")
+        self.keep_awake.setAccessibleName("Impedir suspensão durante os downloads")
+        self.completion_sound.setAccessibleName("Tocar som ao concluir")
+        self.stats_refresh.setAccessibleName("Atualizar os totais de armazenamento")
+        self.stats_cleanup.setAccessibleName("Limpar arquivos temporários")
+        self.export_button.setAccessibleName("Exportar as configurações para um arquivo")
+        self.import_button.setAccessibleName("Importar configurações de um arquivo de backup")
+        self.refresh_sites.setAccessibleName("Verificar novamente os sites compatíveis")
         self.theme.setToolTip("A alteração é aplicada ao salvar as configurações.")
         self.concurrent.setToolTip("A roda do mouse não altera este valor; use as setas ou digite.")
 
@@ -566,6 +742,21 @@ class SettingsPage(QWidget):
             combo.setCurrentText(str(self.settings.get(f"downloads.{key}", combo.itemText(0))))
         self.embed_thumbnail.setChecked(self.settings.get("downloads.embed_thumbnail", True))
         self.add_metadata.setChecked(self.settings.get("downloads.add_metadata", True))
+        self.window_enabled.setChecked(bool(self.settings.get("downloads.window_enabled", False)))
+        self.window_start.setTime(
+            QTime().addSecs(
+                60 * clamp_minute(self.settings.get("downloads.window_start_minute", 0))
+            )
+        )
+        self.window_end.setTime(
+            QTime().addSecs(
+                60 * clamp_minute(self.settings.get("downloads.window_end_minute", 360))
+            )
+        )
+        self.minimum_free_mb.setValue(int(self.settings.get("downloads.minimum_free_mb", 32)))
+        self.keep_awake.setChecked(bool(self.settings.get("downloads.keep_awake", False)))
+        self.completion_sound.setChecked(bool(self.settings.get("downloads.completion_sound", True)))
+        self._refresh_window_state()
         self.filename_template.setText(self.settings.get("filenames.template", "%(title)s.%(ext)s"))
         self._select_data(self.duplicate_policy, self.settings.get("downloads.duplicate_policy", "rename"))
         self._select_data(self.proxy_type, self.settings.get("network.proxy_type", "none"))
@@ -574,16 +765,38 @@ class SettingsPage(QWidget):
         self._select_data(self.cookie_source, self.settings.get("cookies.source", "none"))
         self.cookies_file.setText(self.settings.get("cookies.file", ""))
         self.browser.setCurrentText(self.settings.get("cookies.browser", "chrome"))
+        _select_impersonate(
+            self.impersonate, str(self.settings.get("cookies.impersonate") or "")
+        )
         self._profiles = list(self.settings.get("cookies.profiles", []) or [])
         self._reload_profile_list()
         self.spotify_client_id.setText(self.settings.get("spotify.client_id", ""))
         self._refresh_spotify_status()
         self._refresh_cookies_status()
+        self._refresh_proxy_status()
+        self._refresh_gate_status()
+        self._refresh_sites()
+
+    def showEvent(self, event) -> None:  # noqa: ANN001 - Qt signature
+        """Measure the download folders only when the page is actually shown.
+
+        Walking the folders is the one expensive thing this page does, so it must
+        not run while the window is still being built.
+        """
+        super().showEvent(event)
+        self._refresh_stats()
 
     def save(self) -> None:
         valid, message = validate_template(self.filename_template.text())
         if not valid:
             QMessageBox.warning(self, "Template inválido", message)
+            return
+        valid, message = validate_proxy_url(
+            str(self.proxy_type.currentData()), self.proxy_url.text()
+        )
+        if not valid:
+            QMessageBox.warning(self, "Proxy inválido", message)
+            self._refresh_proxy_status()
             return
         self.settings.update_section("general", {
             "language": "pt_BR", "theme": self.theme.currentData(),
@@ -601,16 +814,191 @@ class SettingsPage(QWidget):
             "video_quality": self.video_quality.currentText(), "audio_format": self.audio_format.currentText(),
             "audio_quality": self.audio_quality.currentText(), "embed_thumbnail": self.embed_thumbnail.isChecked(),
             "add_metadata": self.add_metadata.isChecked(), "duplicate_policy": self.duplicate_policy.currentData(),
+            "window_enabled": self.window_enabled.isChecked(),
+            "window_start_minute": self.window_start.time().hour() * 60 + self.window_start.time().minute(),
+            "window_end_minute": self.window_end.time().hour() * 60 + self.window_end.time().minute(),
+            "minimum_free_mb": self.minimum_free_mb.value(),
+            "keep_awake": self.keep_awake.isChecked(),
+            "completion_sound": self.completion_sound.isChecked(),
         })
         self.settings.update_section("filenames", {"template": self.filename_template.text()})
         self.settings.update_section("network", {"proxy_type": self.proxy_type.currentData(), "proxy_url": self.proxy_url.text().strip(), "rate_limit_kbps": self.rate_limit.value()})
-        self.settings.update_section("cookies", {"source": self.cookie_source.currentData(), "file": self.cookies_file.text(), "browser": self.browser.currentText(), "profiles": list(self._profiles)})
+        self.settings.update_section("cookies", {
+            "source": self.cookie_source.currentData(), "file": self.cookies_file.text(),
+            "browser": self.browser.currentText(),
+            "impersonate": normalize_impersonate(self.impersonate.currentData()),
+            "profiles": list(self._profiles),
+        })
         self.settings.update_section("spotify", {"client_id": self.spotify_client_id.text().strip()})
         self.queue.set_concurrency(self.concurrent.value())
+        self._apply_gate()
         self.theme_changed.emit(str(self.theme.currentData()))
         self.storage_changed.emit()
         self._refresh_cookies_status()
         QMessageBox.information(self, "Configurações", "Configurações salvas.")
+
+    def _gate_config(self) -> GateConfig:
+        start = self.window_start.time()
+        end = self.window_end.time()
+        return GateConfig(
+            window_enabled=self.window_enabled.isChecked(),
+            window_start_minute=start.hour() * 60 + start.minute(),
+            window_end_minute=end.hour() * 60 + end.minute(),
+            minimum_free_bytes=self.minimum_free_mb.value() * 1024 * 1024,
+        )
+
+    def _apply_gate(self) -> None:
+        self.queue.set_gate(self._gate_config())
+        self.queue.set_keep_awake(self.keep_awake.isChecked())
+        self._refresh_gate_status()
+
+    def _refresh_window_state(self) -> None:
+        enabled = self.window_enabled.isChecked()
+        for control in (self.window_start, self.window_end):
+            control.setEnabled(enabled)
+        self.minimum_free_mb.setEnabled(enabled or self.minimum_free_mb.value() > 0)
+        self._refresh_gate_status()
+
+    def _refresh_gate_status(self) -> None:
+        if self.queue.gate_blocked:
+            message = self.queue.gate_reason or "A fila está aguardando."
+            self.gate_status.setText(message)
+            self.gate_status_panel.setProperty("state", "warning")
+        elif self.window_enabled.isChecked():
+            self.gate_status.setText(
+                "Liberado agora. Próxima verificação a cada 30 segundos."
+            )
+            self.gate_status_panel.setProperty("state", "success")
+        else:
+            self.gate_status.setText("Sem agendamento: downloads a qualquer hora.")
+            self.gate_status_panel.setProperty("state", "neutral")
+        self.gate_status_panel.style().unpolish(self.gate_status_panel)
+        self.gate_status_panel.style().polish(self.gate_status_panel)
+
+    def _refresh_proxy_status(self, *_args: object) -> None:
+        kind = str(self.proxy_type.currentData())
+        enabled = kind not in ("", "none")
+        self.proxy_url.setEnabled(enabled)
+        valid, message = validate_proxy_url(kind, self.proxy_url.text())
+        self.proxy_status.setText(
+            message if message else ("Endereço válido." if enabled else "")
+        )
+        self.proxy_status.setProperty("state", "error" if message else "neutral")
+        self.proxy_status.style().unpolish(self.proxy_status)
+        self.proxy_status.style().polish(self.proxy_status)
+
+    def _stats_directories(self) -> list[Path]:
+        directories = [
+            self.video_download_dir.text().strip(),
+            self.audio_download_dir.text().strip(),
+            self.site_files_download_dir.text().strip(),
+        ]
+        return [Path(item) for item in directories if item]
+
+    def _refresh_stats(self) -> None:
+        try:
+            snapshot = stats_service.collect(self._stats_directories())
+        except OSError as error:
+            self.stats_completed.setText("—")
+            self.stats_downloaded.setText("—")
+            self.stats_temporary.setText("—")
+            self.stats_free.setText("—")
+            self.stats_cleanup.setEnabled(False)
+            self.stats_cleanup.setToolTip(str(error))
+            return
+        self.stats_cleanup.setEnabled(True)
+        self.stats_cleanup.setToolTip(
+            "Remove apenas partes e fragmentos de transferências interrompidas. "
+            "Mídias concluídas nunca são apagadas."
+        )
+        self.stats_completed.setText(f"{snapshot.completed_count:,}".replace(",", "."))
+        self.stats_downloaded.setText(format_bytes(snapshot.downloaded_bytes))
+        self.stats_temporary.setText(
+            f"{format_bytes(snapshot.temporary_bytes)} "
+            f"({snapshot.temporary_files} arquivos)"
+        )
+        self.stats_free.setText(
+            format_bytes(snapshot.free_bytes)
+            if snapshot.free_bytes is not None
+            else "Indisponível"
+        )
+
+    def _cleanup_temporaries(self) -> None:
+        answer = QMessageBox.question(
+            self,
+            "Limpar temporários",
+            "Remover partes e fragmentos de downloads interrompidos? "
+            "Nenhuma mídia concluída é apagada.",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        result: CleanupResult = stats_service.remove_temporaries(self._stats_directories())
+        self._refresh_stats()
+        QMessageBox.information(
+            self,
+            "Limpar temporários",
+            f"{result.removed_files} arquivos removidos, {format_bytes(result.freed_bytes)} liberados.",
+        )
+
+    def _refresh_sites(self) -> None:
+        lines = []
+        for row in site_rows():
+            lines.append(
+                f"<b>{row.platform.name}</b> — {row.label}<br/><span style=\"opacity:0.7\">{row.description}</span>"
+            )
+        self.site_list.setText("<div>" + "<br/><br/>".join(lines) + "</div>")
+
+    def _export_backup(self) -> None:
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exportar configurações",
+            str(Path.home() / backup_service.BACKUP_FILENAME),
+            "Backup de configurações (*.json)",
+        )
+        if not filename:
+            return
+        payload = backup_service.dumps(
+            dict(self.settings.as_dict()), list(self._profiles)
+        )
+        try:
+            Path(filename).write_text(payload, encoding="utf-8")
+        except OSError as error:
+            QMessageBox.warning(self, "Exportar configurações", str(error))
+            return
+        QMessageBox.information(
+            self, "Exportar configurações", f"Backup gravado em {filename}."
+        )
+
+    def _import_backup(self) -> None:
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "Importar configurações", "", "Backup de configurações (*.json)"
+        )
+        if not filename:
+            return
+        try:
+            raw = Path(filename).read_text(encoding="utf-8")
+            payload = backup_service.loads(raw)
+            profiles = backup_service.apply(payload)
+        except (OSError, BackupError) as error:
+            QMessageBox.warning(self, "Importar configurações", str(error))
+            return
+        answer = QMessageBox.question(
+            self,
+            "Importar configurações",
+            "Substituir as configurações atuais pelas do backup?",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self.settings.replace(payload.settings)
+        self._profiles = profiles
+        self._load()
+        self._apply_gate()
+        self.theme_changed.emit(str(self.theme.currentData()))
+        QMessageBox.information(
+            self,
+            "Importar configurações",
+            f"{len(profiles)} perfis de cookies restaurados. Revise e salve para aplicar.",
+        )
 
     def _connect_spotify(self) -> None:
         client_id = self.spotify_client_id.text().strip()
@@ -753,7 +1141,9 @@ class SettingsPage(QWidget):
         for profile in self._profiles:
             hosts = ", ".join(str(host) for host in profile.get("hosts") or [])
             label = str(profile.get("label") or "Perfil")
-            self.profile_list.addItem(f"{label} — {hosts}")
+            impersonate = normalize_impersonate(profile.get("impersonate"))
+            suffix = f" · {impersonate}" if impersonate else ""
+            self.profile_list.addItem(f"{label} - {hosts}{suffix}")
         self._refresh_profile_buttons()
 
     def _refresh_profile_buttons(self) -> None:

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="history_clear_button">Limpar histórico</string>
+    <string name="history_selection_select_all">Selecionar tudo</string>
+    <string name="history_selection_clear_all">Limpar seleção</string>
+    <string name="history_selection_delete">Eliminar selecionados</string>
+    <string name="history_selection_close">Sair da seleção</string>
+    <plurals name="history_delete_selection_title">
+        <item quantity="one">Remover %1$d item?</item>
+        <item quantity="other">Remover %1$d itens?</item>
+        <item quantity="many">Remover %1$d itens?</item>
+    </plurals>
+    <string name="history_delete_selection_message">Os ficheiros continuam no seu armazenamento. Só o histórico da app é apagado.</string>
+    <string name="history_delete_selection_confirm">Remover</string>
+    <plurals name="history_selected_count">
+        <item quantity="one">%1$d selecionado</item>
+        <item quantity="other">%1$d selecionados</item>
+        <item quantity="many">%1$d selecionados</item>
+    </plurals>
+    <string name="history_clear_confirm">Limpar</string>
+    <string name="history_clear_message">Os registros serão removidos, mas os arquivos baixados continuarão no aparelho.</string>
+    <string name="history_clear_title">Limpar histórico?</string>
+    <string name="history_empty_supporting">Quando um download for concluído, o arquivo ficará organizado aqui.</string>
+    <string name="history_empty_title">Sua biblioteca está pronta</string>
+    <string name="history_export">Exportar histórico (CSV)</string>
+    <string name="history_heading_eyebrow">Sua biblioteca</string>
+    <string name="history_heading_supporting">Encontre, abra e compartilhe tudo o que já foi concluído.</string>
+    <string name="history_heading_title">Histórico</string>
+    <plurals name="history_items_found">
+        <item quantity="one">%1$d arquivo encontrado neste aparelho.</item>
+        <item quantity="many">%1$d arquivos encontrados neste aparelho.</item>
+        <item quantity="other">%1$d arquivos encontrados neste aparelho.</item>
+    </plurals>
+    <string name="history_no_results_query">Nenhum registro corresponde a &quot;%1$s&quot;.</string>
+    <string name="history_no_results_title">Nada encontrado</string>
+    <string name="history_redownload">Baixar de novo</string>
+    <string name="history_rename_action">Renomear</string>
+    <string name="history_rename_dialog">Renomear arquivo</string>
+    <string name="history_rename_hint">Nome do arquivo</string>
+    <string name="history_search_clear">Limpar busca</string>
+    <string name="history_search_placeholder">Buscar no histórico</string>
+</resources>
